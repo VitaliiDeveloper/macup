@@ -27,23 +27,27 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 | Команда | Що робить |
 |---|---|
 | `macup` | Меню |
-| `macup check` | Перевірити все; нічого не ставить і не видаляє |
-| `macup all` | Оновлення + безпечна чистка + перевірки |
+| `macup check` | Перевірити все, потім вибрати, що почистити (або нічого) |
+| `macup all` | Оновлення + чистка до твого рівня + перевірки |
 | `macup update` · `macup clean` | Лише оновлення · лише чистка (з перевірками) |
 | `macup last` · `macup history` | Останній звіт · тренди між запусками |
 | `macup tasks` · `macup config` | Що виконується і id задач · налаштування |
 | `macup lang [en\|uk\|ru]` | Мова інтерфейсу |
 | `macup self-update` · `macup uninstall` | Оновити або видалити macup |
 
-Опції: `--deep` (найбільші папки, старі Downloads, артефакти збірки в проєктах), `--skip id,…`, `--only id,…` (працюють групи: `clean.*`), `--lang xx`, `--no-color`.
+Опції: `--level safe|standard|aggressive` (що можуть видаляти `clean`/`all`), `--deep` (найбільші папки, старі Downloads, артефакти збірки в проєктах), `--skip id,…`, `--only id,…` (працюють групи: `clean.*`), `--lang xx`, `--no-color`.
 
-Почни з `macup check`. Кожен запуск завершується підсумком і зберігає звіт у `~/Library/Logs/macup/`.
+Почни з `macup check`: він покаже, що можна почистити, з розмірами й рівнями, і дасть вибрати номери, рівень або нічого. Кожен запуск завершується підсумком і зберігає звіт у `~/Library/Logs/macup/`.
 
 ## Що робить
 
 - **Оновлює:** Claude Code (CLI, плагіни, маркетплейси), глобальні npm-пакети, скіли агентів у `~/.agents`, Homebrew, програми App Store (через [`mas`](https://github.com/mas-cli/mas)), pipx, інструменти uv, rustup, Oh My Zsh, розширення GitHub CLI. Оновлення macOS лише показує, ніколи не встановлює.
-- **Чистить за замовчуванням:** Xcode DerivedData і прев'ю SwiftUI (не при відкритому Xcode), DeviceSupport старші за 90 днів, старі логи пристроїв, недоступні симулятори, кеші симуляторів; кеші SwiftPM, CocoaPods, Carthage, Homebrew, npm, Yarn, pnpm, pip, uv і Go; логи програм і крешрепорти старші за 30 днів; кеш Quick Look.
-- **Чистить, лише якщо ввімкнеш:** `clean.stale_node_modules` (проєкти без змін 90 днів) і `clean.trash`.
+- **Чистить, три рівні:**
+  - 🟢 **safe** (типово; відновлюється само): Xcode DerivedData і прев'ю SwiftUI, старий DeviceSupport і логи пристроїв, кеші симуляторів; кеші SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv і Go; кеші VS Code, Cursor, Windsurf, Antigravity, Claude і Codex; залишки Codex; старі логи.
+  - 🟡 **standard** (перекачається при наступному використанні): Gradle, Android Studio, Maven; кеш збірки Docker і непотрібні образи; старі браузери Playwright/Puppeteer; старіші патч-версії в nvm, rbenv, pyenv, mise і asdf.
+  - 🔴 **aggressive** (програми якийсь час повільніші або виходять з акаунта): кеш браузерів (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
+  - **Лише якщо вибереш:** інші великі папки в `~/Library/Caches`, старі `node_modules`, Кошик.
+- **Вимірює, ніколи не видаляє:** кеші рендеру й прев'ю Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic і Camera Raw (з пунктом меню самої програми, щоб їх очистити), історію чатів Codex, AI-моделі, Android SDK і емулятори, Xcode Archives, симулятори.
 - **Перевіряє:** час роботи, місце на диску і SMART, пам'ять і swap, CPU і перегрів, батарею; FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine; сторонні й «осиротілі» служби автозапуску; MCP-сервери Claude Code; `brew doctor`; Xcode і runtime-и симуляторів; Docker; розміри того, що macup ніколи не видаляє.
 
 Інструменти, яких у тебе немає, пропускаються.
@@ -51,8 +55,10 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 ## Безпека
 
 - **Без команди нічого не змінюється.** Оновлення й чистка — лише через `all`, `update`, `clean` або меню. Поза терміналом `macup` без команди лише показує довідку, тож у скриптах пиши `macup all`.
-- **Чистка видаляє лише те, що відновлюється або перекачується само.** Xcode Archives, Кошик, Downloads і пристрої симуляторів лише вимірюються, ніколи не видаляються.
-- **`macup check` нічого не ставить, не оновлює й не видаляє.** Але ходить у мережу: оновлює список пакетів Homebrew, питає npm, App Store, Apple і GitHub про доступні версії і на мить запускає MCP-сервери, щоб їх перевірити.
+- **`clean` і `all` зупиняються на рівні `safe`**, якщо не вказати `--level` чи `clean_level`. Перевірка видаляє лише те, що ти вибереш; агресивні й ручні пункти перепитують.
+- **Лише перелічені папки кешу, ніколи те, що лежить поруч.** Налаштування, історія чатів, сесії, virtualenv, ключі, `gradle.properties`, `settings.xml` Maven, профілі й паролі браузерів не чіпаються. Закріплені (`.nvmrc`, `.tool-versions`, …) і типові версії лишаються. Символьні посилання не відкриваються.
+- **Відкриті програми пропускаються.** Закрий програму й запусти ще раз.
+- **`macup check` нічого не ставить і не оновлює.** Але ходить у мережу: оновлює список пакетів Homebrew, питає npm, App Store, Apple і GitHub про доступні версії і на мить запускає MCP-сервери, щоб їх перевірити.
 - **Оновлення — до найсвіжішої версії**, зокрема нові мажорні версії npm-пакетів. Якщо фіксуєш версії, вимкни задачу: `skip = update.npm`.
 - **Без sudo.** macup його не викликає. Запит пароля під час оновлення програми з Homebrew іде від інсталятора самої програми.
 - **`--deep` читає всю домашню теку.** macOS може попросити для Terminal доступ до Documents, Downloads чи даних інших програм; відмова лише скоротить перевірку.
@@ -65,6 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 language = uk                          # en, uk, ru
 skip = update.mas, check.docker        # задачі, які ніколи не запускати; працюють групи: clean.*
 enable = clean.stale_node_modules      # задачі, що вмикаються вручну
+clean_level = safe                     # що можуть видаляти clean/all: safe, standard, aggressive
 project_dirs = ~/Developer, ~/Code     # для --deep і старих node_modules
 device_support_days = 90
 stale_project_days = 90

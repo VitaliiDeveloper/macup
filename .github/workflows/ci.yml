@@ -29,6 +29,8 @@ jobs:
           /bin/bash --version | head -1
           /bin/bash -n macup
           /bin/bash -n install.sh
+      - name: Tests (fake home folders only)
+        run: tests/run.sh
       - name: Install from the checkout
         run: /bin/bash ./install.sh --yes --lang en --projects "~/work"
       - name: Help, tasks, version

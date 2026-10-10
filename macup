@@ -1,0 +1,1582 @@
+#!/bin/bash
+# shellcheck disable=SC2088,SC2034,SC2059
+# macup — keep a Mac healthy: update tools, clean safe caches, check the system, track trends.
+# https://github.com/VitaliiDeveloper/macup · MIT License
+#
+# Compatible with the stock macOS bash 3.2. No sudo required.
+# Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
+
+MACUP_VERSION="2.2.0"
+MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
+MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
+set -o pipefail
+
+case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { export LC_CTYPE=en_US.UTF-8; } 2>/dev/null ;; esac
+
+# ---------------------------------------------------------------- paths
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/macup"
+CONF="$CONF_DIR/config"
+STATE_DIR="$HOME/Library/Application Support/macup"
+HISTORY="$STATE_DIR/history.csv"
+LOGDIR="$HOME/Library/Logs/macup"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
+# Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
+CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
+
+# ---------------------------------------------------------------- task registry
+# id | default (on/off) | description          `macup tasks` prints this table.
+TASKS='check.system|on|macOS version, model, uptime (warns after 14 days without restart)
+check.disk|on|Free space, disk health (SMART), local Time Machine snapshots
+check.memory|on|Memory pressure and swap usage
+check.cpu|on|Load average, top CPU and memory processes, thermal throttling
+check.battery|on|Charge, cycle count, maximum capacity, condition
+check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine
+check.startup|on|Third-party launch agents/daemons, orphaned ones pointing at deleted apps
+check.mcp|on|Claude Code MCP servers that fail to connect
+check.brew_doctor|on|brew doctor warnings
+check.macos_updates|on|Pending macOS updates (never installed automatically)
+check.xcode|on|Xcode, command line tools, simulator runtimes
+check.devtools|on|Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
+check.docker|on|Docker disk usage (if Docker is running)
+check.sizes|on|Sizes of things macup never deletes: Archives, Trash, caches, pub-cache
+check.trends|on|Compare with the previous run: free space, swap, battery capacity
+check.self_update|on|Tell when a newer macup is on GitHub (once a week)
+update.claude|on|Claude Code CLI, plugin marketplaces, plugins
+update.npm|on|Global npm packages (Codex, Playwright, ...)
+update.skills|on|Agent skills in ~/.agents (npx skills update -g)
+update.brew|on|Homebrew formulae and casks
+update.mas|on|App Store apps (needs mas)
+update.pipx|on|pipx-installed tools
+update.uv|on|uv-installed tools
+update.rustup|on|Rust toolchains
+update.omz|on|Oh My Zsh
+update.gh_ext|on|GitHub CLI extensions
+clean.derived_data|on|Xcode DerivedData (skipped while Xcode is open)
+clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
+clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
+clean.device_logs|on|iOS device logs older than 90 days
+clean.sim_unavailable|on|Simulators whose runtime is gone
+clean.sim_caches|on|CoreSimulator caches
+clean.spm|on|SwiftPM cache
+clean.cocoapods|on|CocoaPods cache
+clean.carthage|on|Carthage cache
+clean.brew|on|Old Homebrew versions and downloads
+clean.npm|on|npm cache garbage (npm cache verify)
+clean.yarn|on|Yarn cache
+clean.pnpm|on|pnpm store: unreferenced packages
+clean.pip|on|pip cache
+clean.uv|on|uv cache: unused entries
+clean.go|on|Go build cache
+clean.logs|on|Your app logs and crash reports older than 30 days
+clean.quicklook|on|Quick Look thumbnail cache
+clean.reports|on|macup reports older than keep_reports_days
+clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
+clean.trash|off|Empty the Trash (opt-in)'
+
+# ---------------------------------------------------------------- config
+conf(){ # key default
+  local v=""
+  [ -f "$CONF" ] && v=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' | tail -1)
+  echo "${v:-$2}"
+}
+conf_set(){ # key value — replace or append
+  mkdir -p "$CONF_DIR"; [ -f "$CONF" ] || write_default_conf
+  if grep -qE "^[[:space:]]*$1[[:space:]]*=" "$CONF"; then
+    sed -i '' -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF" 2>/dev/null || sed -i -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF"
+  else printf '%s = %s\n' "$1" "$2" >>"$CONF"; fi
+}
+CLI_SKIP=""; CLI_ONLY=""
+num(){ case "$1" in ''|*[!0-9]*|0) echo "$2" ;; *) echo "$1" ;; esac; }   # positive integer or the default
+load_conf(){
+  SKIP=",$(conf skip "" | tr -d ' '),$(echo "$CLI_SKIP" | tr -d ' '),"
+  ENABLE=",$(conf enable "" | tr -d ' '),"
+  CLI_ONLY=$(echo "$CLI_ONLY" | tr -d ' ')
+  DS_DAYS=$(num "$(conf device_support_days 90)" 90)
+  KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
+  STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
+  PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
+}
+task_default(){ printf '%s\n' "$TASKS" | awk -F'|' -v id="$1" '$1==id{print $2}'; }
+task(){ # true when the task should run
+  local id=$1 grp=${1%%.*}
+  if [ -n "$CLI_ONLY" ]; then case ",$CLI_ONLY," in *",$id,"*|*",$grp.*,"*) ;; *) return 1 ;; esac; fi
+  case "$SKIP" in *",$id,"*|*",$grp.*,"*) return 1 ;; esac
+  if [ "$(task_default "$id")" = off ]; then case "$ENABLE" in *",$id,"*) return 0 ;; esac; return 1; fi
+  return 0
+}
+
+# ---------------------------------------------------------------- language
+system_lang(){
+  local l; l=$(defaults read -g AppleLanguages 2>/dev/null | sed -n '2p' | tr -d ' ",')
+  case "$l" in uk*) echo uk ;; ru*) echo ru ;; *) echo en ;; esac
+}
+MSG_LANG="${MACUP_LANG:-$(conf language "")}"
+[ -z "$MSG_LANG" ] && MSG_LANG=$(system_lang)
+case "$MSG_LANG" in en|uk|ru) ;; *) MSG_LANG=en ;; esac
+LANGFILE=""
+load_lang(){
+  [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; LANGFILE=""
+  [ "$MSG_LANG" = en ] && return
+  LANGFILE=$(mktemp "${TMPDIR:-/tmp}/macup-lang.XXXXXX")
+  lang_table "$MSG_LANG" >"$LANGFILE"
+}
+_(){ # translate a message (English text is the key)
+  local v=""
+  [ -n "$LANGFILE" ] && v=$(awk -F' [|][|] ' -v k="$1" '$1==k{print $2; exit}' "$LANGFILE")
+  printf '%s' "${v:-$1}"
+}
+_f(){ local f; f=$(_ "$1"); shift; printf "$f" "$@"; }
+lang_name(){ case "$1" in uk) echo "Українська" ;; ru) echo "Русский" ;; *) echo "English" ;; esac; }
+
+# ---------------------------------------------------------------- output
+if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+  B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
+else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
+
+WARN=(); UPDATED=(); FREED=0; POTENTIAL=0; BODY=""; PENDING=""
+md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
+section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
+flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
+# ok/info/warn/fail take a format string (translated) and its arguments
+ok()      { local m; m=$(_f "$@"); flush; printf '%s  %s✓%s %s\n' "$CL" "$G" "$N" "$m"; md "- ✅ $m"; }
+info()    { local m; m=$(_f "$@"); flush; printf '%s  %s·%s %s\n' "$CL" "$D" "$N" "$m"; md "- $m"; }
+warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N" "$m"; md "- ⚠️ $m"; WARN+=("$m"); }
+fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
+sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
+mdonly()  { md "    - $*"; }
+step()    { [ -t 1 ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
+done_upd(){ UPDATED+=("$(_f "$@")"); }
+run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
+have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
+            case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
+cnt()     { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi; }
+lines()   { [ -n "$1" ] && printf '%s\n' "$1" | while IFS= read -r l; do [ -n "$l" ] && sub "$l"; done; }
+kb()      { if [ -e "$1" ]; then du -sk "$1" 2>/dev/null | awk '{s+=$1} END{print s+0}'; else echo 0; fi; }
+hum()     { awk -v k="${1:-0}" 'BEGIN{ s=""; if(k<0){s="-";k=-k} if(k>=1048576) printf "%s%.1f GB",s,k/1048576; else if(k>=1024) printf "%s%.0f MB",s,k/1024; else printf "%s%d KB",s,k }'; }
+tokb()    { echo "$1" | awk '{n=$1+0; u=$1; gsub(/[0-9.]/,"",u); m=(u=="TB")?1073741824:(u=="GB")?1048576:(u=="MB")?1024:(u=="KB")?1:0; printf "%d", n*m}'; }
+nocolor() { sed $'s/\x1b\\[[0-9;?]*[A-Za-z]//g'; }
+tildify() { echo "$1" | sed "s|^$HOME|~|"; }
+expand()  { echo "$1" | sed "s|^~|$HOME|"; }
+ulen()    { printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '; }   # characters, not bytes
+pad()     { local n; n=$(( $2 - $(ulen "$1") )); [ "$n" -lt 1 ] && n=1; printf '%s%*s' "$1" "$n" ''; }
+UPD()     { [ "$DRY" = 0 ] && [ "$DO_UPDATE" = 1 ]; }
+CLEAN()   { [ "$DRY" = 0 ] && [ "$DO_CLEAN" = 1 ]; }
+WANT_UPD(){ [ "$DO_UPDATE" = 1 ] || [ "$DRY" = 1 ]; }
+WANT_CLN(){ [ "$DO_CLEAN" = 1 ] || [ "$DRY" = 1 ]; }
+upd()     { [ -z "$3" ] && return; if [ -n "$2" ] && [ "$2" != "$3" ]; then ok '%s: %s → %s' "$1" "$2" "$3"; UPDATED+=("$1 $2 → $3"); else ok '%s %s' "$1" "$3"; fi; }
+XCODE_ON(){ pgrep -x Xcode >/dev/null 2>&1; }
+ask()     { local a; printf '%s' "$1" >/dev/tty; read -r a </dev/tty; echo "$a"; }
+
+# ---------------------------------------------------------------- help texts
+usage(){
+  case "$MSG_LANG" in
+  uk) cat <<EOF
+${B}macup${N} $MACUP_VERSION — догляд за Маком однією командою
+
+Просто набери  ${B}macup${N}  — з'явиться меню.
+
+Команди
+  macup check        Перевірити все; нічого не ставить і не видаляє
+  macup all          Оновити інструменти + безпечна чистка + перевірки
+  macup update       Лише оновлення (плюс перевірки)
+  macup clean        Лише чистка (плюс перевірки)
+  macup last         Останній звіт
+  macup history      Тренди: вільне місце, swap, батарея, звільнене місце
+  macup reports      Відкрити папку зі звітами у Finder
+  macup tasks        Усі задачі з id і чи вони увімкнені
+  macup config       Створити або відкрити файл налаштувань
+  macup lang         Змінити мову (en, uk, ru)
+  macup self-update  Встановити свіжу версію з GitHub
+  macup uninstall    Видалити macup
+  macup help         Ця довідка
+
+Опції (до будь-якої команди запуску)
+  --deep             Ще й найбільші папки, старі Downloads, артефакти збірки в проєктах
+                     (macup --deep без команди — глибока перевірка)
+  --skip a,b         Пропустити задачі на цей запуск, напр. --skip update.brew,clean.*
+  --only a,b         Виконати лише ці задачі, напр. --only check.*
+  --lang en|uk|ru    Мова для цього запуску
+  --no-color         Без кольорів
+
+Без команди (all, update, clean) macup нічого не змінює. Звичайна чистка видаляє
+лише те, що відновлюється або перекачується само. Звіти: ~/Library/Logs/macup/
+Налаштування: $(tildify "$CONF")
+EOF
+  ;;
+  ru) cat <<EOF
+${B}macup${N} $MACUP_VERSION — уход за Маком одной командой
+
+Просто наберите  ${B}macup${N}  — появится меню.
+
+Команды
+  macup check        Проверить всё; ничего не ставит и не удаляет
+  macup all          Обновить инструменты + безопасная очистка + проверки
+  macup update       Только обновления (плюс проверки)
+  macup clean        Только очистка (плюс проверки)
+  macup last         Последний отчёт
+  macup history      Тренды: свободное место, swap, батарея, освобождённое место
+  macup reports      Открыть папку с отчётами в Finder
+  macup tasks        Все задачи с id и включены ли они
+  macup config       Создать или открыть файл настроек
+  macup lang         Сменить язык (en, uk, ru)
+  macup self-update  Установить свежую версию с GitHub
+  macup uninstall    Удалить macup
+  macup help         Эта справка
+
+Опции (к любой команде запуска)
+  --deep             Ещё и самые большие папки, старые Downloads, артефакты сборки в проектах
+                     (macup --deep без команды — глубокая проверка)
+  --skip a,b         Пропустить задачи в этом запуске, напр. --skip update.brew,clean.*
+  --only a,b         Выполнить только эти задачи, напр. --only check.*
+  --lang en|uk|ru    Язык для этого запуска
+  --no-color         Без цветов
+
+Без команды (all, update, clean) macup ничего не меняет. Обычная очистка удаляет
+только то, что восстанавливается или скачивается заново само. Отчёты: ~/Library/Logs/macup/
+Настройки: $(tildify "$CONF")
+EOF
+  ;;
+  *) cat <<EOF
+${B}macup${N} $MACUP_VERSION — keep your Mac healthy from one command
+
+Just type  ${B}macup${N}  to get a menu.
+
+Commands
+  macup check        Check everything; installs and deletes nothing
+  macup all          Update tools + safe cleanup + checks
+  macup update       Updates only (plus checks)
+  macup clean        Cleanup only (plus checks)
+  macup last         Show the latest report
+  macup history      Trends across runs: free space, swap, battery, freed space
+  macup reports      Open the reports folder in Finder
+  macup tasks        List every task id and whether it's on
+  macup config       Create or open your config file
+  macup lang         Change language (en, uk, ru)
+  macup self-update  Install the latest macup from GitHub
+  macup uninstall    Remove macup
+  macup help         This help
+
+Options (combine with any run command)
+  --deep             Also scan the largest folders, Downloads and project build artifacts
+                     (macup --deep on its own is a deep check)
+  --skip a,b         Skip task ids for this run, e.g. --skip update.brew,clean.*
+  --only a,b         Run only these task ids, e.g. --only check.*
+  --lang en|uk|ru    Language for this run
+  --no-color         Plain output
+
+Nothing changes without a command (all, update, clean). Default cleanup removes only
+what rebuilds or re-downloads itself. Reports: ~/Library/Logs/macup/
+Config: $(tildify "$CONF")
+EOF
+  ;;
+  esac
+}
+
+# ---------------------------------------------------------------- small commands
+list_tasks(){
+  local id def desc st
+  load_conf
+  printf '%s%s %s %s%s\n' "$B" "$(pad "$(_ 'TASK')" 26)" "$(pad "$(_ 'STATE')" 6)" "$(_ 'WHAT IT DOES')" "$N"
+  while IFS='|' read -r id def desc; do
+    if task "$id"; then st="$G$(pad "$(_ 'on')" 6)$N"; else st="$D$(pad "$(_ 'off')" 6)$N"; fi
+    printf '%s %s %s\n' "$(pad "$id" 26)" "$st" "$(_ "$desc")"
+  done <<EOF
+$TASKS
+EOF
+  printf '\n'; _f 'Turn tasks off or on in %s (skip = … / enable = …)' "$(tildify "$CONF")"; printf '\n'
+}
+
+write_default_conf(){
+  mkdir -p "$CONF_DIR"
+  cat >"$CONF" <<EOF
+# macup config. Lines starting with # are comments.
+# See every task id with:  macup tasks
+
+# Interface language: en, uk, ru
+language = $MSG_LANG
+
+# Tasks to never run. Whole groups work too: update.*, clean.*, check.*
+skip =
+
+# Opt-in tasks to turn on, e.g.: clean.stale_node_modules, clean.trash
+enable =
+
+# Delete DeviceSupport folders older than this many days
+device_support_days = 90
+
+# A project counts as stale when nothing in it changed for this many days
+stale_project_days = 90
+
+# Where your code lives (used by --deep and clean.stale_node_modules)
+project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
+
+# Keep macup reports for this many days
+keep_reports_days = 60
+EOF
+}
+
+open_conf(){
+  [ -f "$CONF" ] || { write_default_conf; _f 'Created %s' "$(tildify "$CONF")"; echo; }
+  # shellcheck disable=SC2086 # $EDITOR may carry arguments, e.g. "code -w"
+  if [ -t 0 ] && [ -t 1 ]; then ${VISUAL:-${EDITOR:-nano}} "$CONF"; else echo "$CONF"; fi
+}
+
+choose_lang(){ # [code]
+  local c="$1"
+  if [ -z "$c" ]; then
+    { : </dev/tty; } 2>/dev/null || { echo "macup lang en|uk|ru"; return 2; }
+    printf '\n  1  English\n  2  Українська\n  3  Русский\n\n'
+    c=$(ask "Language / Мова / Язык [1-3]: ")
+    case "$c" in 1|en) c=en ;; 2|uk|ua) c=uk ;; 3|ru) c=ru ;; *) echo "—"; return 1 ;; esac
+  fi
+  case "$c" in en|uk|ru) ;; ua) c=uk ;; *) echo "en | uk | ru"; return 1 ;; esac
+  conf_set language "$c"; MSG_LANG=$c; load_lang
+  _f 'Language: %s' "$(lang_name "$c")"; echo
+}
+
+show_last(){
+  local f; f=$(ls -t "$LOGDIR"/macup_*.md 2>/dev/null | head -1)
+  if [ -n "$f" ]; then cat "$f"; else _ 'No reports yet. Run: macup check'; echo; fi
+}
+
+show_history(){
+  [ -s "$HISTORY" ] || { _ 'No history yet. Every run adds a line; run: macup check'; echo; return; }
+  printf '%s%s%s  (%s)\n\n' "$B" "$(_ 'Last runs')" "$N" "$(tildify "$HISTORY")"
+  printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$B" "$(pad "$(_ 'DATE')" 18)" "$(pad "$(_ 'MODE')" 11)" "$(pad "$(_ 'FREE')" 11)" \
+    "$(pad "$(_ 'CHANGE')" 11)" "$(pad "$(_ 'SWAP')" 10)" "$(pad "$(_ 'BATTERY')" 9)" "$(pad "$(_ 'UPDATED')" 9)" "$(pad "$(_ 'FREED')" 10)" "$(_ 'WARN')" "$N"
+  tail -n 15 "$HISTORY" | awk -F, -v b="$B" -v n="$N" -v trend="$(_ 'Free space trend:')" '
+    function h(k){ if(k<0) return "-" h(-k); if(k>=1048576) return sprintf("%.1f GB",k/1048576); if(k>=1024) return sprintf("%.0f MB",k/1024); return k " KB" }
+    { chg = (NR>1) ? h($3-prev) : "";  prev=$3
+      bat = ($8!="") ? $8 "%" : "-"
+      printf "%-18s%-11s%-11s%-11s%-10s%-9s%-9s%-10s%s\n", $1,$2,h($3),chg,$6 " MB",bat,$9,h($10),$11
+      v[NR]=$3 }
+    END{ if(NR<2) exit; min=v[1]; max=v[1]; for(i=1;i<=NR;i++){ if(v[i]<min)min=v[i]; if(v[i]>max)max=v[i] }
+      split("▁ ▂ ▃ ▄ ▅ ▆ ▇ █", c, " "); s=""
+      for(i=1;i<=NR;i++){ k=(max==min)?4:int((v[i]-min)/(max-min)*7)+1; s=s c[k] }
+      printf "\n%s%s%s %s  (%s … %s)\n", b, trend, n, s, h(min), h(max) }'
+}
+
+ver_gt(){ # true when version $1 is newer than $2
+  [ -n "$1" ] && [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$1" ]
+}
+resolve_self(){ local p="$0"; case "$p" in */*) ;; *) p=$(command -v "$p") ;; esac; echo "$p"; }
+
+self_update(){
+  local tmp newv target
+  case "$MACUP_REPO" in __*) _ 'This copy has no GitHub repo configured.'; echo; exit 1 ;; esac
+  tmp=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
+  if ! curl -fsSL --max-time 30 "$MACUP_RAW/macup" -o "$tmp"; then _f 'Download failed: %s' "$MACUP_RAW/macup"; echo; rm -f "$tmp"; exit 1; fi
+  newv=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$tmp" | head -1)
+  if [ -z "$newv" ] || ! bash -n "$tmp" 2>/dev/null; then _ 'The downloaded file looks broken; nothing changed.'; echo; rm -f "$tmp"; exit 1; fi
+  if ! ver_gt "$newv" "$MACUP_VERSION"; then _f 'macup %s is already the latest.' "$MACUP_VERSION"; echo; rm -f "$tmp"; exit 0; fi
+  target=$(resolve_self)
+  if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; fi
+  echo; rm -f "$tmp"
+}
+
+uninstall(){
+  local target ans; target=$(resolve_self)
+  ans=$(ask "$(_f 'Remove %s? [y/N] ' "$(tildify "$target")")")
+  case "$ans" in y|Y|т|Т|д|Д) rm -f "$target" && { _ 'Removed.'; echo; } ;; *) _ 'Nothing removed.'; echo; return ;; esac
+  ans=$(ask "$(_ 'Also remove config, history and reports? [y/N] ')")
+  case "$ans" in y|Y|т|Т|д|Д) rm -rf "$CONF_DIR" "$STATE_DIR" "$LOGDIR" && { _ 'Removed config, history and reports.'; echo; } ;; esac
+}
+
+mline(){ # key label hint
+  printf '  %s%s%s  %s%s%s%s\n' "$B" "$1" "$N" "$(pad "$(_ "$2")" 24)" "$D" "$( [ -n "$3" ] && _ "$3")" "$N"
+}
+menu(){
+  local c
+  printf '\n%smacup%s — %s %s(v%s · %s)%s\n\n' "$B" "$N" "$(_ 'keep your Mac healthy')" "$D" "$MACUP_VERSION" "$(lang_name "$MSG_LANG")" "$N"
+  mline 1 'Check'            'installs and deletes nothing: health, security, updates'
+  mline 2 'Update & clean'   'everything + report'
+  mline 3 'Update only'      ''
+  mline 4 'Clean only'       ''
+  mline 5 'Deep check'       'also largest folders, Downloads, project artifacts'
+  mline 6 'History & trends' ''
+  mline 7 'Latest report'    ''
+  mline 8 'Tasks & settings' 'what runs, how to turn things off'
+  mline 9 'Language'         'English · Українська · Русский'
+  mline h 'Help'             ''
+  mline q 'Quit'             ''
+  echo
+  c=$(ask "$(_ 'Choose [1]: ')")
+  case "${c:-1}" in
+    1) DRY=1 ;; 2) ;; 3) DO_CLEAN=0 ;; 4) DO_UPDATE=0 ;; 5) DRY=1; DEEP=1 ;;
+    6) show_history; exit 0 ;; 7) show_last; exit 0 ;;
+    8) list_tasks; c=$(ask "$(_ 'Open the config now? [y/N] ')"); case "$c" in y|Y|т|Т|д|Д) open_conf ;; esac; exit 0 ;;
+    9) choose_lang; exit 0 ;;
+    h|H) usage; exit 0 ;; *) exit 0 ;;
+  esac
+}
+
+# ---------------------------------------------------------------- translations
+# Format: English text || translation. Keep every %s / %d in the same order.
+lang_table(){
+  case "$1" in
+  uk) cat <<'EOF'
+keep your Mac healthy || догляд за Маком
+Check || Перевірити
+installs and deletes nothing: health, security, updates || нічого не ставить і не видаляє: стан, безпека, оновлення
+Update & clean || Оновити й почистити
+everything + report || усе разом + звіт
+Update only || Лише оновити
+Clean only || Лише почистити
+Deep check || Глибока перевірка
+also largest folders, Downloads, project artifacts || ще й найбільші папки, Downloads, артефакти проєктів
+History & trends || Історія і тренди
+Latest report || Останній звіт
+Tasks & settings || Задачі й налаштування
+what runs, how to turn things off || що виконується і як вимкнути
+Language || Мова
+Help || Довідка
+Quit || Вийти
+Choose [1]:  || Вибір [1]:
+Open the config now? [y/N]  || Відкрити налаштування? [y/N]
+Language: %s || Мова: %s
+TASK || ЗАДАЧА
+STATE || СТАН
+WHAT IT DOES || ЩО РОБИТЬ
+on || увімк
+off || вимк
+Turn tasks off or on in %s (skip = … / enable = …) || Вмикати й вимикати задачі: %s (skip = … / enable = …)
+Created %s || Створено %s
+No reports yet. Run: macup check || Звітів ще немає. Запусти: macup check
+No history yet. Every run adds a line; run: macup check || Історії ще немає. Кожен запуск додає рядок; запусти: macup check
+Last runs || Останні запуски
+DATE || ДАТА
+MODE || РЕЖИМ
+FREE || ВІЛЬНО
+CHANGE || ЗМІНА
+SWAP || SWAP
+BATTERY || БАТАРЕЯ
+UPDATED || ОНОВЛ.
+FREED || ЗВІЛЬН.
+WARN || УВАГА
+Free space trend: || Тренд вільного місця:
+This copy has no GitHub repo configured. || У цієї копії не вказано репозиторій GitHub.
+Download failed: %s || Не вдалося завантажити: %s
+The downloaded file looks broken; nothing changed. || Завантажений файл пошкоджений; нічого не змінено.
+macup %s is already the latest. || macup %s — це вже остання версія.
+macup updated: %s → %s || macup оновлено: %s → %s
+Couldn't write %s || Не вдалося записати %s
+Remove %s? [y/N]  || Видалити %s? [y/N]
+Removed. || Видалено.
+Nothing removed. || Нічого не видалено.
+Also remove config, history and reports? [y/N]  || Видалити також налаштування, історію і звіти? [y/N]
+Removed config, history and reports. || Налаштування, історію і звіти видалено.
+Unknown command: %s || Невідома команда: %s
+Type  macup  for the menu or  macup help  for all commands. || Набери  macup  для меню або  macup help  для всіх команд.
+Interrupted. Log: %s || Перервано. Лог: %s
+nothing will be installed or deleted || нічого не буде встановлено чи видалено
+System || Система
+macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · працює %s
+macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · працює %s — варто перезавантажити (%s днів без перезавантаження)
+Disk: %s free of %s (%s%%) || Диск: вільно %s з %s (%s%%)
+Disk: %s free of %s (%s%%) — critically low || Диск: вільно %s з %s (%s%%) — критично мало
+Disk: %s free of %s (%s%%) — getting low || Диск: вільно %s з %s (%s%%) — місця стає мало
+Disk health (SMART): %s || Стан диска (SMART): %s
+Disk health (SMART): %s — back up now || Стан диска (SMART): %s — терміново зроби бекап
+Local Time Machine snapshots: %s (macOS frees them automatically when space runs low) || Локальні знімки Time Machine: %s (macOS прибирає їх сама, коли бракує місця)
+Memory: %s GB, %s%% free, swap %s MB || Пам'ять: %s GB, вільно %s%%, swap %s MB
+Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart || Пам'ять: %s GB, вільно %s%%, swap %s MB — пам'яті замало; закрий важкі програми або перезавантаж
+CPU: load %s on %s cores || CPU: навантаження %s на %s ядер
+CPU: load %s on %s cores — something is busy || CPU: навантаження %s на %s ядер — щось активно працює
+Top CPU:    %s || Найбільше CPU:     %s
+Top memory: %s || Найбільше пам'яті: %s
+Thermal: the Mac is throttling right now || Нагрів: Мак зараз скидає частоту
+Battery: %s charged, %s cycles, %s%% capacity, %s || Батарея: заряд %s, циклів %s, ємність %s%%, стан %s
+Battery: %s charged, %s cycles, %s%% capacity, %s — capacity under 80%% || Батарея: заряд %s, циклів %s, ємність %s%%, стан %s — ємність нижче 80%%
+Security || Безпека
+FileVault: on || FileVault: увімкнено
+FileVault: off — your disk is not encrypted (System Settings → Privacy & Security) || FileVault: вимкнено — диск не зашифрований (Системні параметри → Приватність і безпека)
+Firewall: on || Брандмауер: увімкнено
+Firewall: off (System Settings → Network → Firewall) || Брандмауер: вимкнено (Системні параметри → Мережа → Брандмауер)
+System Integrity Protection: on || System Integrity Protection: увімкнено
+System Integrity Protection: off || System Integrity Protection: вимкнено
+Gatekeeper: on || Gatekeeper: увімкнено
+Gatekeeper: off — apps from anywhere can run || Gatekeeper: вимкнено — запускаються програми з будь-яких джерел
+Automatic update checks: off || Автоперевірка оновлень: вимкнена
+Security responses & system files: not installed automatically || Оновлення безпеки та системні файли: не ставляться автоматично
+Automatic security updates: on || Автоматичні оновлення безпеки: увімкнено
+Time Machine: last backup %s (%s days ago) || Time Machine: останній бекап %s (%s днів тому)
+Time Machine: last backup %s || Time Machine: останній бекап %s
+Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: налаштовано (дата бекапу потребує повного доступу до диска для Terminal)
+Time Machine: no backup destination configured || Time Machine: диск для бекапів не налаштований
+Updates || Оновлення
+Available updates (not installed) || Доступні оновлення (не встановлено)
+%s: %s is on npm (fine if you're on the stable channel) || %s: на npm є %s (це нормально, якщо в тебе канал stable)
+Plugin marketplaces || Маркетплейси плагінів
+Plugin marketplaces refreshed || Маркетплейси плагінів оновлено
+Plugin marketplaces: refresh failed (see log) || Маркетплейси плагінів: помилка оновлення (див. лог)
+Plugin %s || Плагін %s
+Plugin %s: %s → %s || Плагін %s: %s → %s
+plugin %s %s → %s || плагін %s %s → %s
+Claude Code plugins: %s installed || Плагіни Claude Code: встановлено %s
+npm globals || npm (глобальні)
+npm globals: up to date || npm (глобальні): усе актуальне
+npm globals: %s outdated || npm (глобальні): застаріло %s
+%s: update failed (see log) || %s: не вдалося оновити (див. лог)
+Agent skills || Скіли агентів
+Agent skills: %s installed, %s updated || Скіли агентів: встановлено %s, оновлено %s
+skill %s || скіл %s
+Agent skills: update failed (see log) || Скіли агентів: не вдалося оновити (див. лог)
+Homebrew: up to date || Homebrew: усе актуальне
+brew upgrade (%s formulae, %s casks) || brew upgrade (формули: %s, програми: %s)
+Homebrew: upgraded %s formulae, %s casks || Homebrew: оновлено — формули: %s, програми: %s
+Homebrew: upgraded with errors (see log) || Homebrew: оновлено з помилками (див. лог)
+Homebrew: %s formulae, %s casks || Homebrew: формули: %s, програми: %s
+Homebrew: %s formulae, %s casks outdated || Homebrew: застаріли — формули: %s, програми: %s
+%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy || Ще %s програм оновлюються самі (Chrome, Slack…). Примусово: brew upgrade --cask --greedy
+App Store: up to date || App Store: усе актуальне
+App Store: %s apps updated || App Store: оновлено програм: %s
+App Store: %s apps || App Store: програм: %s
+App Store: %s updates didn't install — open the App Store || App Store: %s оновлень не встановились — відкрий App Store
+App Store: %s updates || App Store: оновлень: %s
+App Store apps aren't checked: brew install mas || App Store не перевіряється: brew install mas
+%s: updated || %s: оновлено
+pipx tools || Інструменти pipx
+uv tools || Інструменти uv
+Rust toolchains || Тулчейни Rust
+gh extensions || Розширення gh
+Updated on a full run (no version check): %s || Оновлюються при повному запуску (без перевірки версій): %s
+Looking for macOS updates (up to a minute) || Шукаю оновлення macOS (до хвилини)
+macOS: up to date || macOS: оновлень немає
+macOS: updates available — System Settings → General → Software Update || macOS: є оновлення — Системні параметри → Загальні → Оновлення ПЗ
+Tools & services || Інструменти й сервіси
+Checking MCP servers || Перевіряю MCP-сервери
+Claude Code MCP servers: none configured || MCP-сервери Claude Code: не налаштовані
+Claude Code MCP servers: all %s connected || MCP-сервери Claude Code: усі %s працюють
+Claude Code MCP servers: %s of %s not working || MCP-сервери Claude Code: %s з %s не працюють
+brew doctor: %s warnings (details in the log) || brew doctor: попереджень: %s (деталі в лозі)
+brew doctor: all good || brew doctor: без зауважень
+Developer tools: %s (%s) || Інструменти розробника: %s (%s)
+Command Line Tools only || лише Command Line Tools
+Developer tools: not installed or broken — run: xcode-select --install || Інструменти розробника не встановлені або зламані — запусти: xcode-select --install
+Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components || Runtime-и симуляторів: %s, %s — старі видаляй у Xcode → Settings → Components
+Claude Desktop %s (updates itself) || Claude Desktop %s (оновлюється сам)
+Docker: %s — clean manually with: docker system prune || Docker: %s — чистити вручну: docker system prune
+Cleanup || Чистка
+What cleanup would free || Що звільнить чистка
+%s: freed %s || %s: звільнено %s
+%s: cleaned || %s: почищено
+%s: %s || %s: %s
+%s: %s — skipped, Xcode is open || %s: %s — пропущено, Xcode відкритий
+%s (%s items, older than %s days) || %s (%s шт., старші за %s днів)
+%s: %s in cache (part of it is freeable) || %s: %s у кеші (частину можна звільнити)
+Xcode DerivedData || Xcode DerivedData
+SwiftUI previews || Прев'ю SwiftUI
+iOS device logs || Логи iOS-пристроїв
+Unavailable simulators || Недоступні симулятори
+Unavailable simulators (%s) || Недоступні симулятори (%s)
+Unavailable simulators: %s || Недоступних симуляторів: %s
+Simulator caches || Кеш симуляторів
+SwiftPM cache || Кеш SwiftPM
+CocoaPods cache || Кеш CocoaPods
+Carthage cache || Кеш Carthage
+Homebrew cleanup || Чистка Homebrew
+Homebrew old versions & downloads || Старі версії й завантаження Homebrew
+Homebrew: nothing old to remove || Homebrew: нічого старого
+Homebrew downloads cache || Кеш завантажень Homebrew
+npm cache || Кеш npm
+Yarn cache || Кеш Yarn
+pnpm store || Сховище pnpm
+pip cache || Кеш pip
+uv cache || Кеш uv
+Go build cache || Кеш збірки Go
+Old logs & crash reports (%s files) || Старі логи й крешрепорти (файлів: %s)
+Trash || Кошик
+Looking for stale node_modules || Шукаю старі node_modules
+Stale node_modules (%s projects untouched for %s days; npm install brings them back) || Старі node_modules (%s проєктів без змін %s днів; npm install поверне їх)
+Not touched by macup || macup цього не чіпає
+Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes) || Xcode Archives: %s — видали старі білди в Xcode → Organizer (лиши потрібні для символікації крешів)
+Xcode Archives: %s || Xcode Archives: %s
+Simulator devices: %s (Xcode → Window → Devices and Simulators) || Пристрої симуляторів: %s (Xcode → Window → Devices and Simulators)
+Flutter pub-cache: %s (full reset: dart pub cache clean) || Flutter pub-cache: %s (повна очистка: dart pub cache clean)
+Gradle caches: %s || Кеші Gradle: %s
+App caches (~/Library/Caches): %s — macOS trims these itself when space is low || Кеші програм (~/Library/Caches): %s — macOS чистить їх сама при нестачі місця
+Trash: %s — empty it || Кошик: %s — очисти його
+Trash: %s || Кошик: %s
+Startup items || Автозапуск
+Third-party background services: %s (full list in the report) || Фонові служби сторонніх програм: %s (повний список у звіті)
+Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps) || Осиротілі елементи автозапуску: %s посилаються на програми, яких уже немає (імовірно, залишки видалених програм)
+Login items: System Settings → General → Login Items & Extensions || Об'єкти входу: Системні параметри → Загальні → Об'єкти входу
+Deep scan || Глибока перевірка
+Measuring your home folder (can take a few minutes) || Рахую розміри домашньої теки (кілька хвилин)
+Largest folders in your home: || Найбільші папки в домашній теці:
+Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старші за 90 днів: %s шт., %s — переглянь і видали непотрібне
+Files over 1 GB in Downloads: || Файли понад 1 GB у Downloads:
+Scanning projects for build artifacts || Шукаю артефакти збірки в проєктах
+Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest: || Артефакти збірки (node_modules, Pods, .build, .dart_tool): разом %s; найбільші:
+Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days || Порада: увімкни clean.stale_node_modules у налаштуваннях, щоб прибирати node_modules з проєктів, які ти не чіпав %s днів
+No project folders found. Set project_dirs in %s || Папок з проєктами не знайдено. Вкажи project_dirs у %s
+No build artifacts in: %s || Артефактів збірки немає в: %s
+Since last run || Від минулого запуску
+Free space: %s since %s — something is filling the disk (try: macup check --deep) || Вільне місце: %s від %s — щось заповнює диск (спробуй: macup check --deep)
+Free space: %s since %s || Вільне місце: %s від %s
+Battery capacity: %s%% → %s%% || Ємність батареї: %s%% → %s%%
+Battery cycles: +%s || Цикли батареї: +%s
+Full history: macup history || Повна історія: macup history
+Summary || Підсумок
+macup report — %s || Звіт macup — %s
+Mode: %s · macup %s · took %s || Режим: %s · macup %s · тривалість %s
+Updated (%s): || Оновлено (%s):
+Updates: everything was already up to date || Оновлення: усе вже було актуальне
+Freed: %s || Звільнено: %s
+Could free: ~%s || Можна звільнити: ~%s
+Could free: ~%s  (to free it: macup all) || Можна звільнити: ~%s  (щоб звільнити: macup all)
+Free disk space: %s (%s%%), was %s || Вільно на диску: %s (%s%%), було %s
+Free disk space: %s (%s%%) || Вільно на диску: %s (%s%%)
+Needs attention (%s): || Потребує уваги (%s):
+Needs attention: %s || Потребує уваги: %s
+Needs attention: nothing || Потребує уваги: нічого
+macup %s is available: macup self-update || Вийшов macup %s: macup self-update
+Command log: %s || Лог команд: %s
+Report: %s · %s || Звіт: %s · %s
+Menu: macup · trends: macup history · help: macup help || Меню: macup · тренди: macup history · довідка: macup help
+Updated: %s || Оновлено: %s
+macOS version, model, uptime (warns after 14 days without restart) || Версія macOS, модель, час роботи (попереджає після 14 днів без перезавантаження)
+Free space, disk health (SMART), local Time Machine snapshots || Вільне місце, стан диска (SMART), локальні знімки Time Machine
+Memory pressure and swap usage || Навантаження на пам'ять і swap
+Load average, top CPU and memory processes, thermal throttling || Навантаження CPU, найважчі процеси, перегрів
+Charge, cycle count, maximum capacity, condition || Заряд, цикли, максимальна ємність, стан
+FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine || FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine
+Third-party launch agents/daemons, orphaned ones pointing at deleted apps || Сторонні служби автозапуску, зокрема від видалених програм
+Claude Code MCP servers that fail to connect || MCP-сервери Claude Code, що не підключаються
+brew doctor warnings || Попередження brew doctor
+Pending macOS updates (never installed automatically) || Оновлення macOS (ніколи не ставляться автоматично)
+Xcode, command line tools, simulator runtimes || Xcode, Command Line Tools, runtime-и симуляторів
+Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex || Версії Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
+Docker disk usage (if Docker is running) || Місце, зайняте Docker (якщо він запущений)
+Sizes of things macup never deletes: Archives, Trash, caches, pub-cache || Розміри того, що macup не видаляє: Archives, Кошик, кеші, pub-cache
+Compare with the previous run: free space, swap, battery capacity || Порівняння з минулим запуском: місце, swap, батарея
+Tell when a newer macup is on GitHub (once a week) || Повідомляти про нову версію macup на GitHub (раз на тиждень)
+Claude Code CLI, plugin marketplaces, plugins || Claude Code CLI, маркетплейси плагінів, плагіни
+Global npm packages (Codex, Playwright, ...) || Глобальні npm-пакети (Codex, Playwright, ...)
+Agent skills in ~/.agents (npx skills update -g) || Скіли агентів у ~/.agents (npx skills update -g)
+Homebrew formulae and casks || Формули й програми Homebrew
+App Store apps (needs mas) || Програми App Store (потрібен mas)
+pipx-installed tools || Інструменти, встановлені через pipx
+uv-installed tools || Інструменти, встановлені через uv
+GitHub CLI extensions || Розширення GitHub CLI
+Xcode DerivedData (skipped while Xcode is open) || Xcode DerivedData (пропускається, коли Xcode відкритий)
+SwiftUI previews cache (skipped while Xcode is open) || Кеш прев'ю SwiftUI (пропускається, коли Xcode відкритий)
+iOS/watchOS DeviceSupport folders older than device_support_days || Папки DeviceSupport, старші за device_support_days
+iOS device logs older than 90 days || Логи iOS-пристроїв, старші за 90 днів
+Simulators whose runtime is gone || Симулятори без runtime
+CoreSimulator caches || Кеші CoreSimulator
+npm cache garbage (npm cache verify) || Сміття в кеші npm (npm cache verify)
+pnpm store: unreferenced packages || Сховище pnpm: невикористані пакети
+uv cache: unused entries || Кеш uv: невикористані записи
+Old Homebrew versions and downloads || Старі версії й завантаження Homebrew
+Your app logs and crash reports older than 30 days || Логи програм і крешрепорти, старші за 30 днів
+Quick Look thumbnail cache || Кеш мініатюр Quick Look
+macup reports older than keep_reports_days || Звіти macup, старші за keep_reports_days
+node_modules in projects untouched for stale_project_days (opt-in) || node_modules у проєктах без змін stale_project_days днів (вмикається вручну)
+Empty the Trash (opt-in) || Очищати Кошик (вмикається вручну)
+EOF
+  ;;
+  ru) cat <<'EOF'
+keep your Mac healthy || уход за Маком
+Check || Проверить
+installs and deletes nothing: health, security, updates || ничего не ставит и не удаляет: состояние, безопасность, обновления
+Update & clean || Обновить и почистить
+everything + report || всё вместе + отчёт
+Update only || Только обновить
+Clean only || Только почистить
+Deep check || Глубокая проверка
+also largest folders, Downloads, project artifacts || ещё и самые большие папки, Downloads, артефакты проектов
+History & trends || История и тренды
+Latest report || Последний отчёт
+Tasks & settings || Задачи и настройки
+what runs, how to turn things off || что выполняется и как отключить
+Language || Язык
+Help || Справка
+Quit || Выйти
+Choose [1]:  || Выбор [1]:
+Open the config now? [y/N]  || Открыть настройки? [y/N]
+Language: %s || Язык: %s
+TASK || ЗАДАЧА
+STATE || СТАТУС
+WHAT IT DOES || ЧТО ДЕЛАЕТ
+on || вкл
+off || выкл
+Turn tasks off or on in %s (skip = … / enable = …) || Включать и отключать задачи: %s (skip = … / enable = …)
+Created %s || Создан %s
+No reports yet. Run: macup check || Отчётов пока нет. Запустите: macup check
+No history yet. Every run adds a line; run: macup check || Истории пока нет. Каждый запуск добавляет строку; запустите: macup check
+Last runs || Последние запуски
+DATE || ДАТА
+MODE || РЕЖИМ
+FREE || СВОБОДНО
+CHANGE || ИЗМЕН.
+SWAP || SWAP
+BATTERY || БАТАРЕЯ
+UPDATED || ОБНОВЛ.
+FREED || ОСВОБ.
+WARN || ВНИМ.
+Free space trend: || Тренд свободного места:
+This copy has no GitHub repo configured. || У этой копии не указан репозиторий GitHub.
+Download failed: %s || Не удалось скачать: %s
+The downloaded file looks broken; nothing changed. || Скачанный файл повреждён; ничего не изменено.
+macup %s is already the latest. || macup %s — это уже последняя версия.
+macup updated: %s → %s || macup обновлён: %s → %s
+Couldn't write %s || Не удалось записать %s
+Remove %s? [y/N]  || Удалить %s? [y/N]
+Removed. || Удалено.
+Nothing removed. || Ничего не удалено.
+Also remove config, history and reports? [y/N]  || Удалить также настройки, историю и отчёты? [y/N]
+Removed config, history and reports. || Настройки, история и отчёты удалены.
+Unknown command: %s || Неизвестная команда: %s
+Type  macup  for the menu or  macup help  for all commands. || Наберите  macup  для меню или  macup help  для всех команд.
+Interrupted. Log: %s || Прервано. Лог: %s
+nothing will be installed or deleted || ничего не будет установлено или удалено
+System || Система
+macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · работает %s
+macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · работает %s — стоит перезагрузить (%s дней без перезагрузки)
+Disk: %s free of %s (%s%%) || Диск: свободно %s из %s (%s%%)
+Disk: %s free of %s (%s%%) — critically low || Диск: свободно %s из %s (%s%%) — критически мало
+Disk: %s free of %s (%s%%) — getting low || Диск: свободно %s из %s (%s%%) — места становится мало
+Disk health (SMART): %s || Состояние диска (SMART): %s
+Disk health (SMART): %s — back up now || Состояние диска (SMART): %s — срочно сделайте бэкап
+Local Time Machine snapshots: %s (macOS frees them automatically when space runs low) || Локальные снимки Time Machine: %s (macOS удаляет их сама, когда не хватает места)
+Memory: %s GB, %s%% free, swap %s MB || Память: %s GB, свободно %s%%, swap %s MB
+Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart || Память: %s GB, свободно %s%%, swap %s MB — памяти мало; закройте тяжёлые приложения или перезагрузитесь
+CPU: load %s on %s cores || CPU: нагрузка %s на %s ядер
+CPU: load %s on %s cores — something is busy || CPU: нагрузка %s на %s ядер — что-то активно работает
+Top CPU:    %s || Больше всего CPU:    %s
+Top memory: %s || Больше всего памяти: %s
+Thermal: the Mac is throttling right now || Нагрев: Мак сейчас сбрасывает частоту
+Battery: %s charged, %s cycles, %s%% capacity, %s || Батарея: заряд %s, циклов %s, ёмкость %s%%, состояние %s
+Battery: %s charged, %s cycles, %s%% capacity, %s — capacity under 80%% || Батарея: заряд %s, циклов %s, ёмкость %s%%, состояние %s — ёмкость ниже 80%%
+Security || Безопасность
+FileVault: on || FileVault: включён
+FileVault: off — your disk is not encrypted (System Settings → Privacy & Security) || FileVault: выключен — диск не зашифрован (Системные настройки → Конфиденциальность и безопасность)
+Firewall: on || Брандмауэр: включён
+Firewall: off (System Settings → Network → Firewall) || Брандмауэр: выключен (Системные настройки → Сеть → Брандмауэр)
+System Integrity Protection: on || System Integrity Protection: включена
+System Integrity Protection: off || System Integrity Protection: выключена
+Gatekeeper: on || Gatekeeper: включён
+Gatekeeper: off — apps from anywhere can run || Gatekeeper: выключен — запускаются приложения из любых источников
+Automatic update checks: off || Автопроверка обновлений: выключена
+Security responses & system files: not installed automatically || Обновления безопасности и системные файлы: не ставятся автоматически
+Automatic security updates: on || Автоматические обновления безопасности: включены
+Time Machine: last backup %s (%s days ago) || Time Machine: последний бэкап %s (%s дней назад)
+Time Machine: last backup %s || Time Machine: последний бэкап %s
+Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: настроена (для даты бэкапа нужен полный доступ к диску для Terminal)
+Time Machine: no backup destination configured || Time Machine: диск для бэкапов не настроен
+Updates || Обновления
+Available updates (not installed) || Доступные обновления (не установлены)
+%s: %s is on npm (fine if you're on the stable channel) || %s: на npm есть %s (это нормально, если у вас канал stable)
+Plugin marketplaces || Маркетплейсы плагинов
+Plugin marketplaces refreshed || Маркетплейсы плагинов обновлены
+Plugin marketplaces: refresh failed (see log) || Маркетплейсы плагинов: ошибка обновления (см. лог)
+Plugin %s || Плагин %s
+Plugin %s: %s → %s || Плагин %s: %s → %s
+plugin %s %s → %s || плагин %s %s → %s
+Claude Code plugins: %s installed || Плагины Claude Code: установлено %s
+npm globals || npm (глобальные)
+npm globals: up to date || npm (глобальные): всё актуально
+npm globals: %s outdated || npm (глобальные): устарело %s
+%s: update failed (see log) || %s: не удалось обновить (см. лог)
+Agent skills || Скиллы агентов
+Agent skills: %s installed, %s updated || Скиллы агентов: установлено %s, обновлено %s
+skill %s || скилл %s
+Agent skills: update failed (see log) || Скиллы агентов: не удалось обновить (см. лог)
+Homebrew: up to date || Homebrew: всё актуально
+brew upgrade (%s formulae, %s casks) || brew upgrade (формулы: %s, приложения: %s)
+Homebrew: upgraded %s formulae, %s casks || Homebrew: обновлено — формулы: %s, приложения: %s
+Homebrew: upgraded with errors (see log) || Homebrew: обновлено с ошибками (см. лог)
+Homebrew: %s formulae, %s casks || Homebrew: формулы: %s, приложения: %s
+Homebrew: %s formulae, %s casks outdated || Homebrew: устарели — формулы: %s, приложения: %s
+%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy || Ещё %s приложений обновляются сами (Chrome, Slack…). Принудительно: brew upgrade --cask --greedy
+App Store: up to date || App Store: всё актуально
+App Store: %s apps updated || App Store: обновлено приложений: %s
+App Store: %s apps || App Store: приложений: %s
+App Store: %s updates didn't install — open the App Store || App Store: %s обновлений не установились — откройте App Store
+App Store: %s updates || App Store: обновлений: %s
+App Store apps aren't checked: brew install mas || App Store не проверяется: brew install mas
+%s: updated || %s: обновлено
+pipx tools || Инструменты pipx
+uv tools || Инструменты uv
+Rust toolchains || Тулчейны Rust
+gh extensions || Расширения gh
+Updated on a full run (no version check): %s || Обновляются при полном запуске (без проверки версий): %s
+Looking for macOS updates (up to a minute) || Ищу обновления macOS (до минуты)
+macOS: up to date || macOS: обновлений нет
+macOS: updates available — System Settings → General → Software Update || macOS: есть обновления — Системные настройки → Основные → Обновление ПО
+Tools & services || Инструменты и сервисы
+Checking MCP servers || Проверяю MCP-серверы
+Claude Code MCP servers: none configured || MCP-серверы Claude Code: не настроены
+Claude Code MCP servers: all %s connected || MCP-серверы Claude Code: все %s работают
+Claude Code MCP servers: %s of %s not working || MCP-серверы Claude Code: %s из %s не работают
+brew doctor: %s warnings (details in the log) || brew doctor: предупреждений: %s (подробности в логе)
+brew doctor: all good || brew doctor: без замечаний
+Developer tools: %s (%s) || Инструменты разработчика: %s (%s)
+Command Line Tools only || только Command Line Tools
+Developer tools: not installed or broken — run: xcode-select --install || Инструменты разработчика не установлены или сломаны — запустите: xcode-select --install
+Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components || Runtime симуляторов: %s, %s — старые удаляйте в Xcode → Settings → Components
+Claude Desktop %s (updates itself) || Claude Desktop %s (обновляется сам)
+Docker: %s — clean manually with: docker system prune || Docker: %s — чистить вручную: docker system prune
+Cleanup || Очистка
+What cleanup would free || Что освободит очистка
+%s: freed %s || %s: освобождено %s
+%s: cleaned || %s: почищено
+%s: %s || %s: %s
+%s: %s — skipped, Xcode is open || %s: %s — пропущено, Xcode открыт
+%s (%s items, older than %s days) || %s (%s шт., старше %s дней)
+%s: %s in cache (part of it is freeable) || %s: %s в кэше (часть можно освободить)
+Xcode DerivedData || Xcode DerivedData
+SwiftUI previews || Превью SwiftUI
+iOS device logs || Логи iOS-устройств
+Unavailable simulators || Недоступные симуляторы
+Unavailable simulators (%s) || Недоступные симуляторы (%s)
+Unavailable simulators: %s || Недоступных симуляторов: %s
+Simulator caches || Кэш симуляторов
+SwiftPM cache || Кэш SwiftPM
+CocoaPods cache || Кэш CocoaPods
+Carthage cache || Кэш Carthage
+Homebrew cleanup || Очистка Homebrew
+Homebrew old versions & downloads || Старые версии и загрузки Homebrew
+Homebrew: nothing old to remove || Homebrew: ничего старого
+Homebrew downloads cache || Кэш загрузок Homebrew
+npm cache || Кэш npm
+Yarn cache || Кэш Yarn
+pnpm store || Хранилище pnpm
+pip cache || Кэш pip
+uv cache || Кэш uv
+Go build cache || Кэш сборки Go
+Old logs & crash reports (%s files) || Старые логи и крэш-репорты (файлов: %s)
+Trash || Корзина
+Looking for stale node_modules || Ищу старые node_modules
+Stale node_modules (%s projects untouched for %s days; npm install brings them back) || Старые node_modules (%s проектов без изменений %s дней; npm install вернёт их)
+Not touched by macup || macup это не трогает
+Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes) || Xcode Archives: %s — удалите старые билды в Xcode → Organizer (оставьте нужные для символикации крэшей)
+Xcode Archives: %s || Xcode Archives: %s
+Simulator devices: %s (Xcode → Window → Devices and Simulators) || Устройства симуляторов: %s (Xcode → Window → Devices and Simulators)
+Flutter pub-cache: %s (full reset: dart pub cache clean) || Flutter pub-cache: %s (полная очистка: dart pub cache clean)
+Gradle caches: %s || Кэши Gradle: %s
+App caches (~/Library/Caches): %s — macOS trims these itself when space is low || Кэши приложений (~/Library/Caches): %s — macOS чистит их сама при нехватке места
+Trash: %s — empty it || Корзина: %s — очистите её
+Trash: %s || Корзина: %s
+Startup items || Автозапуск
+Third-party background services: %s (full list in the report) || Фоновые службы сторонних приложений: %s (полный список в отчёте)
+Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps) || Осиротевшие элементы автозапуска: %s ссылаются на программы, которых уже нет (вероятно, остатки удалённых приложений)
+Login items: System Settings → General → Login Items & Extensions || Объекты входа: Системные настройки → Основные → Объекты входа
+Deep scan || Глубокая проверка
+Measuring your home folder (can take a few minutes) || Считаю размеры домашней папки (несколько минут)
+Largest folders in your home: || Самые большие папки в домашней папке:
+Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старше 90 дней: %s шт., %s — просмотрите и удалите ненужное
+Files over 1 GB in Downloads: || Файлы больше 1 GB в Downloads:
+Scanning projects for build artifacts || Ищу артефакты сборки в проектах
+Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest: || Артефакты сборки (node_modules, Pods, .build, .dart_tool): всего %s; самые большие:
+Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days || Совет: включите clean.stale_node_modules в настройках, чтобы удалять node_modules из проектов, которые вы не трогали %s дней
+No project folders found. Set project_dirs in %s || Папки с проектами не найдены. Укажите project_dirs в %s
+No build artifacts in: %s || Артефактов сборки нет в: %s
+Since last run || С прошлого запуска
+Free space: %s since %s — something is filling the disk (try: macup check --deep) || Свободное место: %s с %s — что-то заполняет диск (попробуйте: macup check --deep)
+Free space: %s since %s || Свободное место: %s с %s
+Battery capacity: %s%% → %s%% || Ёмкость батареи: %s%% → %s%%
+Battery cycles: +%s || Циклы батареи: +%s
+Full history: macup history || Полная история: macup history
+Summary || Итог
+macup report — %s || Отчёт macup — %s
+Mode: %s · macup %s · took %s || Режим: %s · macup %s · длительность %s
+Updated (%s): || Обновлено (%s):
+Updates: everything was already up to date || Обновления: всё уже было актуально
+Freed: %s || Освобождено: %s
+Could free: ~%s || Можно освободить: ~%s
+Could free: ~%s  (to free it: macup all) || Можно освободить: ~%s  (чтобы освободить: macup all)
+Free disk space: %s (%s%%), was %s || Свободно на диске: %s (%s%%), было %s
+Free disk space: %s (%s%%) || Свободно на диске: %s (%s%%)
+Needs attention (%s): || Требует внимания (%s):
+Needs attention: %s || Требует внимания: %s
+Needs attention: nothing || Требует внимания: ничего
+macup %s is available: macup self-update || Вышел macup %s: macup self-update
+Command log: %s || Лог команд: %s
+Report: %s · %s || Отчёт: %s · %s
+Menu: macup · trends: macup history · help: macup help || Меню: macup · тренды: macup history · справка: macup help
+Updated: %s || Обновлено: %s
+macOS version, model, uptime (warns after 14 days without restart) || Версия macOS, модель, время работы (предупреждает после 14 дней без перезагрузки)
+Free space, disk health (SMART), local Time Machine snapshots || Свободное место, состояние диска (SMART), локальные снимки Time Machine
+Memory pressure and swap usage || Нагрузка на память и swap
+Load average, top CPU and memory processes, thermal throttling || Нагрузка CPU, самые тяжёлые процессы, перегрев
+Charge, cycle count, maximum capacity, condition || Заряд, циклы, максимальная ёмкость, состояние
+FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine || FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine
+Third-party launch agents/daemons, orphaned ones pointing at deleted apps || Сторонние службы автозапуска, в т. ч. от удалённых приложений
+Claude Code MCP servers that fail to connect || MCP-серверы Claude Code, которые не подключаются
+brew doctor warnings || Предупреждения brew doctor
+Pending macOS updates (never installed automatically) || Обновления macOS (никогда не ставятся автоматически)
+Xcode, command line tools, simulator runtimes || Xcode, Command Line Tools, runtime симуляторов
+Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex || Версии Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
+Docker disk usage (if Docker is running) || Место, занятое Docker (если он запущен)
+Sizes of things macup never deletes: Archives, Trash, caches, pub-cache || Размеры того, что macup не удаляет: Archives, Корзина, кэши, pub-cache
+Compare with the previous run: free space, swap, battery capacity || Сравнение с прошлым запуском: место, swap, батарея
+Tell when a newer macup is on GitHub (once a week) || Сообщать о новой версии macup на GitHub (раз в неделю)
+Claude Code CLI, plugin marketplaces, plugins || Claude Code CLI, маркетплейсы плагинов, плагины
+Global npm packages (Codex, Playwright, ...) || Глобальные npm-пакеты (Codex, Playwright, ...)
+Agent skills in ~/.agents (npx skills update -g) || Скиллы агентов в ~/.agents (npx skills update -g)
+Homebrew formulae and casks || Формулы и приложения Homebrew
+App Store apps (needs mas) || Приложения App Store (нужен mas)
+pipx-installed tools || Инструменты, установленные через pipx
+uv-installed tools || Инструменты, установленные через uv
+GitHub CLI extensions || Расширения GitHub CLI
+Xcode DerivedData (skipped while Xcode is open) || Xcode DerivedData (пропускается, когда Xcode открыт)
+SwiftUI previews cache (skipped while Xcode is open) || Кэш превью SwiftUI (пропускается, когда Xcode открыт)
+iOS/watchOS DeviceSupport folders older than device_support_days || Папки DeviceSupport старше device_support_days
+iOS device logs older than 90 days || Логи iOS-устройств старше 90 дней
+Simulators whose runtime is gone || Симуляторы без runtime
+CoreSimulator caches || Кэши CoreSimulator
+npm cache garbage (npm cache verify) || Мусор в кэше npm (npm cache verify)
+pnpm store: unreferenced packages || Хранилище pnpm: неиспользуемые пакеты
+uv cache: unused entries || Кэш uv: неиспользуемые записи
+Old Homebrew versions and downloads || Старые версии и загрузки Homebrew
+Your app logs and crash reports older than 30 days || Логи приложений и крэш-репорты старше 30 дней
+Quick Look thumbnail cache || Кэш миниатюр Quick Look
+macup reports older than keep_reports_days || Отчёты macup старше keep_reports_days
+node_modules in projects untouched for stale_project_days (opt-in) || node_modules в проектах без изменений stale_project_days дней (включается вручную)
+Empty the Trash (opt-in) || Очищать Корзину (включается вручную)
+EOF
+  ;;
+  esac
+}
+
+load_lang
+
+# ---------------------------------------------------------------- arguments
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""
+cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
+trap cleanup_lang EXIT
+set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
+while [ $# -gt 0 ]; do case "$1" in
+  check|-n|--dry-run)   DRY=1; ACTION=check ;;
+  all|run)              ACTION=all ;;
+  update|--no-clean)    DO_CLEAN=0; ACTION=update ;;
+  clean|--no-update)    DO_UPDATE=0; ACTION=clean ;;
+  deep|--deep)          DEEP=1 ;;
+  --skip)               CLI_SKIP="$CLI_SKIP,$2"; shift ;;
+  --skip=*)             CLI_SKIP="$CLI_SKIP,${1#*=}" ;;
+  --only)               CLI_ONLY="$CLI_ONLY,$2"; shift ;;
+  --only=*)             CLI_ONLY="$CLI_ONLY,${1#*=}" ;;
+  --lang)               set_lang "$2"; shift ;;
+  --lang=*)             set_lang "${1#*=}" ;;
+  --no-color)           B=; G=; Y=; R=; C=; D=; N=; CL= ;;
+  lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
+  last|--last)          CMD=last ;;
+  history|--history)    CMD=history ;;
+  reports|--reports)    CMD=reports ;;
+  tasks|--tasks)        CMD=tasks ;;
+  config|--config)      CMD=config ;;
+  self-update|selfupdate|upgrade) CMD=self_update ;;
+  uninstall)            CMD=uninstall ;;
+  help|-h|--help)       CMD=help ;;
+  version|-v|--version) CMD=version ;;
+  *) _f 'Unknown command: %s' "$1"; echo; _ 'Type  macup  for the menu or  macup help  for all commands.'; echo; exit 1 ;;
+esac; shift; done
+
+# one-off commands run after all options are read, so `macup help --lang uk` works
+case "$CMD" in
+  lang)        choose_lang "$LANG_ARG"; exit $? ;;
+  last)        show_last; exit 0 ;;
+  history)     show_history; exit 0 ;;
+  reports)     mkdir -p "$LOGDIR"; open "$LOGDIR"; exit 0 ;;
+  tasks)       list_tasks; exit 0 ;;
+  config)      open_conf; exit 0 ;;
+  self_update) self_update; exit 0 ;;
+  uninstall)   uninstall; exit 0 ;;
+  help)        usage; exit 0 ;;
+  version)     echo "macup $MACUP_VERSION"; exit 0 ;;
+esac
+
+# Changing anything needs an explicit command (all, update, clean). Without one:
+# a terminal gets the menu, `macup --deep` is a deep check, anything else gets the help.
+if [ -z "$ACTION" ]; then
+  if [ "$DEEP" = 1 ]; then DRY=1
+  elif [ -t 0 ] && [ -t 1 ]; then menu
+  else usage; exit 2; fi
+fi
+
+load_conf
+mkdir -p "$LOGDIR" "$STATE_DIR"
+STAMP=$(date +%Y-%m-%d_%H-%M)
+REPORT="$LOGDIR/macup_$STAMP.md"
+RAW="$LOGDIR/macup_$STAMP.log"
+BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
+trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; rm -f "$BODY"; cleanup_lang; exit 130' INT
+trap 'rm -f "$BODY"; cleanup_lang' EXIT
+
+if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
+[ "$DEEP" = 1 ] && MODE="$MODE+deep"
+printf '%smacup %s%s · %s%s\n' "$B" "$MACUP_VERSION" "$N" "$MODE" "$( [ "$DRY" = 1 ] && printf ' · %s' "$(_ 'nothing will be installed or deleted')")"
+
+PREV=$( [ -s "$HISTORY" ] && tail -n 1 "$HISTORY")
+
+# ================================================================ SYSTEM
+section "System"
+OSV=$(sw_vers -productVersion 2>/dev/null)
+if task check.system; then
+  UPTXT=$(uptime | sed -E 's/.* up ([^,]+(, *[0-9]+:[0-9]+)?),.*/\1/')
+  BOOT=$(sysctl -n kern.boottime 2>/dev/null | awk -F'sec = ' '{print $2+0}')
+  UPDAYS=$(( ( $(date +%s) - ${BOOT:-$(date +%s)} ) / 86400 ))
+  BUILD=$(sw_vers -buildVersion 2>/dev/null); MODEL=$(sysctl -n hw.model 2>/dev/null)
+  if [ "$UPDAYS" -ge 14 ]; then warn 'macOS %s (%s) · %s · up %s — restart recommended (%s days without restart)' "$OSV" "$BUILD" "$MODEL" "$UPTXT" "$UPDAYS"
+  else ok 'macOS %s (%s) · %s · up %s' "$OSV" "$BUILD" "$MODEL" "$UPTXT"; fi
+fi
+
+D_TOTAL=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $2}'); D_TOTAL=${D_TOTAL:-1}
+FREE_BEFORE=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}'); FREE_BEFORE=${FREE_BEFORE:-0}
+if task check.disk; then
+  PCT=$(( FREE_BEFORE * 100 / D_TOTAL )); F1=$(hum "$FREE_BEFORE"); F2=$(hum "$D_TOTAL")
+  if   [ "$PCT" -lt 10 ]; then fail 'Disk: %s free of %s (%s%%) — critically low' "$F1" "$F2" "$PCT"
+  elif [ "$PCT" -lt 20 ]; then warn 'Disk: %s free of %s (%s%%) — getting low' "$F1" "$F2" "$PCT"
+  else ok 'Disk: %s free of %s (%s%%)' "$F1" "$F2" "$PCT"; fi
+  SMART=$(diskutil info disk0 2>/dev/null | awk -F': *' '/SMART Status/{print $2}')
+  if [ -n "$SMART" ]; then
+    case "$SMART" in Verified|"Not Supported") ok 'Disk health (SMART): %s' "$SMART" ;; *) fail 'Disk health (SMART): %s — back up now' "$SMART" ;; esac
+  fi
+  SNAPS=$(tmutil listlocalsnapshots / 2>/dev/null | grep -c 'com.apple')
+  [ "${SNAPS:-0}" -gt 0 ] && info 'Local Time Machine snapshots: %s (macOS frees them automatically when space runs low)' "$SNAPS"
+fi
+
+MEMFREE=""; SWAP=0
+if task check.memory; then
+  RAM=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
+  MEMFREE=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}')
+  SWAP=$(sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}')
+  SWAP=${SWAP:-0}
+  if [ "${MEMFREE:-100}" -lt 15 ] || [ "$SWAP" -gt 6144 ]; then warn 'Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart' "$RAM" "${MEMFREE:-?}" "$SWAP"
+  else ok 'Memory: %s GB, %s%% free, swap %s MB' "$RAM" "${MEMFREE:-?}" "$SWAP"; fi
+fi
+
+if task check.cpu; then
+  CORES=$(sysctl -n hw.ncpu 2>/dev/null || echo 1)
+  LOAD=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
+  HIGH=$(awk -v l="${LOAD:-0}" -v c="$CORES" 'BEGIN{print (l > c*1.5) ? 1 : 0}')
+  if [ "$HIGH" = 1 ]; then warn 'CPU: load %s on %s cores — something is busy' "$LOAD" "$CORES"; else ok 'CPU: load %s on %s cores' "${LOAD:-?}" "$CORES"; fi
+  TOPCPU=$(ps -Aceo pcpu=,comm= -r 2>/dev/null | head -3 | awk '{p=$1; $1=""; sub(/^ /,""); printf "%s%% %s\n", p, $0}' | paste -sd ',' - | sed 's/,/, /g')
+  TOPMEM=$(ps -Aceo rss=,comm= -m 2>/dev/null | head -3 | awk '{r=$1; $1=""; sub(/^ /,""); printf "%.1f GB %s\n", r/1048576, $0}' | paste -sd ',' - | sed 's/,/, /g')
+  [ -n "$TOPCPU" ] && info 'Top CPU:    %s' "$TOPCPU"
+  [ -n "$TOPMEM" ] && info 'Top memory: %s' "$TOPMEM"
+  if pmset -g therm 2>/dev/null | grep -qiE 'thermal warning level set|Speed_Limit[^0-9]*[0-9]{1,2}$'; then
+    warn 'Thermal: the Mac is throttling right now'
+  fi
+fi
+
+BCYC=""; BMAX=""
+if task check.battery && pmset -g batt 2>/dev/null | grep -q InternalBattery; then
+  BPCT=$(pmset -g batt | grep -o '[0-9]*%' | head -1)
+  BP=$(system_profiler SPPowerDataType 2>/dev/null)
+  BCYC=$(echo "$BP" | awk -F': ' '/Cycle Count/{print $2; exit}')
+  BCOND=$(echo "$BP" | awk -F': ' '/Condition/{print $2; exit}')
+  BMAX=$(echo "$BP" | awk -F': ' '/Maximum Capacity/{gsub(/%/,"",$2); print $2; exit}')
+  if [ -n "$BCOND" ] && [ "$BCOND" != "Normal" ]; then warn 'Battery: %s charged, %s cycles, %s%% capacity, %s' "$BPCT" "${BCYC:-?}" "${BMAX:-?}" "$BCOND"
+  elif [ -n "$BMAX" ] && [ "$BMAX" -lt 80 ]; then warn 'Battery: %s charged, %s cycles, %s%% capacity, %s — capacity under 80%%' "$BPCT" "${BCYC:-?}" "$BMAX" "${BCOND:-?}"
+  else ok 'Battery: %s charged, %s cycles, %s%% capacity, %s' "$BPCT" "${BCYC:-?}" "${BMAX:-?}" "${BCOND:-?}"; fi
+fi
+
+# ================================================================ SECURITY
+if task check.security; then
+  section "Security"
+  FV=$(fdesetup status 2>/dev/null)
+  case "$FV" in *"is On"*) ok 'FileVault: on' ;; "") ;; *) warn 'FileVault: off — your disk is not encrypted (System Settings → Privacy & Security)' ;; esac
+  FW=$(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null)
+  case "$FW" in *enabled*) ok 'Firewall: on' ;; "") ;; *) warn 'Firewall: off (System Settings → Network → Firewall)' ;; esac
+  SIP=$(csrutil status 2>/dev/null)
+  case "$SIP" in *"status: enabled"*) ok 'System Integrity Protection: on' ;; "") ;; *) warn 'System Integrity Protection: off' ;; esac
+  GK=$(spctl --status 2>/dev/null)
+  case "$GK" in *enabled*) ok 'Gatekeeper: on' ;; "") ;; *) warn 'Gatekeeper: off — apps from anywhere can run' ;; esac
+  AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
+  CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
+  if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
+  TMD=$(tmutil destinationinfo 2>/dev/null)
+  if echo "$TMD" | grep -q 'Name'; then
+    LB=$(tmutil latestbackup 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
+    if [ -n "$LB" ]; then
+      AGE=$(( ( $(date +%s) - $(date -j -f %Y-%m-%d "$LB" +%s 2>/dev/null || date +%s) ) / 86400 ))
+      if [ "$AGE" -gt 7 ]; then warn 'Time Machine: last backup %s (%s days ago)' "$LB" "$AGE"; else ok 'Time Machine: last backup %s' "$LB"; fi
+    else info 'Time Machine: configured (last backup date needs Full Disk Access for Terminal)'; fi
+  else
+    warn 'Time Machine: no backup destination configured'
+  fi
+fi
+
+# ================================================================ UPDATES
+if WANT_UPD; then
+if UPD; then section "Updates"; else section "Available updates (not installed)"; fi
+
+if task update.claude && have claude; then
+  v1=$(claude --version 2>/dev/null | awk '{print $1}')
+  if UPD; then step 'Claude Code'; run claude update; fi
+  v2=$(claude --version 2>/dev/null | awk '{print $1}')
+  upd "Claude Code" "$v1" "$v2"
+  if ! UPD && have npm; then
+    latest=$(npm view @anthropic-ai/claude-code version 2>/dev/null)
+    ver_gt "$latest" "$v2" && info "%s: %s is on npm (fine if you're on the stable channel)" "Claude Code" "$latest"
+  fi
+  PJSON="$HOME/.claude/plugins/installed_plugins.json"
+  plugins(){ [ -f "$PJSON" ] && have python3 && python3 - "$PJSON" <<'PY' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1])); pl = d.get("plugins", d)
+for k, v in sorted(pl.items()):
+    es = v if isinstance(v, list) else [v]
+    e = next((x for x in es if isinstance(x, dict) and x.get("scope", "user") == "user"), None)
+    if e is None: continue   # project/local plugins belong to their project
+    print(k, e.get("version") or (e.get("gitCommitSha") or "")[:7] or "?")
+PY
+  }
+  P1=$(plugins)
+  if UPD; then
+    step 'Plugin marketplaces'
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else warn 'Plugin marketplaces: refresh failed (see log)'; fi
+    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
+    printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
+  fi
+  P2=$(plugins)
+  if [ -n "$P2" ]; then
+    while read -r name ver; do
+      [ -z "$name" ] && continue
+      old=$(printf '%s\n' "$P1" | awk -v n="$name" '$1==n{print $2}')
+      if [ -n "$old" ] && [ "$old" != "$ver" ]; then ok 'Plugin %s: %s → %s' "$name" "$old" "$ver"; done_upd 'plugin %s %s → %s' "$name" "$old" "$ver"; else mdonly "$name $ver"; fi
+    done <<EOF
+$P2
+EOF
+    ok 'Claude Code plugins: %s installed' "$(cnt "$P2")"
+  fi
+fi
+
+if task update.npm && have npm && have python3; then
+  step 'npm globals'
+  # skips npm-link'ed packages and anything whose versions don't look like registry versions
+  NO=$(npm outdated -g --json 2>/dev/null | python3 -c '
+import json, os, sys, re
+try: d = json.load(sys.stdin)
+except Exception: d = {}
+root = sys.argv[1]
+ver = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+")
+for k, v in d.items():
+    c, l = str(v.get("current", "")), str(v.get("latest", ""))
+    if os.path.islink(os.path.join(root, k)) or not ver.match(c) or not ver.match(l) or c == l: continue
+    print(k, c, l)' "$(npm root -g 2>/dev/null)" 2>/dev/null)
+  if [ -z "$NO" ]; then ok 'npm globals: up to date'
+  else
+    UPD || warn 'npm globals: %s outdated' "$(cnt "$NO")"
+    while read -r p c l; do
+      [ -z "$p" ] && continue
+      if UPD; then
+        step 'npm %s' "$p"
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else fail '%s: update failed (see log)' "$p"; fi
+      else sub "$p: $c → $l"; fi
+    done <<EOF
+$NO
+EOF
+  fi
+fi
+
+LOCK="$HOME/.agents/.skill-lock.json"; LATER_SKILLS=""
+if task update.skills && [ -f "$LOCK" ] && have npx && have python3; then
+  skills(){ python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash", "")[:7])' "$LOCK" 2>/dev/null; }
+  S1=$(skills)
+  if UPD; then
+    step 'Agent skills'
+    # -g: the global skills in ~/.agents, wherever macup is started from
+    if (cd "$HOME" && run env CI=1 npx -y skills update -g); then
+      S2=$(skills); n=0
+      while read -r name h; do
+        [ -z "$name" ] && continue
+        old=$(printf '%s\n' "$S1" | awk -v n="$name" '$1==n{print $2}')
+        [ "$old" != "$h" ] && { n=$((n+1)); done_upd 'skill %s' "$name"; }
+      done <<EOF
+$S2
+EOF
+      ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
+    else fail 'Agent skills: update failed (see log)'; fi
+  else
+    # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
+    LATER_SKILLS="$(_ 'Agent skills') ($(cnt "$S1"))"
+  fi
+fi
+
+if task update.brew && have brew; then
+  step 'brew update'; run brew update   # refreshes the package list only
+  OF=$(brew outdated --formula --verbose 2>/dev/null); NF=$(cnt "$OF")
+  OC=$(brew outdated --cask --verbose 2>/dev/null);    NC=$(cnt "$OC")
+  if [ $((NF + NC)) -eq 0 ]; then ok 'Homebrew: up to date'
+  else
+    if UPD; then
+      step 'brew upgrade (%s formulae, %s casks)' "$NF" "$NC"
+      if run brew upgrade; then ok 'Homebrew: upgraded %s formulae, %s casks' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
+      done_upd 'Homebrew: %s formulae, %s casks' "$NF" "$NC"
+    else warn 'Homebrew: %s formulae, %s casks outdated' "$NF" "$NC"; fi
+    lines "$(printf '%s\n%s\n' "$OF" "$OC")"
+  fi
+  GR=$(cnt "$(brew outdated --cask --greedy --quiet 2>/dev/null)"); UPD || GR=$((GR - NC))
+  [ "$GR" -gt 0 ] && info '%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy' "$GR"
+fi
+
+if task update.mas; then
+  if have mas; then
+    step 'App Store'
+    OM=$(mas outdated 2>/dev/null); NM=$(cnt "$OM")
+    if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
+    elif UPD; then
+      if run mas upgrade; then ok 'App Store: %s apps updated' "$NM"; done_upd 'App Store: %s apps' "$NM"; else warn "App Store: %s updates didn't install — open the App Store" "$NM"; fi
+    else warn 'App Store: %s updates' "$NM"; lines "$OM"; fi
+  else info "App Store apps aren't checked: brew install mas"; fi
+fi
+
+LATER="${LATER_SKILLS:-}"
+simple_update(){ # task-id label cmd...
+  local id=$1 label; label=$(_ "$2"); shift 2
+  task "$id" || return 0
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else warn '%s: update failed (see log)' "$label"; fi
+  else LATER="$LATER${LATER:+, }$label"; fi
+}
+have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
+have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --all
+have rustup && simple_update update.rustup 'Rust toolchains' rustup update
+[ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
+have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+[ -n "$LATER" ] && info 'Updated on a full run (no version check): %s' "$LATER"
+
+if task check.macos_updates; then
+  step 'Looking for macOS updates (up to a minute)'
+  SU=$(softwareupdate -l 2>&1 | sed -n 's/^[[:space:]]*\* Label: //p')
+  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "$SU"; fi
+fi
+fi # WANT_UPD
+
+# ================================================================ TOOLS & SERVICES
+section "Tools & services"
+if task check.mcp && have claude; then
+  step 'Checking MCP servers'
+  # from $HOME: the list depends on the current folder (local-scope servers)
+  MCP=$(cd "$HOME" && claude mcp list 2>/dev/null </dev/null | nocolor)
+  MT=$(printf '%s\n' "$MCP" | grep -cE '✓|✔|✗|✘|⚠|Connected|Failed|[Aa]uth')
+  BAD=$(printf '%s\n' "$MCP" | grep -E '✗|✘|⚠|Failed|[Nn]eeds auth')
+  if [ "$MT" -eq 0 ]; then info 'Claude Code MCP servers: none configured'
+  elif [ -z "$BAD" ]; then ok 'Claude Code MCP servers: all %s connected' "$MT"
+  else warn 'Claude Code MCP servers: %s of %s not working' "$(cnt "$BAD")" "$MT"; lines "$BAD"; fi
+fi
+if task check.brew_doctor && have brew; then
+  step 'brew doctor'
+  DOC=$(brew doctor 2>&1); echo "$DOC" >>"$RAW"
+  ND=$(printf '%s\n' "$DOC" | grep -c '^Warning:')
+  if [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
+fi
+if task check.xcode; then
+  if XP=$(xcode-select -p 2>/dev/null) && [ -d "$XP" ]; then
+    XV=$(xcodebuild -version 2>/dev/null | head -1)
+    ok 'Developer tools: %s (%s)' "${XV:-$(_ 'Command Line Tools only')}" "$(tildify "$XP")"
+  else warn 'Developer tools: not installed or broken — run: xcode-select --install'; fi
+  if have xcrun && have python3; then
+    RT=$(xcrun simctl runtime list -j 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit()
+rs = sorted(d.values(), key=lambda r: (r.get("platformIdentifier",""), r.get("version","")))
+print(len(rs), sum(r.get("sizeBytes", 0) for r in rs) // 1024)
+for r in rs: print("%s %s · %.1f GB" % (r.get("platformIdentifier","").split(".")[-1].replace("platform",""), r.get("version","?"), r.get("sizeBytes",0)/1e9))' 2>/dev/null)
+    if [ -n "$RT" ]; then
+      read -r RN RK <<EOF
+$(printf '%s\n' "$RT" | head -1)
+EOF
+      if [ "${RN:-0}" -gt 0 ]; then
+        info 'Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components' "$RN" "$(hum "$RK")"
+        printf '%s\n' "$RT" | tail -n +2 | while IFS= read -r l; do mdonly "$l"; done
+      fi
+    fi
+  fi
+fi
+if task check.devtools; then
+  tool(){ [ -n "$2" ] && TOOLS="$TOOLS${TOOLS:+ · }$1 $2"; }
+  TOOLS=""
+  have swift   && tool Swift     "$(swift --version 2>&1 | grep -o 'Swift version [0-9.]*' | head -1 | sed 's/Swift version //')"
+  have pod     && tool CocoaPods "$(pod --version 2>/dev/null)"
+  have flutter && tool Flutter   "$(flutter --version 2>/dev/null | head -1 | sed 's/^Flutter //; s/ •.*//')"
+  have node    && tool Node      "$(node --version 2>/dev/null | sed 's/^v//')"
+  have ruby    && tool Ruby      "$(ruby -e 'print RUBY_VERSION' 2>/dev/null)"
+  have python3 && tool Python    "$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null)"
+  have codex   && tool Codex     "$(codex --version 2>/dev/null | head -1 | awk '{print $NF}')"
+  [ -n "$TOOLS" ] && info '%s' "$TOOLS"
+  [ -d /Applications/Claude.app ] && info 'Claude Desktop %s (updates itself)' "$(defaults read /Applications/Claude.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null)"
+fi
+if task check.docker && have docker && docker info >/dev/null 2>&1; then
+  DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
+  info 'Docker: %s — clean manually with: docker system prune' "${DDF%; }"
+fi
+
+# ================================================================ CLEANUP
+if WANT_CLN; then
+if CLEAN; then section "Cleanup"; else section "What cleanup would free"; fi
+
+safe_path(){ case "$1" in "$HOME"/Library/*|"$HOME"/.*) return 0 ;; esac; return 1; }
+account(){ # label(translated) size_kb
+  if CLEAN; then FREED=$((FREED + $2)); if [ "$2" -ge 1024 ]; then ok '%s: freed %s' "$1" "$(hum "$2")"; else ok '%s: cleaned' "$1"; fi
+  else POTENTIAL=$((POTENTIAL + $2)); info '%s: %s' "$1" "$(hum "$2")"; fi
+}
+clean_dir(){ # id label path [xcode]
+  local id=$1 label p=$3 s a; label=$(_ "$2")
+  task "$id" || return 0
+  [ -d "$p" ] && safe_path "$p" || return 0
+  s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
+  if CLEAN && [ "$4" = xcode ] && XCODE_ON; then info '%s: %s — skipped, Xcode is open' "$label" "$(hum "$s")"; return 0; fi
+  if CLEAN; then step '%s' "$label"; find "$p" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>>"$RAW"; a=$(kb "$p"); s=$((s - a)); fi
+  account "$label" "$s"
+}
+clean_old(){ # id label dir days [type] — deletes entries older than N days
+  local id=$1 label p=$3 days=$4 type=${5:-d} old s=0 x; label=$(_ "$2")
+  task "$id" || return 0
+  [ -d "$p" ] && safe_path "$p" || return 0
+  old=$(find "$p" -mindepth 1 -maxdepth 1 -type "$type" -mtime +"$days" 2>/dev/null)
+  [ -z "$old" ] && return 0
+  while IFS= read -r x; do s=$((s + $(kb "$x"))); done <<EOF
+$old
+EOF
+  [ "$s" -lt 1024 ] && return 0
+  CLEAN && while IFS= read -r x; do rm -rf "$x"; done <<EOF
+$old
+EOF
+  account "$(_f '%s (%s items, older than %s days)' "$label" "$(cnt "$old")" "$days")" "$s"
+}
+measure_cmd(){ # id label dir cmd... — run a cleaning command, measure a dir before/after
+  local id=$1 label p=$3 s a; label=$(_ "$2"); shift 3
+  task "$id" || return 0
+  [ -e "$p" ] || return 0
+  s=$(kb "$p")
+  if CLEAN; then step '%s' "$label"; run "$@"; a=$(kb "$p"); s=$((s - a)); [ "$s" -lt 0 ] && s=0; account "$label" "$s"
+  elif [ "$s" -ge 5120 ]; then info '%s: %s in cache (part of it is freeable)' "$label" "$(hum "$s")"; fi
+}
+
+DEV="$HOME/Library/Developer"
+clean_dir  clean.derived_data   'Xcode DerivedData'    "$DEV/Xcode/DerivedData" xcode
+clean_dir  clean.xcode_previews 'SwiftUI previews'     "$DEV/Xcode/UserData/Previews" xcode
+for ds in "$DEV/Xcode/"*DeviceSupport; do
+  [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
+done
+clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
+if task clean.sim_unavailable && have xcrun; then
+  NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')
+  if [ "$NU" -gt 0 ]; then
+    if CLEAN; then
+      s=$(kb "$DEV/CoreSimulator/Devices"); step 'Unavailable simulators'; run xcrun simctl delete unavailable
+      a=$(kb "$DEV/CoreSimulator/Devices"); d=$((s - a)); [ "$d" -lt 0 ] && d=0
+      account "$(_f 'Unavailable simulators (%s)' "$NU")" "$d"
+    else info 'Unavailable simulators: %s' "$NU"; fi
+  fi
+fi
+clean_dir  clean.sim_caches     'Simulator caches'     "$DEV/CoreSimulator/Caches"
+clean_dir  clean.spm            'SwiftPM cache'        "$HOME/Library/Caches/org.swift.swiftpm"
+clean_dir  clean.cocoapods      'CocoaPods cache'      "$HOME/Library/Caches/CocoaPods"
+clean_dir  clean.carthage       'Carthage cache'       "$HOME/Library/Caches/org.carthage.CarthageKit"
+
+if task clean.brew && have brew; then
+  if CLEAN; then
+    step 'Homebrew cleanup'
+    OUT=$(brew cleanup -s --prune=7 2>&1); echo "$OUT" >>"$RAW"
+    FR=$(echo "$OUT" | grep -o 'freed approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')
+    if [ -n "$FR" ]; then account "$(_ 'Homebrew old versions & downloads')" "$(tokb "$FR")"; else ok 'Homebrew: nothing old to remove'; fi
+  else
+    s=$(kb "$(brew --cache 2>/dev/null)"); [ "$s" -gt 5120 ] && account "$(_ 'Homebrew downloads cache')" "$s"
+  fi
+fi
+have npm  && measure_cmd clean.npm  'npm cache'      "$HOME/.npm/_cacache" npm cache verify
+have yarn && clean_dir   clean.yarn 'Yarn cache'     "$HOME/Library/Caches/Yarn"
+have pnpm && measure_cmd clean.pnpm 'pnpm store'     "$(pnpm store path 2>/dev/null || echo /nonexistent)" pnpm store prune
+have pip3 && measure_cmd clean.pip  'pip cache'      "$HOME/Library/Caches/pip" pip3 cache purge
+have uv   && measure_cmd clean.uv   'uv cache'       "$(uv cache dir 2>/dev/null || echo /nonexistent)" uv cache prune
+have go   && measure_cmd clean.go   'Go build cache' "$(go env GOCACHE 2>/dev/null || echo /nonexistent)" go clean -cache
+
+if task clean.logs; then
+  OLDLOGS=$(find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null)
+  if [ -n "$OLDLOGS" ]; then
+    s=$(printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}')
+    CLEAN && printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 rm -f 2>/dev/null
+    [ "${s:-0}" -ge 1024 ] && account "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s"
+  fi
+fi
+if task clean.quicklook && CLEAN; then run qlmanage -r cache; fi
+if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
+
+if task clean.trash; then
+  s=$(kb "$HOME/.Trash")
+  if [ "$s" -gt 0 ]; then
+    if CLEAN; then find "$HOME/.Trash" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>>"$RAW"; s=$((s - $(kb "$HOME/.Trash"))); fi
+    account "$(_ 'Trash')" "$s"
+  fi
+fi
+
+project_roots(){ # never the home folder itself or anything above it
+  echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
+    d=$(expand "$d"); d=${d%/}
+    case "$d" in ""|"$HOME") continue ;; esac
+    case "$HOME/" in "$d"/*) continue ;; esac
+    [ -d "$d" ] && echo "$d"
+  done
+}
+if task clean.stale_node_modules; then
+  step 'Looking for stale node_modules'
+  STALE=""; SS=0
+  while IFS= read -r root; do
+    [ -z "$root" ] && continue
+    while IFS= read -r nm; do
+      [ -z "$nm" ] && continue
+      case "${nm#"$root"}" in */.*|*/lib/node_modules) continue ;; esac   # hidden folders, global npm installs
+      proj=$(dirname "$nm")
+      recent=$(find "$proj" -maxdepth 3 \( -name node_modules -o -name .git \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
+      [ -n "$recent" ] && continue
+      STALE="$STALE$nm"$'\n'; SS=$((SS + $(kb "$nm")))
+    done <<EOF
+$(find "$root" -maxdepth 5 -type d -name node_modules -prune 2>/dev/null)
+EOF
+  done <<EOF
+$(project_roots)
+EOF
+  if [ -n "$STALE" ]; then
+    CLEAN && printf '%s' "$STALE" | while IFS= read -r nm; do [ -n "$nm" ] && rm -rf "$nm"; done
+    account "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$SS"
+    printf '%s' "$STALE" | while IFS= read -r nm; do [ -n "$nm" ] && mdonly "$(tildify "$nm")"; done
+  fi
+fi
+fi # WANT_CLN
+
+# ================================================================ SIZES (never deleted)
+if task check.sizes; then
+  section "Not touched by macup"
+  s=$(kb "$DEV/Xcode/Archives")
+  if [ "$s" -gt 5242880 ]; then warn 'Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes)' "$(hum "$s")"
+  elif [ "$s" -gt 0 ]; then info 'Xcode Archives: %s' "$(hum "$s")"; fi
+  s=$(kb "$DEV/CoreSimulator/Devices"); [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
+  s=$(kb "$HOME/.pub-cache");          [ "$s" -gt 0 ] && info 'Flutter pub-cache: %s (full reset: dart pub cache clean)' "$(hum "$s")"
+  s=$(kb "$HOME/.gradle/caches");      [ "$s" -gt 0 ] && info 'Gradle caches: %s' "$(hum "$s")"
+  s=$(kb "$HOME/Library/Caches");      [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
+  if ! task clean.trash; then
+    s=$(kb "$HOME/.Trash")
+    if [ "$s" -gt 2097152 ]; then warn 'Trash: %s — empty it' "$(hum "$s")"; elif [ "$s" -gt 0 ]; then info 'Trash: %s' "$(hum "$s")"; fi
+  fi
+fi
+
+# ================================================================ STARTUP
+if task check.startup; then
+  section "Startup items"
+  AG=""; ORPH=""
+  for f in "$HOME"/Library/LaunchAgents/*.plist /Library/LaunchAgents/*.plist /Library/LaunchDaemons/*.plist; do
+    [ -f "$f" ] || continue
+    b=$(basename "$f" .plist); case "$b" in com.apple.*) continue ;; esac
+    AG="$AG$b"$'\n'
+    prog=$(plutil -extract Program raw -o - "$f" 2>/dev/null || plutil -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null)
+    case "$prog" in /*) [ -e "$prog" ] || ORPH="$ORPH$(tildify "$f") → $(tildify "$prog")"$'\n' ;; esac
+  done
+  info 'Third-party background services: %s (full list in the report)' "$(cnt "$AG")"
+  printf '%s' "$AG" | while IFS= read -r l; do [ -n "$l" ] && mdonly "$l"; done
+  if [ -n "$ORPH" ]; then
+    warn 'Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps)' "$(cnt "$ORPH")"
+    lines "$ORPH"
+  fi
+  info 'Login items: System Settings → General → Login Items & Extensions'
+fi
+
+# ================================================================ DEEP
+if [ "$DEEP" = 1 ]; then
+  section "Deep scan"
+  step 'Measuring your home folder (can take a few minutes)'
+  info 'Largest folders in your home:'
+  du -sk "$HOME"/* "$HOME"/.[!.]* 2>/dev/null | sort -rn | head -12 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
+  if [ -d "$HOME/Downloads" ]; then
+    DL=$(find "$HOME/Downloads" -mindepth 1 -maxdepth 1 -mtime +90 2>/dev/null)
+    if [ -n "$DL" ]; then
+      s=$(printf '%s\n' "$DL" | tr '\n' '\0' | xargs -0 du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}')
+      info "Downloads older than 90 days: %s items, %s — review and delete what you don't need" "$(cnt "$DL")" "$(hum "$s")"
+    fi
+    BIG=$(find "$HOME/Downloads" -type f -size +1G 2>/dev/null | head -10)
+    [ -n "$BIG" ] && { info 'Files over 1 GB in Downloads:'; printf '%s\n' "$BIG" | while IFS= read -r f; do sub "$(hum "$(kb "$f")")  $(tildify "$f")"; done; }
+  fi
+  step 'Scanning projects for build artifacts'
+  ART=""
+  while IFS= read -r root; do
+    [ -z "$root" ] && continue
+    ART="$ART$(find "$root" -maxdepth 6 -type d \( -name node_modules -o -name Pods -o -name .build -o -name .dart_tool -o -name DerivedData \) -prune -print 2>/dev/null)"$'\n'
+  done <<EOF
+$(project_roots)
+EOF
+  if [ -n "$(printf '%s' "$ART" | grep .)" ]; then
+    TOP=$(printf '%s' "$ART" | grep . | while IFS= read -r a; do echo "$(kb "$a") $a"; done | sort -rn)
+    TS=$(printf '%s\n' "$TOP" | awk '{s+=$1} END{print s+0}')
+    info 'Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest:' "$(hum "$TS")"
+    printf '%s\n' "$TOP" | head -8 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
+    task clean.stale_node_modules || info "Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days" "$STALE_DAYS"
+  elif [ -z "$(project_roots)" ]; then
+    info 'No project folders found. Set project_dirs in %s' "$(tildify "$CONF")"
+  else
+    info 'No build artifacts in: %s' "$(project_roots | while IFS= read -r d; do tildify "$d"; done | paste -sd ',' - | sed 's/,/, /g')"
+  fi
+fi
+
+# ================================================================ TRENDS + SUMMARY
+FREE_AFTER=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}'); FREE_AFTER=${FREE_AFTER:-0}
+PCT2=$(( FREE_AFTER * 100 / D_TOTAL ))
+
+if task check.trends && [ -n "$PREV" ]; then
+  section "Since last run"
+  IFS=, read -r P_TS P_MODE P_FREE P_TOT P_MEM P_SWAP P_CYC P_MAX P_UPD P_FREED P_WARN <<EOF
+$PREV
+EOF
+  DFREE=$((FREE_AFTER - ${P_FREE:-$FREE_AFTER}))
+  if [ "$DFREE" -lt -20971520 ]; then warn 'Free space: %s since %s — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS"
+  else info 'Free space: %s since %s' "$( [ "$DFREE" -ge 0 ] && printf '+')$(hum "$DFREE")" "$P_TS"; fi
+  [ -n "$BMAX" ] && [ -n "$P_MAX" ] && [ "$P_MAX" != "$BMAX" ] && info 'Battery capacity: %s%% → %s%%' "$P_MAX" "$BMAX"
+  [ -n "$BCYC" ] && [ -n "$P_CYC" ] && [ "$P_CYC" != "$BCYC" ] && info 'Battery cycles: +%s' "$((BCYC - P_CYC))"
+  info 'Full history: macup history'
+fi
+
+NEWER=""
+if task check.self_update; then
+  case "$MACUP_REPO" in __*) ;; *)
+    STAMPF="$STATE_DIR/last_version_check"
+    if [ ! -f "$STAMPF" ] || [ -n "$(find "$STAMPF" -mtime +6 2>/dev/null)" ]; then
+      RV=$(curl -fsS --max-time 4 "$MACUP_RAW/macup" 2>/dev/null | sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' | head -1)
+      if [ -n "$RV" ]; then echo "$RV" >"$STAMPF"; else touch "$STAMPF"; fi
+    fi
+    RV=$(cat "$STAMPF" 2>/dev/null)
+    ver_gt "$RV" "$MACUP_VERSION" && NEWER="$RV"
+  ;; esac
+fi
+
+T=$SECONDS; TIME="$((T / 60))m $((T % 60))s"
+echo "$(date '+%Y-%m-%d %H:%M'),$MODE,$FREE_AFTER,$D_TOTAL,${MEMFREE:-},${SWAP:-0},${BCYC:-},${BMAX:-},${#UPDATED[@]},$FREED,${#WARN[@]}" >>"$HISTORY"
+
+SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
+{
+  echo "# $(_f 'macup report — %s' "$(date '+%Y-%m-%d %H:%M')")"
+  echo
+  _f 'Mode: %s · macup %s · took %s' "$MODE" "$MACUP_VERSION" "$TIME"; echo
+  echo
+  echo "## $(_ 'Summary')"
+  echo
+  if [ ${#UPDATED[@]} -gt 0 ]; then echo "- **$(_f 'Updated (%s):' "${#UPDATED[@]}")**"; for u in "${UPDATED[@]}"; do echo "    - $u"; done
+  elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
+  if CLEAN; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"; elif WANT_CLN && [ "$POTENTIAL" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POTENTIAL")")"; fi
+  echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
+  if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
+  else echo "- $(_ 'Needs attention: nothing')"; fi
+  [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: macup self-update' "$NEWER")"
+  echo
+  _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
+} >"$SUM"
+cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
+
+printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
+if [ ${#UPDATED[@]} -gt 0 ]; then
+  printf '  %s%s%s\n' "$G" "$(_f 'Updated: %s' "${#UPDATED[@]}")" "$N"; for u in "${UPDATED[@]}"; do printf '    · %s\n' "$u"; done
+elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
+if CLEAN; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
+elif WANT_CLN && [ "$POTENTIAL" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POTENTIAL")")"; fi
+printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2")"
+if [ ${#WARN[@]} -gt 0 ]; then
+  printf '  %s%s%s\n' "$Y" "$(_f 'Needs attention: %s' "${#WARN[@]}")" "$N"; for w in "${WARN[@]}"; do printf '    %s!%s %s\n' "$Y" "$N" "$w"; done
+else printf '  %s%s%s\n' "$G" "$(_ 'Needs attention: nothing')" "$N"; fi
+[ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: macup self-update' "$NEWER")" "$N"
+printf '  %s%s%s\n' "$D" "$(_f 'Report: %s · %s' "$(tildify "$REPORT")" "$TIME")" "$N"
+printf '  %s%s%s\n' "$D" "$(_ 'Menu: macup · trends: macup history · help: macup help')" "$N"

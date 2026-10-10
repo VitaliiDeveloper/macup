@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly, to catch macOS runner changes
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: ShellCheck
+        run: |
+          command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
+          shellcheck --version | sed -n 2p
+          shellcheck -s bash -S warning macup install.sh
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Syntax check with the stock macOS bash 3.2
+        run: |
+          /bin/bash --version | head -1
+          /bin/bash -n macup
+          /bin/bash -n install.sh
+      - name: Install from the checkout
+        run: /bin/bash ./install.sh --yes --lang en --projects "~/work"
+      - name: Help, tasks, version
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          macup help --no-color
+          macup tasks --no-color
+          macup version
+      - name: Options without a command change nothing
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          for a in "" "--no-color" "--lang uk" "--skip check.docker"; do
+            if macup $a </dev/null >out.txt 2>&1; then echo "macup $a should exit non-zero"; exit 1; fi
+            grep -q 'macup check' out.txt || { echo "macup $a should print help"; cat out.txt; exit 1; }
+          done
+          if macup --lang xx check </dev/null; then exit 1; fi
+          macup --deep --no-color --only check.system </dev/null 2>/dev/null | head -1 | grep -q 'check+deep'
+      - name: Dry run (installs and deletes nothing)
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          macup check --no-color --skip check.macos_updates,update.skills
+          macup history
+          macup last | head -40
+      - name: Languages
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          for l in uk ru en; do macup lang $l; macup tasks --no-color | head -4; macup help | head -3; done
+          MACUP_LANG=uk macup check --no-color --only check.system,check.disk,check.memory

@@ -48,7 +48,7 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color | unopen)
   [ "$got" = "$(echo "$exp" | unopen)" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp" | unopen) <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
@@ -61,7 +61,7 @@ env HOME="$H" /bin/bash "$M" clean --skip "$X" --no-color </dev/null >"$W/run.ou
 # --- picking after an interactive check
 pick(){ # answer [confirm] → files deleted
   local H="$W/p"; tests/fixture.sh "$H"; (cd "$H" && find . -type f | sort) >"$W/pb"
-  (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "${2:-}"; sleep 2) | script -q /dev/null env HOME="$H" /bin/bash "$M" check --no-color --skip "$X" >"$W/po" 2>&1
+  (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "${2:-}"; sleep 2) | script -q /dev/null env HOME="$H" /bin/bash "$M" check --no-color --skip "$X" ${PL:+--lang $PL} >"$W/po" 2>&1
   (cd "$H" && find . -type f | sort) | comm -23 "$W/pb" - | grep -v -e 'Logs/macup/' -e 'Support/macup/'
 }
 num(){ tr -d '\r' <"$W/po" | grep -E "^ +[0-9]+ .*$1" | head -1 | awk '{print $1}'; }
@@ -71,6 +71,7 @@ pick '' >/dev/null; n1=$(num 'Xcode DerivedData'); n2=$(num 'SwiftPM cache'); nt
 [ "$(pick "$n1,$n2")" = "$(printf '%s\n' './Library/Caches/org.swift.swiftpm/repos/blob' './Library/Developer/Xcode/DerivedData/App-abc/blob')" ] && pass "pick: numbers delete exactly those" || fail "pick: numbers"
 [ -z "$(pick "$nt" n)" ] && pass "pick: opt-in item needs a yes" || fail "pick: confirmation"
 [ "$(pick "$nt" y)" = "./.Trash/thing/blob" ] && pass "pick: opt-in item after yes" || fail "pick: yes"
+[ "$(PL=uk pick 'безпечна')" = "$(unopen <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || fail "pick: localized level"
 
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"

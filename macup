@@ -709,7 +709,6 @@ Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while o
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)
-Codex temporary files || Тимчасові файли Codex
 Codex temporary files and unfinished downloads; chat history is never touched || Тимчасові файли й недокачані завантаження Codex; історія чатів не чіпається
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
 Docker build cache and dangling images (never containers or volumes) || Кеш збірки Docker і непотрібні образи (не контейнери й не томи)
@@ -741,6 +740,8 @@ safe || безпечна
 standard || стандартна
 pnpm metadata cache || Кеш метаданих pnpm
 node-gyp headers || Заголовки node-gyp
+Maven repository (has your own mvn install builds) || Репозиторій Maven (є твої збірки з mvn install)
+Codex temporary git clones (%s, older than 7 days) || Тимчасові git-клони Codex (%s, старші за 7 днів)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1010,7 +1011,6 @@ Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while o
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кэш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)
-Codex temporary files || Временные файлы Codex
 Codex temporary files and unfinished downloads; chat history is never touched || Временные файлы и недокачанные загрузки Codex; история чатов не трогается
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
 Docker build cache and dangling images (never containers or volumes) || Кэш сборки Docker и ненужные образы (не контейнеры и не тома)
@@ -1042,6 +1042,8 @@ safe || безопасная
 standard || стандартная
 pnpm metadata cache || Кэш метаданных pnpm
 node-gyp headers || Заголовки node-gyp
+Maven repository (has your own mvn install builds) || Репозиторий Maven (есть ваши сборки из mvn install)
+Codex temporary git clones (%s, older than 7 days) || Временные git-клоны Codex (%s, старше 7 дней)
 EOF
   ;;
   esac
@@ -1440,7 +1442,7 @@ cover(){ COVERED="$COVERED$1"$'\n'; }
 cand(){ # task level label kb kind paths [proc] [measure-dir] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
   C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8
-  if task "$1"; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
+  if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
   [ "$5" = cmd ] || cover "$6"
   C_N=$((C_N + 1))
 }
@@ -1536,7 +1538,7 @@ pick(){ # reads a choice, prints the chosen indexes one per line
   local ans tok i a b lv
   ans=$(ask "$(_ 'Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip: ')")
   for tok in $(echo "$ans" | tr ',' ' '); do
-    lv=""; case "$tok" in safe) lv=1 ;; standard) lv=2 ;; aggressive) lv=3 ;; esac
+    lv=""; case "$tok" in safe|"$(_ safe)") lv=1 ;; standard|"$(_ standard)") lv=2 ;; aggressive|"$(_ aggressive)") lv=3 ;; esac
     if [ -n "$lv" ]; then
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
     elif echo "$tok" | grep -qE '^[0-9]+(-[0-9]+)?$'; then
@@ -1623,7 +1625,10 @@ clean_dir clean.android 'Android cache'      "$HOME/.android/cache"
 for d in "$HOME/Library/Caches/Google/AndroidStudio"*; do
   [ -d "$d" ] && clean_dir clean.android "$(_f 'Android Studio cache (%s)' "${d##*/}")" "$d" '/Android Studio.app/Contents/'
 done
-clean_dir clean.maven   'Maven repository'   "$HOME/.m2/repository"
+# `mvn install` puts your own builds (often SNAPSHOTs) here; those exist nowhere else
+if [ -n "$(find "$HOME/.m2/repository" -name maven-metadata-local.xml -print 2>/dev/null | head -1)" ]; then
+  CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository"
+else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository"; fi
 CL_LVL=""
 if task_allowed clean.docker && have docker && docker info >/dev/null 2>&1; then
   BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
@@ -1633,11 +1638,13 @@ fi
 # --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
 # every version named in a global setting or in a project's pin file (.nvmrc, .tool-versions, …).
 if task_allowed clean.old_versions; then
-  PINS=" $( { cat "$HOME/.nvm/alias/default" "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" \
-      "$HOME/.config/mise/config.toml" 2>/dev/null; echo
+  PINS=" $( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
+    find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
+    find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" -maxdepth 2 \
+      -name pyvenv.cfg 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null
     project_roots | while IFS= read -r r; do
       find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \
-        -o -name .ruby-version -o -name .python-version -o -name .tool-versions -o -name mise.toml -o -name .mise.toml \) -print 2>/dev/null
+        -o -name .ruby-version -o -name .python-version -o -name .tool-versions -o -name mise.toml -o -name .mise.toml -o -name pyvenv.cfg \) -print 2>/dev/null
     done | head -2000 | tr '\n' '\0' | xargs -0 cat 2>/dev/null
   } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
   old_versions(){ # dir series(1 = major, 2 = major.minor) → older patch versions that nothing pins
@@ -1674,9 +1681,8 @@ if task_allowed clean.playwright; then
 fi
 
 # --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
-CL_LVL=1
-clean_old clean.ai_tools 'Codex temporary files' "$HOME/.codex/.tmp" 7
-CL_LVL=""
+L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtime +7 2>/dev/null)
+[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
 [ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
 

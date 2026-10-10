@@ -40,3 +40,9 @@ for a in Code Cursor Claude; do blob "$L/Application Support/$a/Cache/c"; blob "
 blob "$L/Caches/Arc/data"; blob "$L/Caches/Google/Chrome/Default/Cache"
 mkdir -p "$H/elsewhere2"; echo precious >"$H/elsewhere2/precious"; dd if=/dev/zero of="$H/elsewhere2/big" bs=1024 count=6144 2>/dev/null; ln -s "$H/elsewhere2" "$L/Caches/Firefox"
 blob "$L/Caches/BigApp" 103424; blob "$L/Caches/com.apple.bigdaemon" 103424
+# a project venv built on an exact Python patch, an nvm alias chain, and a local mvn install: all must stay
+blob "$H/.pyenv/versions/3.12.1" 1024; blob "$H/.pyenv/versions/3.12.8" 1024
+mkdir -p "$H/Code/proj/.venv"; printf 'home = %s\nversion = 3.12.1\n' "$H/.pyenv/versions/3.12.1/bin" >"$H/Code/proj/.venv/pyvenv.cfg"
+for v in v22.1.0 v22.9.0; do blob "$H/.nvm/versions/node/$v" 1024; done
+mkdir -p "$H/.nvm/alias/lts"; echo "lts/jod" >"$H/.nvm/alias/default2"; echo "v22.1.0" >"$H/.nvm/alias/lts/jod"
+blob "$H/.m2/repository/com/me/lib/1.0-SNAPSHOT" 64; echo '<metadata/>' >"$H/.m2/repository/com/me/lib/maven-metadata-local.xml"

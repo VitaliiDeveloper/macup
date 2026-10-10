@@ -104,9 +104,9 @@ t(){ # message id
   uk:mas)     echo "Поставити mas, щоб оновлювати програми з App Store? [y/N]: " ;;
   ru:mas)     echo "Установить mas, чтобы обновлять приложения из App Store? [y/N]: " ;;
   *:mas)      echo "Install mas so App Store apps get updated too? [y/N]: " ;;
-  uk:run)     echo "Запустити першу перевірку зараз? Вона нічого не ставить і не видаляє. [Y/n]: " ;;
-  ru:run)     echo "Запустить первую проверку сейчас? Она ничего не ставит и не удаляет. [Y/n]: " ;;
-  *:run)      echo "Run a first check now? It installs and deletes nothing. [Y/n]: " ;;
+  uk:run)     echo "Запустити першу перевірку зараз? Вона нічого не змінює, а наприкінці дасть вибрати, що почистити. [Y/n]: " ;;
+  ru:run)     echo "Запустить первую проверку сейчас? Она ничего не меняет, а в конце даст выбрать, что почистить. [Y/n]: " ;;
+  *:run)      echo "Run a first check now? It changes nothing, then lets you pick what to clean. [Y/n]: " ;;
   uk:finish)  echo "Готово. Далі:" ;;
   ru:finish)  echo "Готово. Дальше:" ;;
   *:finish)   echo "Done. Next:" ;;
@@ -116,9 +116,9 @@ t(){ # message id
   uk:menu)    echo "меню" ;;
   ru:menu)    echo "меню" ;;
   *:menu)     echo "menu" ;;
-  uk:check)   echo "перевірка, нічого не ставить і не видаляє" ;;
-  ru:check)   echo "проверка, ничего не ставит и не удаляет" ;;
-  *:check)    echo "check; installs and deletes nothing" ;;
+  uk:check)   echo "перевірка, потім вибір, що почистити" ;;
+  ru:check)   echo "проверка, потом выбор, что почистить" ;;
+  *:check)    echo "check, then pick what to clean" ;;
   uk:help)    echo "усі команди" ;;
   ru:help)    echo "все команды" ;;
   *:help)     echo "all commands" ;;

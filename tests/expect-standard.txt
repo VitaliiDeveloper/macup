@@ -1,7 +1,6 @@
 ./.android/cache/x/blob
 ./.gradle/caches/modules-2/blob
 ./.gradle/wrapper/dists/gradle-7.0-bin/blob
-./.m2/repository/org/blob
 ./.nvm/versions/node/v20.5.0/blob
 ./.rbenv/versions/3.2.1/blob
 ./Library/Caches/Google/AndroidStudio2024.1/index/blob

@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.2.0"
+MACUP_VERSION="3.0.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
 set -o pipefail
@@ -39,6 +39,7 @@ check.xcode|on|Xcode, command line tools, simulator runtimes
 check.devtools|on|Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
 check.docker|on|Docker disk usage (if Docker is running)
 check.sizes|on|Sizes of things macup never deletes: Archives, Trash, caches, pub-cache
+check.creative|on|Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only)
 check.trends|on|Compare with the previous run: free space, swap, battery capacity
 check.self_update|on|Tell when a newer macup is on GitHub (once a week)
 update.claude|on|Claude Code CLI, plugin marketplaces, plugins
@@ -70,6 +71,16 @@ clean.go|on|Go build cache
 clean.logs|on|Your app logs and crash reports older than 30 days
 clean.quicklook|on|Quick Look thumbnail cache
 clean.reports|on|macup reports older than keep_reports_days
+clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
+clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
+clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
+clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
+clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
+clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
+clean.ai_tools|on|Codex temporary files and unfinished downloads; chat history is never touched
+clean.editors|on|Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open)
+clean.browsers|on|Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open)
+clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
 clean.trash|off|Empty the Trash (opt-in)'
 
@@ -85,7 +96,8 @@ conf_set(){ # key value — replace or append
     sed -i '' -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF" 2>/dev/null || sed -i -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF"
   else printf '%s = %s\n' "$1" "$2" >>"$CONF"; fi
 }
-CLI_SKIP=""; CLI_ONLY=""
+CLI_SKIP=""; CLI_ONLY=""; LEVEL=""
+level_num(){ case "$1" in safe|1) echo 1 ;; standard|2) echo 2 ;; aggressive|3) echo 3 ;; esac; }
 num(){ case "$1" in ''|*[!0-9]*|0) echo "$2" ;; *) echo "$1" ;; esac; }   # positive integer or the default
 load_conf(){
   SKIP=",$(conf skip "" | tr -d ' '),$(echo "$CLI_SKIP" | tr -d ' '),"
@@ -94,14 +106,19 @@ load_conf(){
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
   KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
+  [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
 task_default(){ printf '%s\n' "$TASKS" | awk -F'|' -v id="$1" '$1==id{print $2}'; }
-task(){ # true when the task should run
+task_allowed(){ # not skipped by config, --skip or --only
   local id=$1 grp=${1%%.*}
   if [ -n "$CLI_ONLY" ]; then case ",$CLI_ONLY," in *",$id,"*|*",$grp.*,"*) ;; *) return 1 ;; esac; fi
   case "$SKIP" in *",$id,"*|*",$grp.*,"*) return 1 ;; esac
-  if [ "$(task_default "$id")" = off ]; then case "$ENABLE" in *",$id,"*) return 0 ;; esac; return 1; fi
+  return 0
+}
+task(){ # true when the task should run: allowed, and opt-in tasks only when enabled
+  task_allowed "$1" || return 1
+  if [ "$(task_default "$1")" = off ]; then case "$ENABLE" in *",$1,"*) return 0 ;; esac; return 1; fi
   return 0
 }
 
@@ -133,7 +150,7 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
-WARN=(); UPDATED=(); FREED=0; POTENTIAL=0; BODY=""; PENDING=""
+WARN=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
 section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
@@ -164,7 +181,6 @@ CLEAN()   { [ "$DRY" = 0 ] && [ "$DO_CLEAN" = 1 ]; }
 WANT_UPD(){ [ "$DO_UPDATE" = 1 ] || [ "$DRY" = 1 ]; }
 WANT_CLN(){ [ "$DO_CLEAN" = 1 ] || [ "$DRY" = 1 ]; }
 upd()     { [ -z "$3" ] && return; if [ -n "$2" ] && [ "$2" != "$3" ]; then ok '%s: %s → %s' "$1" "$2" "$3"; UPDATED+=("$1 $2 → $3"); else ok '%s %s' "$1" "$3"; fi; }
-XCODE_ON(){ pgrep -x Xcode >/dev/null 2>&1; }
 ask()     { local a; printf '%s' "$1" >/dev/tty; read -r a </dev/tty; echo "$a"; }
 
 # ---------------------------------------------------------------- help texts
@@ -176,7 +192,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
 Просто набери  ${B}macup${N}  — з'явиться меню.
 
 Команди
-  macup check        Перевірити все; нічого не ставить і не видаляє
+  macup check        Перевірити все, потім вибрати, що почистити (або нічого)
   macup all          Оновити інструменти + безпечна чистка + перевірки
   macup update       Лише оновлення (плюс перевірки)
   macup clean        Лише чистка (плюс перевірки)
@@ -191,6 +207,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup help         Ця довідка
 
 Опції (до будь-якої команди запуску)
+  --level РІВЕНЬ     Що можуть видаляти clean/all: safe (типово), standard, aggressive
   --deep             Ще й найбільші папки, старі Downloads, артефакти збірки в проєктах
                      (macup --deep без команди — глибока перевірка)
   --skip a,b         Пропустити задачі на цей запуск, напр. --skip update.brew,clean.*
@@ -198,8 +215,9 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   --lang en|uk|ru    Мова для цього запуску
   --no-color         Без кольорів
 
-Без команди (all, update, clean) macup нічого не змінює. Звичайна чистка видаляє
-лише те, що відновлюється або перекачується само. Звіти: ~/Library/Logs/macup/
+Без команди (all, update, clean) чи твого вибору після перевірки нічого не змінюється.
+Рівні: safe — відновиться само · standard — перекачається · aggressive — програми можуть вийти з акаунта.
+Звіти: ~/Library/Logs/macup/
 Налаштування: $(tildify "$CONF")
 EOF
   ;;
@@ -209,7 +227,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
 Просто наберите  ${B}macup${N}  — появится меню.
 
 Команды
-  macup check        Проверить всё; ничего не ставит и не удаляет
+  macup check        Проверить всё, потом выбрать, что почистить (или ничего)
   macup all          Обновить инструменты + безопасная очистка + проверки
   macup update       Только обновления (плюс проверки)
   macup clean        Только очистка (плюс проверки)
@@ -224,6 +242,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup help         Эта справка
 
 Опции (к любой команде запуска)
+  --level УРОВЕНЬ    Что могут удалять clean/all: safe (по умолчанию), standard, aggressive
   --deep             Ещё и самые большие папки, старые Downloads, артефакты сборки в проектах
                      (macup --deep без команды — глубокая проверка)
   --skip a,b         Пропустить задачи в этом запуске, напр. --skip update.brew,clean.*
@@ -231,8 +250,9 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   --lang en|uk|ru    Язык для этого запуска
   --no-color         Без цветов
 
-Без команды (all, update, clean) macup ничего не меняет. Обычная очистка удаляет
-только то, что восстанавливается или скачивается заново само. Отчёты: ~/Library/Logs/macup/
+Без команды (all, update, clean) или вашего выбора после проверки ничего не меняется.
+Уровни: safe — восстановится само · standard — скачается заново · aggressive — приложения могут выйти из аккаунта.
+Отчёты: ~/Library/Logs/macup/
 Настройки: $(tildify "$CONF")
 EOF
   ;;
@@ -242,7 +262,7 @@ ${B}macup${N} $MACUP_VERSION — keep your Mac healthy from one command
 Just type  ${B}macup${N}  to get a menu.
 
 Commands
-  macup check        Check everything; installs and deletes nothing
+  macup check        Check everything, then pick what to clean (or nothing)
   macup all          Update tools + safe cleanup + checks
   macup update       Updates only (plus checks)
   macup clean        Cleanup only (plus checks)
@@ -257,6 +277,7 @@ Commands
   macup help         This help
 
 Options (combine with any run command)
+  --level LEVEL      What clean/all may remove: safe (default), standard, aggressive
   --deep             Also scan the largest folders, Downloads and project build artifacts
                      (macup --deep on its own is a deep check)
   --skip a,b         Skip task ids for this run, e.g. --skip update.brew,clean.*
@@ -264,8 +285,9 @@ Options (combine with any run command)
   --lang en|uk|ru    Language for this run
   --no-color         Plain output
 
-Nothing changes without a command (all, update, clean). Default cleanup removes only
-what rebuilds or re-downloads itself. Reports: ~/Library/Logs/macup/
+Nothing changes without a command (all, update, clean) or your pick after a check.
+Levels: safe rebuilds itself · standard downloads again · aggressive may sign apps out.
+Reports: ~/Library/Logs/macup/
 Config: $(tildify "$CONF")
 EOF
   ;;
@@ -300,6 +322,12 @@ skip =
 
 # Opt-in tasks to turn on, e.g.: clean.stale_node_modules, clean.trash
 enable =
+
+# What `macup clean` / `macup all` may remove: safe, standard, aggressive
+#   safe        rebuilds itself (DerivedData, package caches, logs)
+#   standard    downloaded again on next use (Gradle, Maven, old Node/Ruby/Python patches)
+#   aggressive  browser caches; apps may be slower for a while or sign you out
+clean_level = safe
 
 # Delete DeviceSupport folders older than this many days
 device_support_days = 90
@@ -388,7 +416,7 @@ mline(){ # key label hint
 menu(){
   local c
   printf '\n%smacup%s — %s %s(v%s · %s)%s\n\n' "$B" "$N" "$(_ 'keep your Mac healthy')" "$D" "$MACUP_VERSION" "$(lang_name "$MSG_LANG")" "$N"
-  mline 1 'Check'            'installs and deletes nothing: health, security, updates'
+  mline 1 'Check'            'health, security, updates, then pick what to clean'
   mline 2 'Update & clean'   'everything + report'
   mline 3 'Update only'      ''
   mline 4 'Clean only'       ''
@@ -417,7 +445,7 @@ lang_table(){
   uk) cat <<'EOF'
 keep your Mac healthy || догляд за Маком
 Check || Перевірити
-installs and deletes nothing: health, security, updates || нічого не ставить і не видаляє: стан, безпека, оновлення
+health, security, updates, then pick what to clean || стан, безпека, оновлення, потім вибір, що чистити
 Update & clean || Оновити й почистити
 everything + report || усе разом + звіт
 Update only || Лише оновити
@@ -468,7 +496,6 @@ Removed config, history and reports. || Налаштування, історію
 Unknown command: %s || Невідома команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Набери  macup  для меню або  macup help  для всіх команд.
 Interrupted. Log: %s || Перервано. Лог: %s
-nothing will be installed or deleted || нічого не буде встановлено чи видалено
 System || Система
 macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · працює %s
 macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · працює %s — варто перезавантажити (%s днів без перезавантаження)
@@ -555,29 +582,22 @@ Command Line Tools only || лише Command Line Tools
 Developer tools: not installed or broken — run: xcode-select --install || Інструменти розробника не встановлені або зламані — запусти: xcode-select --install
 Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components || Runtime-и симуляторів: %s, %s — старі видаляй у Xcode → Settings → Components
 Claude Desktop %s (updates itself) || Claude Desktop %s (оновлюється сам)
-Docker: %s — clean manually with: docker system prune || Docker: %s — чистити вручну: docker system prune
 Cleanup || Чистка
-What cleanup would free || Що звільнить чистка
 %s: freed %s || %s: звільнено %s
 %s: cleaned || %s: почищено
 %s: %s || %s: %s
-%s: %s — skipped, Xcode is open || %s: %s — пропущено, Xcode відкритий
 %s (%s items, older than %s days) || %s (%s шт., старші за %s днів)
-%s: %s in cache (part of it is freeable) || %s: %s у кеші (частину можна звільнити)
 Xcode DerivedData || Xcode DerivedData
 SwiftUI previews || Прев'ю SwiftUI
 iOS device logs || Логи iOS-пристроїв
 Unavailable simulators || Недоступні симулятори
 Unavailable simulators (%s) || Недоступні симулятори (%s)
-Unavailable simulators: %s || Недоступних симуляторів: %s
 Simulator caches || Кеш симуляторів
 SwiftPM cache || Кеш SwiftPM
 CocoaPods cache || Кеш CocoaPods
 Carthage cache || Кеш Carthage
 Homebrew cleanup || Чистка Homebrew
 Homebrew old versions & downloads || Старі версії й завантаження Homebrew
-Homebrew: nothing old to remove || Homebrew: нічого старого
-Homebrew downloads cache || Кеш завантажень Homebrew
 npm cache || Кеш npm
 Yarn cache || Кеш Yarn
 pnpm store || Сховище pnpm
@@ -593,7 +613,6 @@ Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you n
 Xcode Archives: %s || Xcode Archives: %s
 Simulator devices: %s (Xcode → Window → Devices and Simulators) || Пристрої симуляторів: %s (Xcode → Window → Devices and Simulators)
 Flutter pub-cache: %s (full reset: dart pub cache clean) || Flutter pub-cache: %s (повна очистка: dart pub cache clean)
-Gradle caches: %s || Кеші Gradle: %s
 App caches (~/Library/Caches): %s — macOS trims these itself when space is low || Кеші програм (~/Library/Caches): %s — macOS чистить їх сама при нестачі місця
 Trash: %s — empty it || Кошик: %s — очисти його
 Trash: %s || Кошик: %s
@@ -674,12 +693,60 @@ Quick Look thumbnail cache || Кеш мініатюр Quick Look
 macup reports older than keep_reports_days || Звіти macup, старші за keep_reports_days
 node_modules in projects untouched for stale_project_days (opt-in) || node_modules у проєктах без змін stale_project_days днів (вмикається вручну)
 Empty the Trash (opt-in) || Очищати Кошик (вмикається вручну)
+%s cache || Кеш %s
+%s caches || Кеші %s
+%s: %s — skipped while the app is open || %s: %s — пропущено, програма відкрита
+(only if you pick it) || (лише якщо вибереш)
+AI models (Hugging Face, Ollama, LM Studio): %s || AI-моделі (Hugging Face, Ollama, LM Studio): %s
+Adobe media cache (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete || Медіакеш Adobe (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete
+Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager) || Android SDK та емулятори: %s (Android Studio → SDK Manager, Device Manager)
+Android Studio cache (%s) || Кеш Android Studio (%s)
+Android and Android Studio caches (standard); SDK, emulators and keys stay || Кеші Android і Android Studio (стандартна); SDK, емулятори й ключі лишаються
+Android cache || Кеш Android
+App cache: %s || Кеш програми: %s
+Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open) || Кеш браузерів: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агресивна, пропускається, коли відкритий)
+Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open) || Кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаються, коли відкриті)
+Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
+Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: 
+Codex chat history: %s (not a cache; delete old chats in Codex itself) || Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)
+Codex temporary files || Тимчасові файли Codex
+Codex temporary files and unfinished downloads; chat history is never touched || Тимчасові файли й недокачані завантаження Codex; історія чатів не чіпається
+DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
+Docker build cache and dangling images (never containers or volumes) || Кеш збірки Docker і непотрібні образи (не контейнери й не томи)
+Docker build cache and dangling images (standard); never containers or volumes || Кеш збірки Docker і непотрібні образи (стандартна); не контейнери й не томи
+Docker: %s || Docker: %s
+Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files || Файли рендеру Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files
+Gradle caches || Кеші Gradle
+Gradle caches and old Gradle wrappers (standard) || Кеші Gradle і старі Gradle wrapper (стандартна)
+Lightroom Classic previews: %s — Lightroom: Library → Previews → Discard 1:1 Previews || Прев'ю Lightroom Classic: %s — Lightroom: Library → Previews → Discard 1:1 Previews
+Maven repository || Репозиторій Maven
+Maven repository ~/.m2/repository (standard); settings.xml stays || Репозиторій Maven ~/.m2/repository (стандартна); settings.xml лишається
+More with a higher level or by picking: ~%s || Ще можна вищим рівнем або вибором: ~%s
+Nothing to clean at level %s || На рівні %s чистити нічого
+Old Gradle wrappers || Старі Gradle wrapper
+Old Playwright and Puppeteer browser builds (standard) || Старі збірки браузерів Playwright і Puppeteer (стандартна)
+Old Playwright/Puppeteer browsers (%s) || Старі браузери Playwright/Puppeteer (%s)
+Older %s versions (%s): %s || Старіші версії %s (%s): %s
+Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Старіші патч-версії в nvm, rbenv, pyenv, mise, asdf (стандартна); закріплені лишаються
+Other big folders in ~/Library/Caches (aggressive, only when you pick them) || Інші великі папки в ~/Library/Caches (агресивна, лише якщо вибереш)
+Quick Look cache || Кеш Quick Look
+Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only) || Кеші рендеру й прев'ю Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (лише вимірюються)
+This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N]  || Тут є агресивні або ручні пункти: програми можуть вийти з акаунта чи повільно відновлювати кеш. Спершу закрий ці програми. Продовжити? [y/N] 
+Unfinished Codex runtime downloads || Недокачані середовища Codex
+Video & photo || Відео і фото
+What can be cleaned || Що можна почистити
+aggressive || агресивна
+nothing is installed or deleted unless you pick it || нічого не ставиться й не видаляється без твого вибору
+safe || безпечна
+standard || стандартна
+pnpm metadata cache || Кеш метаданих pnpm
+node-gyp headers || Заголовки node-gyp
 EOF
   ;;
   ru) cat <<'EOF'
 keep your Mac healthy || уход за Маком
 Check || Проверить
-installs and deletes nothing: health, security, updates || ничего не ставит и не удаляет: состояние, безопасность, обновления
+health, security, updates, then pick what to clean || состояние, безопасность, обновления, потом выбор, что чистить
 Update & clean || Обновить и почистить
 everything + report || всё вместе + отчёт
 Update only || Только обновить
@@ -730,7 +797,6 @@ Removed config, history and reports. || Настройки, история и о
 Unknown command: %s || Неизвестная команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Наберите  macup  для меню или  macup help  для всех команд.
 Interrupted. Log: %s || Прервано. Лог: %s
-nothing will be installed or deleted || ничего не будет установлено или удалено
 System || Система
 macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · работает %s
 macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · работает %s — стоит перезагрузить (%s дней без перезагрузки)
@@ -817,29 +883,22 @@ Command Line Tools only || только Command Line Tools
 Developer tools: not installed or broken — run: xcode-select --install || Инструменты разработчика не установлены или сломаны — запустите: xcode-select --install
 Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components || Runtime симуляторов: %s, %s — старые удаляйте в Xcode → Settings → Components
 Claude Desktop %s (updates itself) || Claude Desktop %s (обновляется сам)
-Docker: %s — clean manually with: docker system prune || Docker: %s — чистить вручную: docker system prune
 Cleanup || Очистка
-What cleanup would free || Что освободит очистка
 %s: freed %s || %s: освобождено %s
 %s: cleaned || %s: почищено
 %s: %s || %s: %s
-%s: %s — skipped, Xcode is open || %s: %s — пропущено, Xcode открыт
 %s (%s items, older than %s days) || %s (%s шт., старше %s дней)
-%s: %s in cache (part of it is freeable) || %s: %s в кэше (часть можно освободить)
 Xcode DerivedData || Xcode DerivedData
 SwiftUI previews || Превью SwiftUI
 iOS device logs || Логи iOS-устройств
 Unavailable simulators || Недоступные симуляторы
 Unavailable simulators (%s) || Недоступные симуляторы (%s)
-Unavailable simulators: %s || Недоступных симуляторов: %s
 Simulator caches || Кэш симуляторов
 SwiftPM cache || Кэш SwiftPM
 CocoaPods cache || Кэш CocoaPods
 Carthage cache || Кэш Carthage
 Homebrew cleanup || Очистка Homebrew
 Homebrew old versions & downloads || Старые версии и загрузки Homebrew
-Homebrew: nothing old to remove || Homebrew: ничего старого
-Homebrew downloads cache || Кэш загрузок Homebrew
 npm cache || Кэш npm
 Yarn cache || Кэш Yarn
 pnpm store || Хранилище pnpm
@@ -855,7 +914,6 @@ Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you n
 Xcode Archives: %s || Xcode Archives: %s
 Simulator devices: %s (Xcode → Window → Devices and Simulators) || Устройства симуляторов: %s (Xcode → Window → Devices and Simulators)
 Flutter pub-cache: %s (full reset: dart pub cache clean) || Flutter pub-cache: %s (полная очистка: dart pub cache clean)
-Gradle caches: %s || Кэши Gradle: %s
 App caches (~/Library/Caches): %s — macOS trims these itself when space is low || Кэши приложений (~/Library/Caches): %s — macOS чистит их сама при нехватке места
 Trash: %s — empty it || Корзина: %s — очистите её
 Trash: %s || Корзина: %s
@@ -936,6 +994,54 @@ Quick Look thumbnail cache || Кэш миниатюр Quick Look
 macup reports older than keep_reports_days || Отчёты macup старше keep_reports_days
 node_modules in projects untouched for stale_project_days (opt-in) || node_modules в проектах без изменений stale_project_days дней (включается вручную)
 Empty the Trash (opt-in) || Очищать Корзину (включается вручную)
+%s cache || Кэш %s
+%s caches || Кэши %s
+%s: %s — skipped while the app is open || %s: %s — пропущено, приложение открыто
+(only if you pick it) || (только если выберете)
+AI models (Hugging Face, Ollama, LM Studio): %s || AI-модели (Hugging Face, Ollama, LM Studio): %s
+Adobe media cache (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete || Медиакэш Adobe (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete
+Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager) || Android SDK и эмуляторы: %s (Android Studio → SDK Manager, Device Manager)
+Android Studio cache (%s) || Кэш Android Studio (%s)
+Android and Android Studio caches (standard); SDK, emulators and keys stay || Кэши Android и Android Studio (стандартная); SDK, эмуляторы и ключи остаются
+Android cache || Кэш Android
+App cache: %s || Кэш приложения: %s
+Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open) || Кэш браузеров: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агрессивная, пропускается, когда открыт)
+Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open) || Кэши VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаются, когда открыты)
+Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кэш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
+Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: 
+Codex chat history: %s (not a cache; delete old chats in Codex itself) || История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)
+Codex temporary files || Временные файлы Codex
+Codex temporary files and unfinished downloads; chat history is never touched || Временные файлы и недокачанные загрузки Codex; история чатов не трогается
+DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
+Docker build cache and dangling images (never containers or volumes) || Кэш сборки Docker и ненужные образы (не контейнеры и не тома)
+Docker build cache and dangling images (standard); never containers or volumes || Кэш сборки Docker и ненужные образы (стандартная); не контейнеры и не тома
+Docker: %s || Docker: %s
+Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files || Файлы рендера Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files
+Gradle caches || Кэши Gradle
+Gradle caches and old Gradle wrappers (standard) || Кэши Gradle и старые Gradle wrapper (стандартная)
+Lightroom Classic previews: %s — Lightroom: Library → Previews → Discard 1:1 Previews || Превью Lightroom Classic: %s — Lightroom: Library → Previews → Discard 1:1 Previews
+Maven repository || Репозиторий Maven
+Maven repository ~/.m2/repository (standard); settings.xml stays || Репозиторий Maven ~/.m2/repository (стандартная); settings.xml остаётся
+More with a higher level or by picking: ~%s || Ещё можно уровнем выше или выбором: ~%s
+Nothing to clean at level %s || На уровне %s чистить нечего
+Old Gradle wrappers || Старые Gradle wrapper
+Old Playwright and Puppeteer browser builds (standard) || Старые сборки браузеров Playwright и Puppeteer (стандартная)
+Old Playwright/Puppeteer browsers (%s) || Старые браузеры Playwright/Puppeteer (%s)
+Older %s versions (%s): %s || Более старые версии %s (%s): %s
+Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Более старые патч-версии в nvm, rbenv, pyenv, mise, asdf (стандартная); закреплённые остаются
+Other big folders in ~/Library/Caches (aggressive, only when you pick them) || Другие большие папки в ~/Library/Caches (агрессивная, только если выберете)
+Quick Look cache || Кэш Quick Look
+Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only) || Кэши рендера и превью Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (только измеряются)
+This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N]  || Здесь есть агрессивные или ручные пункты: приложения могут выйти из аккаунта или медленно восстанавливать кэш. Сначала закройте эти приложения. Продолжить? [y/N] 
+Unfinished Codex runtime downloads || Недокачанные среды Codex
+Video & photo || Видео и фото
+What can be cleaned || Что можно почистить
+aggressive || агрессивная
+nothing is installed or deleted unless you pick it || ничего не ставится и не удаляется без вашего выбора
+safe || безопасная
+standard || стандартная
+pnpm metadata cache || Кэш метаданных pnpm
+node-gyp headers || Заголовки node-gyp
 EOF
   ;;
   esac
@@ -958,6 +1064,8 @@ while [ $# -gt 0 ]; do case "$1" in
   --skip=*)             CLI_SKIP="$CLI_SKIP,${1#*=}" ;;
   --only)               CLI_ONLY="$CLI_ONLY,$2"; shift ;;
   --only=*)             CLI_ONLY="$CLI_ONLY,${1#*=}" ;;
+  --level)              LEVEL=$(level_num "$2"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; }; shift ;;
+  --level=*)            LEVEL=$(level_num "${1#*=}"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; } ;;
   --lang)               set_lang "$2"; shift ;;
   --lang=*)             set_lang "${1#*=}" ;;
   --no-color)           B=; G=; Y=; R=; C=; D=; N=; CL= ;;
@@ -1007,7 +1115,7 @@ trap 'rm -f "$BODY"; cleanup_lang' EXIT
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"
-printf '%smacup %s%s · %s%s\n' "$B" "$MACUP_VERSION" "$N" "$MODE" "$( [ "$DRY" = 1 ] && printf ' · %s' "$(_ 'nothing will be installed or deleted')")"
+printf '%smacup %s%s · %s%s\n' "$B" "$MACUP_VERSION" "$N" "$MODE" "$( [ "$DRY" = 1 ] && printf ' · %s' "$(_ 'nothing is installed or deleted unless you pick it')")"
 
 PREV=$( [ -s "$HISTORY" ] && tail -n 1 "$HISTORY")
 
@@ -1305,51 +1413,140 @@ if task check.devtools; then
 fi
 if task check.docker && have docker && docker info >/dev/null 2>&1; then
   DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
-  info 'Docker: %s — clean manually with: docker system prune' "${DDF%; }"
+  info 'Docker: %s' "${DDF%; }"
 fi
 
 # ================================================================ CLEANUP
-if WANT_CLN; then
-if CLEAN; then section "Cleanup"; else section "What cleanup would free"; fi
+# Two phases. First every cleaner registers a candidate: what, how big, how risky.
+# Then the chosen candidates run: `clean`/`all` take every enabled one up to --level,
+# an interactive `check` lets you pick at the end. Levels:
+#   1 safe        rebuilds itself, nothing to notice
+#   2 standard    downloaded again on next use (time, traffic)
+#   3 aggressive  apps get slower for a while or sign you out
+C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
+C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=()
+# Only these places, and never these names, whatever a cleaner asks for.
+safe_path(){
+  case "$1" in "$HOME"/Library/*|"$HOME"/.*) ;; *) return 1 ;; esac
+  case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
+    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|"$HOME/Library/Application Support/Google/Chrome"*) return 1 ;; esac
+  return 0
+}
+kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$((s + $(kb "$p"))); done <<EOF2
+$1
+EOF2
+  echo "$s"; }
+cover(){ COVERED="$COVERED$1"$'\n'; }
+cand(){ # task level label kb kind paths [proc] [measure-dir] — kind: empty (dirs) | rm (paths) | cmd (key)
+  task_allowed "$1" || return 0
+  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8
+  if task "$1"; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
+  [ "$5" = cmd ] || cover "$6"
+  C_N=$((C_N + 1))
+}
+running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 
-safe_path(){ case "$1" in "$HOME"/Library/*|"$HOME"/.*) return 0 ;; esac; return 1; }
-account(){ # label(translated) size_kb
-  if CLEAN; then FREED=$((FREED + $2)); if [ "$2" -ge 1024 ]; then ok '%s: freed %s' "$1" "$(hum "$2")"; else ok '%s: cleaned' "$1"; fi
-  else POTENTIAL=$((POTENTIAL + $2)); info '%s: %s' "$1" "$(hum "$2")"; fi
-}
-clean_dir(){ # id label path [xcode]
-  local id=$1 label p=$3 s a; label=$(_ "$2")
-  task "$id" || return 0
-  [ -d "$p" ] && safe_path "$p" || return 0
+# --- registering helpers (the old call sites stay as they were)
+clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
+  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc='/Xcode.app/Contents/MacOS/Xcode'
+  [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
-  if CLEAN && [ "$4" = xcode ] && XCODE_ON; then info '%s: %s — skipped, Xcode is open' "$label" "$(hum "$s")"; return 0; fi
-  if CLEAN; then step '%s' "$label"; find "$p" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>>"$RAW"; a=$(kb "$p"); s=$((s - a)); fi
-  account "$label" "$s"
+  cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
 }
-clean_old(){ # id label dir days [type] — deletes entries older than N days
-  local id=$1 label p=$3 days=$4 type=${5:-d} old s=0 x; label=$(_ "$2")
-  task "$id" || return 0
-  [ -d "$p" ] && safe_path "$p" || return 0
+clean_old(){ # id label dir days [type] — entries older than N days
+  local p=$3 days=$4 type=${5:-d} old s
+  [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   old=$(find "$p" -mindepth 1 -maxdepth 1 -type "$type" -mtime +"$days" 2>/dev/null)
   [ -z "$old" ] && return 0
-  while IFS= read -r x; do s=$((s + $(kb "$x"))); done <<EOF
-$old
-EOF
-  [ "$s" -lt 1024 ] && return 0
-  CLEAN && while IFS= read -r x; do rm -rf "$x"; done <<EOF
-$old
-EOF
-  account "$(_f '%s (%s items, older than %s days)' "$label" "$(cnt "$old")" "$days")" "$s"
+  s=$(kbl "$old"); [ "$s" -lt 1024 ] && return 0
+  cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
 }
-measure_cmd(){ # id label dir cmd... — run a cleaning command, measure a dir before/after
-  local id=$1 label p=$3 s a; label=$(_ "$2"); shift 3
-  task "$id" || return 0
-  [ -e "$p" ] || return 0
-  s=$(kb "$p")
-  if CLEAN; then step '%s' "$label"; run "$@"; a=$(kb "$p"); s=$((s - a)); [ "$s" -lt 0 ] && s=0; account "$label" "$s"
-  elif [ "$s" -ge 5120 ]; then info '%s: %s in cache (part of it is freeable)' "$label" "$(hum "$s")"; fi
+measure_cmd(){ # id label dir key — a tool's own clean command; the dir is measured before and after
+  [ -e "$3" ] || return 0
+  cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$(kb "$3")" cmd "$4" "" "$3"
 }
 
+# --- running
+KEY_FREED=""
+run_key(){ local out
+  case "$1" in
+    sim)       run xcrun simctl delete unavailable ;;
+    brew)      out=$(brew cleanup -s --prune=7 2>&1); echo "$out" >>"$RAW"
+               KEY_FREED=$(tokb "$(echo "$out" | grep -o 'freed approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')") ;;
+    npm)       run npm cache verify ;;
+    pnpm)      run pnpm store prune ;;
+    pip)       run pip3 cache purge ;;
+    uv)        run uv cache prune ;;
+    go)        run go clean -cache ;;
+    quicklook) run qlmanage -r cache ;;
+    docker)    out=$({ docker builder prune -f; docker image prune -f; } 2>&1); echo "$out" >>"$RAW"
+               KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
+  esac
+}
+del(){ # one path, re-checked right before deleting; symlinks are never followed or removed
+  [ -L "$1" ] && return 0
+  [ -e "$1" ] || return 0
+  safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; return 0; }
+  rm -rf "$1" 2>>"$RAW"
+}
+exec_cand(){ # index
+  local i=$1 lbl=${C_LBL[$1]} b a d p
+  if running "${C_PROC[i]}"; then info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"; return 0; fi
+  step '%s' "$lbl"
+  case "${C_KIND[i]}" in
+    empty) b=$(kbl "${C_PATHS[i]}")
+           while IFS= read -r d; do
+             [ -d "$d" ] && [ ! -L "$d" ] && safe_path "$d" || continue
+             find "$d" -mindepth 1 -maxdepth 1 2>/dev/null | while IFS= read -r p; do del "$p"; done
+           done <<EOF2
+${C_PATHS[i]}
+EOF2
+           a=$(kbl "${C_PATHS[i]}") ;;
+    rm)    b=$(kbl "${C_PATHS[i]}")
+           while IFS= read -r p; do [ -n "$p" ] && del "$p"; done <<EOF2
+${C_PATHS[i]}
+EOF2
+           a=$(kbl "${C_PATHS[i]}") ;;
+    cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kb "${C_MDIR[i]}")
+           run_key "${C_PATHS[i]}"
+           [ -n "${C_MDIR[i]}" ] && a=$(kb "${C_MDIR[i]}")
+           [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
+  esac
+  d=$((b - a)); [ "$d" -lt 0 ] && d=0
+  FREED=$((FREED + d)); DID_CLEAN=1
+  if [ "$d" -ge 1024 ]; then ok '%s: freed %s' "$lbl" "$(hum "$d")"; else ok '%s: cleaned' "$lbl"; fi
+}
+lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
+lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
+visible(){ [ "${C_KB[$1]}" -ge 1024 ]; }
+list_cands(){ # numbered list of what can be cleaned
+  local i n=0 tag
+  for ((i = 0; i < C_N; i++)); do
+    visible "$i" || continue
+    n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"
+    flush
+    printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
+    md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"
+  done
+}
+vis_index(){ # visible number → index
+  local i n=0; for ((i = 0; i < C_N; i++)); do visible "$i" || continue; n=$((n + 1)); [ "$n" = "$1" ] && { echo "$i"; return; }; done
+}
+pick(){ # reads a choice, prints the chosen indexes one per line
+  local ans tok i a b lv
+  ans=$(ask "$(_ 'Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip: ')")
+  for tok in $(echo "$ans" | tr ',' ' '); do
+    lv=""; case "$tok" in safe) lv=1 ;; standard) lv=2 ;; aggressive) lv=3 ;; esac
+    if [ -n "$lv" ]; then
+      for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
+    elif echo "$tok" | grep -qE '^[0-9]+(-[0-9]+)?$'; then
+      a=${tok%-*}; b=${tok#*-}
+      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
+    fi
+  done | sort -un
+}
+
+if WANT_CLN; then
 DEV="$HOME/Library/Developer"
 clean_dir  clean.derived_data   'Xcode DerivedData'    "$DEV/Xcode/DerivedData" xcode
 clean_dir  clean.xcode_previews 'SwiftUI previews'     "$DEV/Xcode/UserData/Previews" xcode
@@ -1357,56 +1554,36 @@ for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done
 clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
-if task clean.sim_unavailable && have xcrun; then
+if task_allowed clean.sim_unavailable && have xcrun; then
   NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')
-  if [ "$NU" -gt 0 ]; then
-    if CLEAN; then
-      s=$(kb "$DEV/CoreSimulator/Devices"); step 'Unavailable simulators'; run xcrun simctl delete unavailable
-      a=$(kb "$DEV/CoreSimulator/Devices"); d=$((s - a)); [ "$d" -lt 0 ] && d=0
-      account "$(_f 'Unavailable simulators (%s)' "$NU")" "$d"
-    else info 'Unavailable simulators: %s' "$NU"; fi
-  fi
+  [ "$NU" -gt 0 ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$NU")" 0 cmd sim "" "$DEV/CoreSimulator/Devices"
 fi
 clean_dir  clean.sim_caches     'Simulator caches'     "$DEV/CoreSimulator/Caches"
 clean_dir  clean.spm            'SwiftPM cache'        "$HOME/Library/Caches/org.swift.swiftpm"
 clean_dir  clean.cocoapods      'CocoaPods cache'      "$HOME/Library/Caches/CocoaPods"
 clean_dir  clean.carthage       'Carthage cache'       "$HOME/Library/Caches/org.carthage.CarthageKit"
-
-if task clean.brew && have brew; then
-  if CLEAN; then
-    step 'Homebrew cleanup'
-    OUT=$(brew cleanup -s --prune=7 2>&1); echo "$OUT" >>"$RAW"
-    FR=$(echo "$OUT" | grep -o 'freed approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')
-    if [ -n "$FR" ]; then account "$(_ 'Homebrew old versions & downloads')" "$(tokb "$FR")"; else ok 'Homebrew: nothing old to remove'; fi
-  else
-    s=$(kb "$(brew --cache 2>/dev/null)"); [ "$s" -gt 5120 ] && account "$(_ 'Homebrew downloads cache')" "$s"
-  fi
+if task_allowed clean.brew && have brew; then
+  BC=$(brew --cache 2>/dev/null); cover "$BC"
+  FR=$(brew cleanup -s --prune=7 -n 2>/dev/null | grep -o 'free approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')
+  cand clean.brew 1 "$(_ 'Homebrew old versions & downloads')" "$( [ -n "$FR" ] && tokb "$FR" || echo 0)" cmd brew
 fi
-have npm  && measure_cmd clean.npm  'npm cache'      "$HOME/.npm/_cacache" npm cache verify
+have npm  && { cover "$HOME/.npm"; measure_cmd clean.npm 'npm cache' "$HOME/.npm/_cacache" npm; }
 have yarn && clean_dir   clean.yarn 'Yarn cache'     "$HOME/Library/Caches/Yarn"
-have pnpm && measure_cmd clean.pnpm 'pnpm store'     "$(pnpm store path 2>/dev/null || echo /nonexistent)" pnpm store prune
-have pip3 && measure_cmd clean.pip  'pip cache'      "$HOME/Library/Caches/pip" pip3 cache purge
-have uv   && measure_cmd clean.uv   'uv cache'       "$(uv cache dir 2>/dev/null || echo /nonexistent)" uv cache prune
-have go   && measure_cmd clean.go   'Go build cache' "$(go env GOCACHE 2>/dev/null || echo /nonexistent)" go clean -cache
-
-if task clean.logs; then
+clean_dir clean.pnpm 'pnpm metadata cache' "$HOME/Library/Caches/pnpm"
+clean_dir clean.npm  'node-gyp headers'    "$HOME/Library/Caches/node-gyp"
+have pnpm && { P=$(pnpm store path 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.pnpm 'pnpm store' "$P" pnpm; }; }
+have pip3 && { cover "$HOME/Library/Caches/pip"; measure_cmd clean.pip 'pip cache' "$HOME/Library/Caches/pip" pip; }
+have uv   && { P=$(uv cache dir 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.uv 'uv cache' "$P" uv; }; }
+have go   && { P=$(go env GOCACHE 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.go 'Go build cache' "$P" go; }; }
+if task_allowed clean.logs; then
   OLDLOGS=$(find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null)
   if [ -n "$OLDLOGS" ]; then
     s=$(printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}')
-    CLEAN && printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 rm -f 2>/dev/null
-    [ "${s:-0}" -ge 1024 ] && account "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s"
+    [ "${s:-0}" -ge 1024 ] && cand clean.logs 1 "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s" rm "$OLDLOGS"
   fi
 fi
-if task clean.quicklook && CLEAN; then run qlmanage -r cache; fi
+cand clean.quicklook 1 "$(_ 'Quick Look cache')" 0 cmd quicklook
 if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
-
-if task clean.trash; then
-  s=$(kb "$HOME/.Trash")
-  if [ "$s" -gt 0 ]; then
-    if CLEAN; then find "$HOME/.Trash" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>>"$RAW"; s=$((s - $(kb "$HOME/.Trash"))); fi
-    account "$(_ 'Trash')" "$s"
-  fi
-fi
 
 project_roots(){ # never the home folder itself or anything above it
   echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
@@ -1416,9 +1593,9 @@ project_roots(){ # never the home folder itself or anything above it
     [ -d "$d" ] && echo "$d"
   done
 }
-if task clean.stale_node_modules; then
+if task_allowed clean.stale_node_modules; then
   step 'Looking for stale node_modules'
-  STALE=""; SS=0
+  STALE=""
   while IFS= read -r root; do
     [ -z "$root" ] && continue
     while IFS= read -r nm; do
@@ -1427,18 +1604,137 @@ if task clean.stale_node_modules; then
       proj=$(dirname "$nm")
       recent=$(find "$proj" -maxdepth 3 \( -name node_modules -o -name .git \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
       [ -n "$recent" ] && continue
-      STALE="$STALE$nm"$'\n'; SS=$((SS + $(kb "$nm")))
-    done <<EOF
+      STALE="$STALE$nm"$'\n'
+    done <<EOF2
 $(find "$root" -maxdepth 5 -type d -name node_modules -prune 2>/dev/null)
-EOF
-  done <<EOF
+EOF2
+  done <<EOF2
 $(project_roots)
-EOF
-  if [ -n "$STALE" ]; then
-    CLEAN && printf '%s' "$STALE" | while IFS= read -r nm; do [ -n "$nm" ] && rm -rf "$nm"; done
-    account "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$SS"
-    printf '%s' "$STALE" | while IFS= read -r nm; do [ -n "$nm" ] && mdonly "$(tildify "$nm")"; done
-  fi
+EOF2
+  [ -n "$STALE" ] && cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
+fi
+task_allowed clean.trash && cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"
+# --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
+# gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
+CL_LVL=2
+clean_dir clean.gradle  'Gradle caches'      "$HOME/.gradle/caches" 'GradleDaemon'
+clean_old clean.gradle  'Old Gradle wrappers' "$HOME/.gradle/wrapper/dists" 30
+clean_dir clean.android 'Android cache'      "$HOME/.android/cache"
+for d in "$HOME/Library/Caches/Google/AndroidStudio"*; do
+  [ -d "$d" ] && clean_dir clean.android "$(_f 'Android Studio cache (%s)' "${d##*/}")" "$d" '/Android Studio.app/Contents/'
+done
+clean_dir clean.maven   'Maven repository'   "$HOME/.m2/repository"
+CL_LVL=""
+if task_allowed clean.docker && have docker && docker info >/dev/null 2>&1; then
+  BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
+  cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never containers or volumes)')" "$(tokb "${BCR:-0B}")" cmd docker
+fi
+
+# --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
+# every version named in a global setting or in a project's pin file (.nvmrc, .tool-versions, …).
+if task_allowed clean.old_versions; then
+  PINS=" $( { cat "$HOME/.nvm/alias/default" "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" \
+      "$HOME/.config/mise/config.toml" 2>/dev/null; echo
+    project_roots | while IFS= read -r r; do
+      find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \
+        -o -name .ruby-version -o -name .python-version -o -name .tool-versions -o -name mise.toml -o -name .mise.toml \) -print 2>/dev/null
+    done | head -2000 | tr '\n' '\0' | xargs -0 cat 2>/dev/null
+  } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
+  old_versions(){ # dir series(1 = major, 2 = major.minor) → older patch versions that nothing pins
+    for e in "$1"/*; do [ -d "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+      | awk -v s="$2" '{v=$0; sub(/^v/,"",v); split(v,a,"."); print (s==1 ? a[1] : a[1]"."a[2]), v, $0}' \
+      | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | while IFS= read -r n; do
+        [ -L "$1/$n" ] && continue
+        case "$PINS" in *" ${n#v} "*) continue ;; esac
+        [ -n "$(ls -A "$1/$n/envs" 2>/dev/null)" ] && continue   # pyenv virtualenvs live inside
+        echo "$1/$n"
+      done
+  }
+  vm(){ # tool manager dir series
+    local l; l=$(old_versions "$3" "$4"); [ -z "$l" ] && return 0
+    cand clean.old_versions 2 "$(_f 'Older %s versions (%s): %s' "$1" "$2" "$(echo "$l" | sed 's|.*/v*||' | paste -sd ',' - | sed 's/,/, /g')")" "$(kbl "$l")" rm "$l"
+  }
+  vm Node.js nvm   "$HOME/.nvm/versions/node" 1
+  vm Ruby    rbenv "$HOME/.rbenv/versions"    2
+  vm Python  pyenv "$HOME/.pyenv/versions"    2
+  for m in "$HOME/.local/share/mise/installs" "$HOME/.asdf/installs"; do
+    for t in "$m"/*; do [ -d "$t" ] || continue; s=2; [ "${t##*/}" = node ] && s=1
+      vm "${t##*/}" "$(basename "$(dirname "$m")" | sed 's/^\.//')" "$t" "$s"; done
+  done
+fi
+
+# --- old browser builds left by Playwright and Puppeteer; the newest of each stays
+if task_allowed clean.playwright; then
+  old_builds(){ for e in "$1"/*; do [ -d "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^.+-[0-9][0-9.]*$' | sed -E 's/^(.+)-([0-9][0-9.]*)$/\1 \2 &/' \
+      | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | sed "s|^|$1/|"; }
+  cover "$HOME/Library/Caches/ms-playwright"; cover "$HOME/Library/Caches/ms-playwright-go"   # browsers in use stay
+  L=""; for d in "$HOME/Library/Caches/ms-playwright" "$HOME/.cache/puppeteer"/*; do [ -d "$d" ] && L="$L$(old_builds "$d")"$'\n'; done
+  L=$(printf '%s' "$L" | grep .)
+  [ -n "$L" ] && cand clean.playwright 2 "$(_f 'Old Playwright/Puppeteer browsers (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+fi
+
+# --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
+CL_LVL=1
+clean_old clean.ai_tools 'Codex temporary files' "$HOME/.codex/.tmp" 7
+CL_LVL=""
+L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
+[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+
+# --- editors and Electron apps: only their cache folders, never User/ (settings) or Backups/ (unsaved files)
+for app in "Code:Visual Studio Code" "Code - Insiders:Visual Studio Code - Insiders" "Cursor:Cursor" "Windsurf:Windsurf" \
+           "Antigravity:Antigravity" "VSCodium:VSCodium" "Claude:Claude" "Codex:Codex"; do
+  dir="$HOME/Library/Application Support/${app%%:*}"; name=${app#*:}
+  [ -d "$dir" ] || continue
+  L=""; for sub in Cache CachedData "Code Cache" GPUCache CachedExtensionVSIXs logs DawnGraphiteCache DawnWebGPUCache; do
+    [ -d "$dir/$sub" ] && [ ! -L "$dir/$sub" ] && L="$L$dir/$sub"$'\n'; done
+  [ -n "$L" ] || continue
+  s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
+  cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/"
+done
+
+# --- browsers: cache only (in ~/Library/Caches), never profiles, history or passwords. Safari needs Full Disk Access; skipped.
+while IFS='|' read -r name proc dirs; do
+  L=""; for d in $(echo "$dirs" | tr ';' ' '); do d=$(echo "$d" | tr '+' ' '); [ -d "$HOME/Library/Caches/$d" ] && L="$L$HOME/Library/Caches/$d"$'\n'; done
+  [ -n "$L" ] || continue
+  s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
+  cand clean.browsers 3 "$(_f '%s cache' "$name")" "$s" empty "$L" "/$proc.app/Contents/"
+done <<EOF2
+Arc|Arc|Arc;company.thebrowser.Browser
+Google Chrome|Google Chrome|Google/Chrome
+Firefox|Firefox|Firefox
+Microsoft Edge|Microsoft Edge|Microsoft+Edge
+Brave|Brave Browser|BraveSoftware
+Opera|Opera|com.operasoftware.Opera
+Vivaldi|Vivaldi|Vivaldi
+EOF2
+
+# --- other big folders in ~/Library/Caches (100 MB+), except macOS's own and what is already listed above
+if task_allowed clean.app_caches; then
+  du -sk "$HOME/Library/Caches/"* 2>/dev/null | sort -rn | while read -r s e; do
+    [ "$s" -lt 102400 ] && break
+    b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
+    case "$b" in com.apple.*|Adobe\ Camera\ Raw*) continue ;; esac
+    printf '%s' "$COVERED" | grep -qxF "$e" && continue
+    printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    printf '%s\t%s\n' "$s" "$e"
+  done > "$BODY.caches"
+  while IFS="$(printf '\t')" read -r s e; do
+    cand clean.app_caches 3 "$(_f 'App cache: %s' "${e##*/}")" "$s" empty "$e"
+  done < "$BODY.caches"; rm -f "$BODY.caches"
+fi
+
+# what a plain `macup all` would free, and what more is there
+for ((i = 0; i < C_N; i++)); do
+  visible "$i" || continue
+  if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
+done
+if CLEAN; then
+  section "Cleanup"
+  for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ] && exec_cand "$i"; done
+  [ "$DID_CLEAN" = 0 ] && info 'Nothing to clean at level %s' "$(lvl_word "$LEVEL")"
+else
+  section "What can be cleaned"
+  list_cands
 fi
 fi # WANT_CLN
 
@@ -1450,12 +1746,40 @@ if task check.sizes; then
   elif [ "$s" -gt 0 ]; then info 'Xcode Archives: %s' "$(hum "$s")"; fi
   s=$(kb "$DEV/CoreSimulator/Devices"); [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
   s=$(kb "$HOME/.pub-cache");          [ "$s" -gt 0 ] && info 'Flutter pub-cache: %s (full reset: dart pub cache clean)' "$(hum "$s")"
-  s=$(kb "$HOME/.gradle/caches");      [ "$s" -gt 0 ] && info 'Gradle caches: %s' "$(hum "$s")"
+  s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)")
+  [ "$s" -ge 102400 ] && info 'Codex chat history: %s (not a cache; delete old chats in Codex itself)' "$(hum "$s")"
+  s=$(kbl "$HOME/.cache/huggingface"$'\n'"$HOME/.ollama/models"$'\n'"$HOME/.lmstudio/models")
+  [ "$s" -ge 102400 ] && info 'AI models (Hugging Face, Ollama, LM Studio): %s' "$(hum "$s")"
+  s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")
+  [ "$s" -ge 102400 ] && info 'Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager)' "$(hum "$s")"
   s=$(kb "$HOME/Library/Caches");      [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
   if ! task clean.trash; then
     s=$(kb "$HOME/.Trash")
     if [ "$s" -gt 2097152 ]; then warn 'Trash: %s — empty it' "$(hum "$s")"; elif [ "$s" -gt 0 ]; then info 'Trash: %s' "$(hum "$s")"; fi
   fi
+fi
+
+# ================================================================ VIDEO & PHOTO (measured only)
+# Their caches are rebuilt only by re-rendering, which can take hours, so macup only shows
+# where the space is and the app's own button to clear it. Folders are read only if the app is installed.
+if task check.creative; then
+  section "Video & photo"
+  if [ -d "/Applications/Final Cut Pro.app" ] && [ -d "$HOME/Movies" ]; then
+    s=$(kbl "$(find "$HOME/Movies" -maxdepth 4 -type d -name 'Render Files' -path '*.fcpbundle/*' -prune 2>/dev/null)")
+    [ "$s" -ge 102400 ] && info 'Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files' "$(hum "$s")"
+  fi
+  s=$(kbl "$HOME/Library/Application Support/Adobe/Common/Media Cache Files"$'\n'"$HOME/Library/Application Support/Adobe/Common/Media Cache")
+  [ "$s" -ge 102400 ] && info 'Adobe media cache (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete' "$(hum "$s")"
+  if [ -d "/Applications/DaVinci Resolve" ]; then
+    s=$(kb "$HOME/Movies/CacheClip")
+    [ "$s" -ge 102400 ] && info 'DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache' "$(hum "$s")"
+  fi
+  if ls -d /Applications/Adobe\ Lightroom\ Classic* >/dev/null 2>&1 && [ -d "$HOME/Pictures" ]; then
+    s=$(kbl "$(find "$HOME/Pictures" -maxdepth 4 -type d -name '*Previews.lrdata' -prune 2>/dev/null)")
+    [ "$s" -ge 102400 ] && info 'Lightroom Classic previews: %s — Lightroom: Library → Previews → Discard 1:1 Previews' "$(hum "$s")"
+  fi
+  s=$(kbl "$(ls -d "$HOME/Library/Caches/Adobe Camera Raw"* 2>/dev/null)")
+  [ "$s" -ge 102400 ] && info 'Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache' "$(hum "$s")"
 fi
 
 # ================================================================ STARTUP
@@ -1514,6 +1838,20 @@ EOF
   fi
 fi
 
+# ================================================================ PICK (interactive check)
+if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE)) -gt 0 ]; then
+  echo
+  CHOSEN=$(pick)
+  if [ -n "$CHOSEN" ]; then
+    RISKY=0; for i in $CHOSEN; do { [ "${C_LVL[i]}" = 3 ] || [ "${C_AUTO[i]}" = 0 ]; } && RISKY=1; done
+    if [ "$RISKY" = 1 ]; then
+      c=$(ask "$(_ 'This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ')")
+      case "$c" in y|Y|т|Т|д|Д) ;; *) CHOSEN="" ;; esac
+    fi
+    if [ -n "$CHOSEN" ]; then section "Cleanup"; for i in $CHOSEN; do exec_cand "$i"; done; fi
+  fi
+fi
+
 # ================================================================ TRENDS + SUMMARY
 FREE_AFTER=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}'); FREE_AFTER=${FREE_AFTER:-0}
 PCT2=$(( FREE_AFTER * 100 / D_TOTAL ))
@@ -1557,7 +1895,9 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   echo
   if [ ${#UPDATED[@]} -gt 0 ]; then echo "- **$(_f 'Updated (%s):' "${#UPDATED[@]}")**"; for u in "${UPDATED[@]}"; do echo "    - $u"; done
   elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
-  if CLEAN; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"; elif WANT_CLN && [ "$POTENTIAL" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POTENTIAL")")"; fi
+  if CLEAN || [ "$DID_CLEAN" = 1 ]; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"
+  elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"; fi
+  WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && echo "- $(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
@@ -1571,8 +1911,9 @@ printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━�
 if [ ${#UPDATED[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$G" "$(_f 'Updated: %s' "${#UPDATED[@]}")" "$N"; for u in "${UPDATED[@]}"; do printf '    · %s\n' "$u"; done
 elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
-if CLEAN; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
-elif WANT_CLN && [ "$POTENTIAL" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POTENTIAL")")"; fi
+if CLEAN || [ "$DID_CLEAN" = 1 ]; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
+elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POT_AUTO")")"; fi
+WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && printf '  %s\n' "$(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
 printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2")"
 if [ ${#WARN[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$Y" "$(_f 'Needs attention: %s' "${#WARN[@]}")" "$N"; for w in "${WARN[@]}"; do printf '    %s!%s %s\n' "$Y" "$N" "$w"; done

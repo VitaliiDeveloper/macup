@@ -1,0 +1,17 @@
+./.cache/codex-runtimes/codex-runtime-install-XYZ/blob
+./.codex/.tmp/git-abc/blob
+./Library/Application Support/Claude/Cache/c/blob
+./Library/Application Support/Claude/Code Cache/js/blob
+./Library/Application Support/Code/Cache/c/blob
+./Library/Application Support/Code/Code Cache/js/blob
+./Library/Application Support/Cursor/Cache/c/blob
+./Library/Application Support/Cursor/Code Cache/js/blob
+./Library/Caches/CocoaPods/Pods/blob
+./Library/Caches/org.carthage.CarthageKit/x/blob
+./Library/Caches/org.swift.swiftpm/repos/blob
+./Library/Developer/CoreSimulator/Caches/dyld/blob
+./Library/Developer/Xcode/DerivedData/App-abc/blob
+./Library/Developer/Xcode/UserData/Previews/x/blob
+./Library/Developer/Xcode/iOS Device Logs/old.crash
+./Library/Developer/Xcode/iOS DeviceSupport/16.0 (20A1)/blob
+./Library/Logs/SomeApp/old.log

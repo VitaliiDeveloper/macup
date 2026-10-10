@@ -9,7 +9,7 @@ M="$PWD/macup"; X='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,c
 
 # lines for apps that are open on this machine are expected to be skipped, so drop them from both sides
 open_apps(){ local a; for a in "Claude:Application Support/Claude/" "Cursor:Application Support/Cursor/" "Visual Studio Code:Application Support/Code/" \
-  "Arc:Caches/Arc/" "Google Chrome:Caches/Google/Chrome/"; do pgrep -f "/${a%%:*}.app/Contents/" >/dev/null 2>&1 && echo "${a#*:}"; done; }
+  "Arc:Caches/Arc/" "Google Chrome:Caches/Google/Chrome/" "Microsoft Edge:Caches/Microsoft Edge/"; do pgrep -f "/${a%%:*}.app/Contents/" >/dev/null 2>&1 && echo "${a#*:}"; done; }
 OPEN=$(open_apps); unopen(){ if [ -n "$OPEN" ]; then grep -vF "$OPEN"; else cat; fi; }
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local H=$1; shift; tests/fixture.sh "$H"; (cd "$H" && find . \( -type f -o -type l \) | sort) >"$H.b"
@@ -19,6 +19,7 @@ deleted(){ # fixture-dir macup-args… → files the run deleted
 }
 
 # --- static
+./build.sh --check >/dev/null 2>&1 && pass "macup is built from src/" || fail "macup is out of date: run ./build.sh"
 /bin/bash -n macup && /bin/bash -n install.sh && pass syntax || fail syntax
 if command -v shellcheck >/dev/null; then shellcheck -s bash -S warning macup install.sh && pass shellcheck || fail shellcheck; fi
 python3 tests/translations.py >/dev/null && pass translations || { fail translations; python3 tests/translations.py | head; }

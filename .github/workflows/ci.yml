@@ -18,7 +18,7 @@ jobs:
         run: |
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
-          shellcheck -s bash -S warning macup install.sh tests/*.sh
+          shellcheck -s bash -S warning macup install.sh build.sh tests/*.sh
 
   macos:
     runs-on: macos-latest

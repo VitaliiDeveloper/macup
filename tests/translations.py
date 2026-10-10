@@ -19,6 +19,8 @@ q = r"""'([^']*)'|"((?:[^"\\$]|\\.)*)\""""
 for m in re.finditer(r"\b(?:ok|info|warn|fail|step|_|_f|done_upd|section|ask \"\$\(_)\s+(?:" + q + ")", code):
     used.add(m.group(1) if m.group(1) is not None else m.group(2))
 for m in re.finditer(r"\b(?:clean_dir|clean_old|measure_cmd|simple_update)\s+\S+\s+'([^']*)'", code): used.add(m.group(1))
+for table in ('CACHE_DIRS', 'TOOL_CACHES'):
+    for l in re.search(table + r"='(.*?)'", src, re.S).group(1).split('\n'): used.add(l.split('|')[2])
 for m in re.finditer(r"mline \w+ '([^']*)'\s+'([^']*)'", code): used.update(m.groups())
 for l in re.search(r"TASKS='(.*?)'", src, re.S).group(1).split('\n'): used.add(l.split('|')[2])
 names = {'%s: %s → %s', 'App Store', 'Claude Code', 'English · Українська · Русский', 'Oh My Zsh', 'brew doctor', 'brew update', 'npm %s', '%s', '%s: %s', '%s %s'}

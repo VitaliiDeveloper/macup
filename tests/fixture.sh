@@ -46,3 +46,4 @@ mkdir -p "$H/Code/proj/.venv"; printf 'home = %s\nversion = 3.12.1\n' "$H/.pyenv
 for v in v22.1.0 v22.9.0; do blob "$H/.nvm/versions/node/$v" 1024; done
 mkdir -p "$H/.nvm/alias/lts"; echo "lts/jod" >"$H/.nvm/alias/default2"; echo "v22.1.0" >"$H/.nvm/alias/lts/jod"
 blob "$H/.m2/repository/com/me/lib/1.0-SNAPSHOT" 64; echo '<metadata/>' >"$H/.m2/repository/com/me/lib/maven-metadata-local.xml"
+blob "$L/Caches/Microsoft Edge/Cache"

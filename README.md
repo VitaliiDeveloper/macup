@@ -115,6 +115,10 @@ keep_reports_days = 60
 
 `macup uninstall` asks before removing the script, and again before removing your settings, history and reports. It leaves the `PATH` line that the installer may have added to `~/.zshrc`, because other tools use `~/.local/bin` too.
 
+## Development
+
+The source is in `src/` (files run in name order; translations in `src/i18n/`). After editing, run `./build.sh` to produce the single-file `macup` that users install, then `tests/run.sh`; both run in CI. New caches usually need one line in the tables at the top of `src/85-cleaners.sh`.
+
 ## License
 
 [MIT](LICENSE)

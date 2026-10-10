@@ -1,2 +1,3 @@
 ./Library/Caches/Arc/data/blob
 ./Library/Caches/Google/Chrome/Default/Cache/blob
+./Library/Caches/Microsoft Edge/Cache/blob

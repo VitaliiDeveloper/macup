@@ -1,7 +1,69 @@
+# ---------------------------------------------------------------- what macup cleans
+# To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
+
+# Folders whose contents can simply be deleted (the folder itself stays).
+# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f) | only if this tool exists
+CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|/Xcode.app/Contents/MacOS/Xcode|
+clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|/Xcode.app/Contents/MacOS/Xcode|
+clean.sim_caches|1|Simulator caches|~/Library/Developer/CoreSimulator/Caches||
+clean.spm|1|SwiftPM cache|~/Library/Caches/org.swift.swiftpm||
+clean.cocoapods|1|CocoaPods cache|~/Library/Caches/CocoaPods||
+clean.carthage|1|Carthage cache|~/Library/Caches/org.carthage.CarthageKit||
+clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
+clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
+clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
+clean.gradle|2|Gradle caches|~/.gradle/caches|GradleDaemon|
+clean.android|2|Android cache|~/.android/cache||'
+
+# Caches cleaned by the tool's own command (it knows what is still in use). The folder is measured
+# before and after; @tool means "ask the tool where its cache is".
+# task | level | label | tool | command key (see run_key) | folder
+TOOL_CACHES='clean.npm|1|npm cache|npm|npm|~/.npm/_cacache
+clean.pnpm|1|pnpm store|pnpm|pnpm|@pnpm
+clean.pip|1|pip cache|pip3|pip|~/Library/Caches/pip
+clean.uv|1|uv cache|uv|uv|@uv
+clean.go|1|Go build cache|go|go|@go'
+
+# Electron apps: only these cache subfolders, never User/ (settings) or Backups/ (unsaved files).
+# folder in ~/Library/Application Support | app name (skipped while it runs)
+ELECTRON_APPS='Code|Visual Studio Code
+Code - Insiders|Visual Studio Code - Insiders
+Cursor|Cursor
+Windsurf|Windsurf
+Antigravity|Antigravity
+VSCodium|VSCodium
+Claude|Claude
+Codex|Codex'
+ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache'
+
+# Browsers: cache only, in ~/Library/Caches; never profiles, history or passwords.
+# name | app name (skipped while it runs) | cache folders in ~/Library/Caches, separated by ;
+BROWSERS='Arc|Arc|Arc;company.thebrowser.Browser
+Google Chrome|Google Chrome|Google/Chrome
+Firefox|Firefox|Firefox
+Microsoft Edge|Microsoft Edge|Microsoft Edge
+Brave|Brave Browser|BraveSoftware
+Opera|Opera|com.operasoftware.Opera
+Vivaldi|Vivaldi|Vivaldi'
+
+tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
+
 if WANT_CLN; then
 DEV="$HOME/Library/Developer"
-clean_dir  clean.derived_data   'Xcode DerivedData'    "$DEV/Xcode/DerivedData" xcode
-clean_dir  clean.xcode_previews 'SwiftUI previews'     "$DEV/Xcode/UserData/Previews" xcode
+while IFS='|' read -r id lv label dir proc tool; do
+  [ -n "$tool" ] && ! have "$tool" && continue
+  CL_LVL=$lv clean_dir "$id" "$label" "$(expand "$dir")" "$proc"
+done <<EOF2
+$CACHE_DIRS
+EOF2
+while IFS='|' read -r id lv label tool key dir; do
+  have "$tool" || continue
+  dir=$(tool_dir "$dir"); [ -n "$dir" ] || continue
+  cover "$dir"; CL_LVL=$lv measure_cmd "$id" "$label" "$dir" "$key"
+done <<EOF2
+$TOOL_CACHES
+EOF2
+cover "$HOME/.npm"
 for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done
@@ -10,23 +72,11 @@ if task_allowed clean.sim_unavailable && have xcrun; then
   NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')
   [ "$NU" -gt 0 ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$NU")" 0 cmd sim "" "$DEV/CoreSimulator/Devices"
 fi
-clean_dir  clean.sim_caches     'Simulator caches'     "$DEV/CoreSimulator/Caches"
-clean_dir  clean.spm            'SwiftPM cache'        "$HOME/Library/Caches/org.swift.swiftpm"
-clean_dir  clean.cocoapods      'CocoaPods cache'      "$HOME/Library/Caches/CocoaPods"
-clean_dir  clean.carthage       'Carthage cache'       "$HOME/Library/Caches/org.carthage.CarthageKit"
 if task_allowed clean.brew && have brew; then
   BC=$(brew --cache 2>/dev/null); cover "$BC"
   FR=$(brew cleanup -s --prune=7 -n 2>/dev/null | grep -o 'free approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')
   cand clean.brew 1 "$(_ 'Homebrew old versions & downloads')" "$( [ -n "$FR" ] && tokb "$FR" || echo 0)" cmd brew
 fi
-have npm  && { cover "$HOME/.npm"; measure_cmd clean.npm 'npm cache' "$HOME/.npm/_cacache" npm; }
-have yarn && clean_dir   clean.yarn 'Yarn cache'     "$HOME/Library/Caches/Yarn"
-clean_dir clean.pnpm 'pnpm metadata cache' "$HOME/Library/Caches/pnpm"
-clean_dir clean.npm  'node-gyp headers'    "$HOME/Library/Caches/node-gyp"
-have pnpm && { P=$(pnpm store path 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.pnpm 'pnpm store' "$P" pnpm; }; }
-have pip3 && { cover "$HOME/Library/Caches/pip"; measure_cmd clean.pip 'pip cache' "$HOME/Library/Caches/pip" pip; }
-have uv   && { P=$(uv cache dir 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.uv 'uv cache' "$P" uv; }; }
-have go   && { P=$(go env GOCACHE 2>/dev/null); [ -n "$P" ] && { cover "$P"; measure_cmd clean.go 'Go build cache' "$P" go; }; }
 if task_allowed clean.logs; then
   OLDLOGS=$(find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null)
   if [ -n "$OLDLOGS" ]; then
@@ -69,9 +119,7 @@ task_allowed clean.trash && cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Tras
 # --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
 # gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
 CL_LVL=2
-clean_dir clean.gradle  'Gradle caches'      "$HOME/.gradle/caches" 'GradleDaemon'
 clean_old clean.gradle  'Old Gradle wrappers' "$HOME/.gradle/wrapper/dists" 30
-clean_dir clean.android 'Android cache'      "$HOME/.android/cache"
 for d in "$HOME/Library/Caches/Google/AndroidStudio"*; do
   [ -d "$d" ] && clean_dir clean.android "$(_f 'Android Studio cache (%s)' "${d##*/}")" "$d" '/Android Studio.app/Contents/'
 done
@@ -136,32 +184,23 @@ L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtim
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
 [ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
 
-# --- editors and Electron apps: only their cache folders, never User/ (settings) or Backups/ (unsaved files)
-for app in "Code:Visual Studio Code" "Code - Insiders:Visual Studio Code - Insiders" "Cursor:Cursor" "Windsurf:Windsurf" \
-           "Antigravity:Antigravity" "VSCodium:VSCodium" "Claude:Claude" "Codex:Codex"; do
-  dir="$HOME/Library/Application Support/${app%%:*}"; name=${app#*:}
-  [ -d "$dir" ] || continue
-  L=""; for sub in Cache CachedData "Code Cache" GPUCache CachedExtensionVSIXs logs DawnGraphiteCache DawnWebGPUCache; do
-    [ -d "$dir/$sub" ] && [ ! -L "$dir/$sub" ] && L="$L$dir/$sub"$'\n'; done
-  [ -n "$L" ] || continue
+# --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
+dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one per line
+  local d; echo "$2" | tr '|;' '\n\n' | while IFS= read -r d; do
+    [ -n "$d" ] && [ -d "$1/$d" ] && [ ! -L "$1/$d" ] && echo "$1/$d"; done; }
+while IFS='|' read -r folder name; do
+  L=$(dirs_in "$HOME/Library/Application Support/$folder" "$ELECTRON_CACHES"); [ -n "$L" ] || continue
   s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
   cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/"
-done
-
-# --- browsers: cache only (in ~/Library/Caches), never profiles, history or passwords. Safari needs Full Disk Access; skipped.
-while IFS='|' read -r name proc dirs; do
-  L=""; for d in $(echo "$dirs" | tr ';' ' '); do d=$(echo "$d" | tr '+' ' '); [ -d "$HOME/Library/Caches/$d" ] && L="$L$HOME/Library/Caches/$d"$'\n'; done
-  [ -n "$L" ] || continue
-  s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
-  cand clean.browsers 3 "$(_f '%s cache' "$name")" "$s" empty "$L" "/$proc.app/Contents/"
 done <<EOF2
-Arc|Arc|Arc;company.thebrowser.Browser
-Google Chrome|Google Chrome|Google/Chrome
-Firefox|Firefox|Firefox
-Microsoft Edge|Microsoft Edge|Microsoft+Edge
-Brave|Brave Browser|BraveSoftware
-Opera|Opera|com.operasoftware.Opera
-Vivaldi|Vivaldi|Vivaldi
+$ELECTRON_APPS
+EOF2
+while IFS='|' read -r name app dirs; do   # Safari's cache needs Full Disk Access; skipped
+  L=$(dirs_in "$HOME/Library/Caches" "$dirs"); [ -n "$L" ] || continue
+  s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
+  cand clean.browsers 3 "$(_f '%s cache' "$name")" "$s" empty "$L" "/$app.app/Contents/"
+done <<EOF2
+$BROWSERS
 EOF2
 
 # --- other big folders in ~/Library/Caches (100 MB+), except macOS's own and what is already listed above

@@ -77,15 +77,30 @@ t(){ # message id
   uk:path)    echo "Додав у PATH" ;;
   ru:path)    echo "Добавил в PATH" ;;
   *:path)     echo "Added to PATH" ;;
-  uk:proj)    echo "Де лежать твої проєкти? Через кому; Enter — залишити як є" ;;
-  ru:proj)    echo "Где лежат ваши проекты? Через запятую; Enter — оставить как есть" ;;
-  *:proj)     echo "Where do you keep your code? Comma-separated; Enter keeps what's shown" ;;
-  uk:found)   echo "знайдено" ;;
-  ru:found)   echo "найдено" ;;
-  *:found)    echo "found" ;;
-  uk:now)     echo "зараз" ;;
-  ru:now)     echo "сейчас" ;;
-  *:now)      echo "now" ;;
+  uk:proj)    echo "У яких папках лежать твої проєкти з кодом?" ;;
+  ru:proj)    echo "В каких папках лежат ваши проекты с кодом?" ;;
+  *:proj)     echo "Which folders hold your code projects?" ;;
+  uk:projwhy) printf '%s\n' "  macup шукає там залишки збірки (node_modules, Pods, .build) і показує, скільки вони займають." \
+                             "  Сам нічого там не видаляє, хіба що ти окремо ввімкнеш clean.stale_node_modules." \
+                             "  Вкажи батьківські папки, а не кожен проєкт. Кілька — через кому. ~ — твоя домашня тека." \
+                             "  Приклад (дві папки):  ~/Developer, ~/Documents/Projects" ;;
+  ru:projwhy) printf '%s\n' "  macup ищет там остатки сборки (node_modules, Pods, .build) и показывает, сколько они занимают." \
+                             "  Сам ничего там не удаляет, разве что вы отдельно включите clean.stale_node_modules." \
+                             "  Укажите родительские папки, а не каждый проект. Несколько — через запятую. ~ — ваша домашняя папка." \
+                             "  Пример (две папки):  ~/Developer, ~/Documents/Projects" ;;
+  *:projwhy)  printf '%s\n' "  macup looks there for build leftovers (node_modules, Pods, .build) and shows how much space they take." \
+                             "  It deletes nothing there unless you separately turn on clean.stale_node_modules." \
+                             "  Give the parent folders, not each project. Several: separate with commas. ~ is your home folder." \
+                             "  Example (two folders):  ~/Developer, ~/Documents/Projects" ;;
+  uk:keep)    echo "Enter — залишити" ;;
+  ru:keep)    echo "Enter — оставить" ;;
+  *:keep)     echo "Enter keeps" ;;
+  uk:nodir)   echo "такої папки немає (збережу все одно, можна створити пізніше)" ;;
+  ru:nodir)   echo "такой папки нет (сохраню всё равно, можно создать позже)" ;;
+  *:nodir)    echo "no such folder (saved anyway; you can create it later)" ;;
+  uk:home)    echo "сама домашня тека не підходить, macup її пропустить" ;;
+  ru:home)    echo "сама домашняя папка не подходит, macup её пропустит" ;;
+  *:home)     echo "your whole home folder is not allowed; macup will skip it" ;;
   uk:mas)     echo "Поставити mas, щоб оновлювати програми з App Store? [y/N]: " ;;
   ru:mas)     echo "Установить mas, чтобы обновлять приложения из App Store? [y/N]: " ;;
   *:mas)      echo "Install mas so App Store apps get updated too? [y/N]: " ;;
@@ -155,11 +170,20 @@ if [ -z "$PROJECTS" ] && [ "$INTERACTIVE" = 1 ]; then
   for d in "$HOME/Developer" "$HOME/Projects" "$HOME/Code" "$HOME/dev" "$HOME/src" "$HOME/repos" "$HOME/work"; do
     [ -d "$d" ] && FOUND="$FOUND${FOUND:+, }$(tld "$d")"
   done
-  printf '\n%s%s%s\n' "$B" "$(t proj)" "$N" >/dev/tty
-  if [ "$HAD_CONF" = 1 ]; then printf '%s(%s: %s)%s\n' "$D" "$(t now)" "$(conf_get project_dirs)" "$N" >/dev/tty
-  elif [ -n "$FOUND" ]; then printf '%s(%s: %s)%s\n' "$D" "$(t found)" "$FOUND" "$N" >/dev/tty; fi
+  # what Enter keeps: the current setting on reinstall, else what we found, else the default list
+  if [ "$HAD_CONF" = 1 ]; then KEEP=$(conf_get project_dirs); else KEEP=${FOUND:-$(conf_get project_dirs)}; fi
+  printf '\n%s%s%s\n%s%s%s\n' "$B" "$(t proj)" "$N" "$D" "$(t projwhy)" "$N" >/dev/tty
+  printf '%s  %s: %s%s\n' "$D" "$(t keep)" "$KEEP" "$N" >/dev/tty
   PROJECTS=$(ask "> ")
-  [ -z "$PROJECTS" ] && [ "$HAD_CONF" = 0 ] && PROJECTS="$FOUND"
+  if [ -z "$PROJECTS" ]; then [ "$HAD_CONF" = 0 ] && PROJECTS="$FOUND"
+  else # point out typos, but keep what was typed
+    echo "$PROJECTS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
+      [ -z "$d" ] && continue
+      p=$(echo "$d" | sed "s|^~|$HOME|"); p=${p%/}
+      if [ "$p" = "$HOME" ] || [ "$p" = "" ]; then printf '  %s! %s: %s%s\n' "$D" "$d" "$(t home)" "$N" >/dev/tty
+      elif [ ! -d "$p" ]; then printf '  %s! %s: %s%s\n' "$D" "$d" "$(t nodir)" "$N" >/dev/tty; fi
+    done
+  fi
 fi
 if [ -n "$PROJECTS" ]; then
   esc=$(printf '%s' "$PROJECTS" | sed 's/[|&]/\\&/g')

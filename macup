@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="3.0.0"
+MACUP_VERSION="2.3.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
 set -o pipefail
@@ -169,7 +169,7 @@ have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
 cnt()     { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi; }
 lines()   { [ -n "$1" ] && printf '%s\n' "$1" | while IFS= read -r l; do [ -n "$l" ] && sub "$l"; done; }
 kb()      { if [ -e "$1" ]; then du -sk "$1" 2>/dev/null | awk '{s+=$1} END{print s+0}'; else echo 0; fi; }
-hum()     { awk -v k="${1:-0}" 'BEGIN{ s=""; if(k<0){s="-";k=-k} if(k>=1048576) printf "%s%.1f GB",s,k/1048576; else if(k>=1024) printf "%s%.0f MB",s,k/1024; else printf "%s%d KB",s,k }'; }
+hum()     { awk -v k="${1:-0}" 'BEGIN{ s=""; if(k<0){s="-";k=-k} b=k*1024; if(b>=1e9) printf "%s%.1f GB",s,b/1e9; else if(b>=1e6) printf "%s%.0f MB",s,b/1e6; else printf "%s%d KB",s,b/1e3 }'; }   # decimal, like Finder
 tokb()    { echo "$1" | awk '{n=$1+0; u=$1; gsub(/[0-9.]/,"",u); m=(u=="TB")?1073741824:(u=="GB")?1048576:(u=="MB")?1024:(u=="KB")?1:0; printf "%d", n*m}'; }
 nocolor() { sed $'s/\x1b\\[[0-9;?]*[A-Za-z]//g'; }
 tildify() { echo "$1" | sed "s|^$HOME|~|"; }
@@ -373,7 +373,7 @@ show_history(){
   printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$B" "$(pad "$(_ 'DATE')" 18)" "$(pad "$(_ 'MODE')" 11)" "$(pad "$(_ 'FREE')" 11)" \
     "$(pad "$(_ 'CHANGE')" 11)" "$(pad "$(_ 'SWAP')" 10)" "$(pad "$(_ 'BATTERY')" 9)" "$(pad "$(_ 'UPDATED')" 9)" "$(pad "$(_ 'FREED')" 10)" "$(_ 'WARN')" "$N"
   tail -n 15 "$HISTORY" | awk -F, -v b="$B" -v n="$N" -v trend="$(_ 'Free space trend:')" '
-    function h(k){ if(k<0) return "-" h(-k); if(k>=1048576) return sprintf("%.1f GB",k/1048576); if(k>=1024) return sprintf("%.0f MB",k/1024); return k " KB" }
+    function h(k){ if(k<0) return "-" h(-k); b=k*1024; if(b>=1e9) return sprintf("%.1f GB",b/1e9); if(b>=1e6) return sprintf("%.0f MB",b/1e6); return sprintf("%d KB",b/1e3) }
     { chg = (NR>1) ? h($3-prev) : "";  prev=$3
       bat = ($8!="") ? $8 "%" : "-"
       printf "%-18s%-11s%-11s%-11s%-10s%-9s%-9s%-10s%s\n", $1,$2,h($3),chg,$6 " MB",bat,$9,h($10),$11
@@ -505,8 +505,8 @@ Disk: %s free of %s (%s%%) — getting low || Диск: вільно %s з %s (%
 Disk health (SMART): %s || Стан диска (SMART): %s
 Disk health (SMART): %s — back up now || Стан диска (SMART): %s — терміново зроби бекап
 Local Time Machine snapshots: %s (macOS frees them automatically when space runs low) || Локальні знімки Time Machine: %s (macOS прибирає їх сама, коли бракує місця)
-Memory: %s GB, %s%% free, swap %s MB || Пам'ять: %s GB, вільно %s%%, swap %s MB
-Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart || Пам'ять: %s GB, вільно %s%%, swap %s MB — пам'яті замало; закрий важкі програми або перезавантаж
+Memory: %s GB, %s%% free, swap %s || Пам'ять: %s GB, вільно %s%%, swap %s
+Memory: %s GB, %s%% free, swap %s — memory is tight; quit heavy apps or restart || Пам'ять: %s GB, вільно %s%%, swap %s — пам'яті замало; закрий важкі програми або перезавантаж
 CPU: load %s on %s cores || CPU: навантаження %s на %s ядер
 CPU: load %s on %s cores — something is busy || CPU: навантаження %s на %s ядер — щось активно працює
 Top CPU:    %s || Найбільше CPU:     %s
@@ -742,6 +742,7 @@ pnpm metadata cache || Кеш метаданих pnpm
 node-gyp headers || Заголовки node-gyp
 Maven repository (has your own mvn install builds) || Репозиторій Maven (є твої збірки з mvn install)
 Codex temporary git clones (%s, older than 7 days) || Тимчасові git-клони Codex (%s, старші за 7 днів)
+Swap files: %s of the used space (macOS removes them on restart) || Файли swap: %s зайнятого місця (macOS прибирає їх під час перезавантаження)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -807,8 +808,8 @@ Disk: %s free of %s (%s%%) — getting low || Диск: свободно %s из
 Disk health (SMART): %s || Состояние диска (SMART): %s
 Disk health (SMART): %s — back up now || Состояние диска (SMART): %s — срочно сделайте бэкап
 Local Time Machine snapshots: %s (macOS frees them automatically when space runs low) || Локальные снимки Time Machine: %s (macOS удаляет их сама, когда не хватает места)
-Memory: %s GB, %s%% free, swap %s MB || Память: %s GB, свободно %s%%, swap %s MB
-Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart || Память: %s GB, свободно %s%%, swap %s MB — памяти мало; закройте тяжёлые приложения или перезагрузитесь
+Memory: %s GB, %s%% free, swap %s || Память: %s GB, свободно %s%%, swap %s
+Memory: %s GB, %s%% free, swap %s — memory is tight; quit heavy apps or restart || Память: %s GB, свободно %s%%, swap %s — памяти мало; закройте тяжёлые приложения или перезагрузитесь
 CPU: load %s on %s cores || CPU: нагрузка %s на %s ядер
 CPU: load %s on %s cores — something is busy || CPU: нагрузка %s на %s ядер — что-то активно работает
 Top CPU:    %s || Больше всего CPU:    %s
@@ -1044,6 +1045,7 @@ pnpm metadata cache || Кэш метаданных pnpm
 node-gyp headers || Заголовки node-gyp
 Maven repository (has your own mvn install builds) || Репозиторий Maven (есть ваши сборки из mvn install)
 Codex temporary git clones (%s, older than 7 days) || Временные git-клоны Codex (%s, старше 7 дней)
+Swap files: %s of the used space (macOS removes them on restart) || Файлы swap: %s занятого места (macOS удаляет их при перезагрузке)
 EOF
   ;;
   esac
@@ -1140,6 +1142,8 @@ if task check.disk; then
   if   [ "$PCT" -lt 10 ]; then fail 'Disk: %s free of %s (%s%%) — critically low' "$F1" "$F2" "$PCT"
   elif [ "$PCT" -lt 20 ]; then warn 'Disk: %s free of %s (%s%%) — getting low' "$F1" "$F2" "$PCT"
   else ok 'Disk: %s free of %s (%s%%)' "$F1" "$F2" "$PCT"; fi
+  SWAPDISK=$(df -k /System/Volumes/VM 2>/dev/null | awk 'NR==2{print $3}')
+  [ "${SWAPDISK:-0}" -ge 1048576 ] && info 'Swap files: %s of the used space (macOS removes them on restart)' "$(hum "$SWAPDISK")"
   SMART=$(diskutil info disk0 2>/dev/null | awk -F': *' '/SMART Status/{print $2}')
   if [ -n "$SMART" ]; then
     case "$SMART" in Verified|"Not Supported") ok 'Disk health (SMART): %s' "$SMART" ;; *) fail 'Disk health (SMART): %s — back up now' "$SMART" ;; esac
@@ -1154,8 +1158,8 @@ if task check.memory; then
   MEMFREE=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}')
   SWAP=$(sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}')
   SWAP=${SWAP:-0}
-  if [ "${MEMFREE:-100}" -lt 15 ] || [ "$SWAP" -gt 6144 ]; then warn 'Memory: %s GB, %s%% free, swap %s MB — memory is tight; quit heavy apps or restart' "$RAM" "${MEMFREE:-?}" "$SWAP"
-  else ok 'Memory: %s GB, %s%% free, swap %s MB' "$RAM" "${MEMFREE:-?}" "$SWAP"; fi
+  if [ "${MEMFREE:-100}" -lt 15 ] || [ "$SWAP" -gt 6144 ]; then warn 'Memory: %s GB, %s%% free, swap %s — memory is tight; quit heavy apps or restart' "$RAM" "${MEMFREE:-?}" "$(hum $((SWAP * 1024)))"
+  else ok 'Memory: %s GB, %s%% free, swap %s' "$RAM" "${MEMFREE:-?}" "$(hum $((SWAP * 1024)))"; fi
 fi
 
 if task check.cpu; then

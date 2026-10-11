@@ -71,11 +71,11 @@ num(){ tr -d '\r' <"$W/po" | grep -E "^ +[0-9]+ .*$1" | head -1 | awk '{print $1
 [ -z "$(pick '')" ] && pass "pick: Enter deletes nothing" || fail "pick: Enter"
 [ -z "$(pick 'zzz, 999')" ] && pass "pick: garbage deletes nothing" || fail "pick: garbage"
 pick '' >/dev/null; n1=$(num 'Xcode DerivedData'); n2=$(num 'SwiftPM cache'); nt=$(num 'Trash')
-[ "$(pick "$n1,$n2")" = "$(printf '%s\n' './Library/Caches/org.swift.swiftpm/repos/blob' './Library/Developer/Xcode/DerivedData/App-abc/blob')" ] && pass "pick: numbers delete exactly those" || fail "pick: numbers"
+[ "$(pick "$n1,$n2" | LC_ALL=C sort)" = "$(printf '%s\n' './Library/Caches/org.swift.swiftpm/repos/blob' './Library/Developer/Xcode/DerivedData/App-abc/blob' | LC_ALL=C sort)" ] && pass "pick: numbers delete exactly those" || fail "pick: numbers"
 [ -z "$(pick "$nt" n)" ] && pass "pick: opt-in item needs a yes" || fail "pick: confirmation"
 [ "$(pick "$nt" y)" = "./.Trash/thing/blob" ] && pass "pick: opt-in item after yes" || fail "pick: yes"
 got=$(PL=uk pick 'безпечна')
-[ "$got" = "$(unopen <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(unopen <tests/expect-safe.txt) <(echo "$got") | head; }
+[ "$(echo "$got" | LC_ALL=C sort)" = "$(unopen <tests/expect-safe.txt | LC_ALL=C sort)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(unopen <tests/expect-safe.txt) <(echo "$got") | head; }
 
 # --- simulators: only on pick, never a booted one; a fake xcrun records what macup asks for
 H="$W/sim"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"

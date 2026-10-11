@@ -3,11 +3,11 @@
 lang_table(){
   case "$1" in
   uk) cat <<'EOF'
-@include i18n/uk.txt
+@i18n uk
 EOF
   ;;
   ru) cat <<'EOF'
-@include i18n/ru.txt
+@i18n ru
 EOF
   ;;
   esac

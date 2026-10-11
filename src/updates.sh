@@ -1,6 +1,6 @@
 # ================================================================ UPDATES
 if WANT_UPD; then
-if UPD; then section "Updates"; else section "Available updates (not installed)"; fi
+if UPD; then section "Updates"; else section "Update status (check only, nothing installed)"; fi
 
 if task update.claude && have claude; then
   v1=$(claude --version 2>/dev/null | awk '{print $1}')
@@ -93,7 +93,7 @@ EOF
     else fail 'Agent skills: update failed (see log)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
-    LATER_SKILLS="$(_ 'Agent skills') ($(cnt "$S1"))"
+    LATER_SKILLS="$(_ 'Agent skills')"
   fi
 fi
 
@@ -137,7 +137,7 @@ have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --a
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
 have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
-[ -n "$LATER" ] && info 'Updated on a full run (no version check): %s' "$LATER"
+[ -n "$LATER" ] && info 'Not checked in this mode, updated by macup update: %s' "$LATER"
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'

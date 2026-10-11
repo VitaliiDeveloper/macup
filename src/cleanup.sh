@@ -77,7 +77,10 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
 }
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p
-  if running "${C_PROC[i]}"; then info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"; return 0; fi
+  if running "${C_PROC[i]}"; then
+    info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
+    SKIPPED+=("$lbl ($(hum "${C_KB[i]}"))"); return 0
+  fi
   step '%s' "$lbl"
   case "${C_KIND[i]}" in
     empty) b=$(kbl "${C_PATHS[i]}")

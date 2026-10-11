@@ -57,6 +57,9 @@ clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
 clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
 clean.device_logs|on|iOS device logs older than 90 days
 clean.sim_unavailable|on|Simulators whose runtime is gone
+clean.sim_runtimes|off|Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again)
+clean.sim_erase|off|Erase the apps and data of a simulator (only when you pick it)
+clean.sim_unused|off|Simulators unused for simulator_days (only when you pick them)
 clean.sim_caches|on|CoreSimulator caches
 clean.spm|on|SwiftPM cache
 clean.cocoapods|on|CocoaPods cache
@@ -106,6 +109,7 @@ load_conf(){
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
   KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
+  SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
@@ -161,7 +165,7 @@ warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N
 fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
 sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
 mdonly()  { md "    - $*"; }
-step()    { [ -t 1 ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
+step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
 run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
 have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1

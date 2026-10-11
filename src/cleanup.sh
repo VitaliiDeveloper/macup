@@ -61,10 +61,14 @@ run_key(){ local out
     uv)        run uv cache prune ;;
     go)        run go clean -cache ;;
     quicklook) run qlmanage -r cache ;;
+    simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
+    simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
+    simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     docker)    out=$({ docker builder prune -f; docker image prune -f; } 2>&1); echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
   esac
 }
+sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1" >>"$RAW"; return 1 ;; esac; }
 del(){ # one path, re-checked right before deleting; symlinks are never followed or removed
   [ -L "$1" ] && return 0
   [ -e "$1" ] || return 0
@@ -90,7 +94,7 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kb "${C_MDIR[i]}")
-           run_key "${C_PATHS[i]}"
+           if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kb "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
@@ -100,7 +104,7 @@ EOF2
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ]; }
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; }; }   # small pick-only commands too
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag
   for ((i = 0; i < C_N; i++)); do

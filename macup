@@ -57,6 +57,9 @@ clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
 clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
 clean.device_logs|on|iOS device logs older than 90 days
 clean.sim_unavailable|on|Simulators whose runtime is gone
+clean.sim_runtimes|off|Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again)
+clean.sim_erase|off|Erase the apps and data of a simulator (only when you pick it)
+clean.sim_unused|off|Simulators unused for simulator_days (only when you pick them)
 clean.sim_caches|on|CoreSimulator caches
 clean.spm|on|SwiftPM cache
 clean.cocoapods|on|CocoaPods cache
@@ -106,6 +109,7 @@ load_conf(){
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
   KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
+  SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
@@ -161,7 +165,7 @@ warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N
 fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
 sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
 mdonly()  { md "    - $*"; }
-step()    { [ -t 1 ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
+step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
 run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
 have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
@@ -331,6 +335,9 @@ clean_level = safe
 
 # Delete DeviceSupport folders older than this many days
 device_support_days = 90
+
+# Offer to delete simulators nobody used for this many days
+simulator_days = 30
 
 # A project counts as stale when nothing in it changed for this many days
 stale_project_days = 90
@@ -743,6 +750,14 @@ node-gyp headers || Заголовки node-gyp
 Maven repository (has your own mvn install builds) || Репозиторій Maven (є твої збірки з mvn install)
 Codex temporary git clones (%s, older than 7 days) || Тимчасові git-клони Codex (%s, старші за 7 днів)
 Swap files: %s of the used space (macOS removes them on restart) || Файли swap: %s зайнятого місця (macOS прибирає їх під час перезавантаження)
+Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again) || Runtime-и симуляторів, які вже не потрібні (лише якщо вибереш; Xcode перекачає їх)
+Erase the apps and data of a simulator (only when you pick it) || Стерти програми й дані симулятора (лише якщо вибереш)
+Simulators unused for simulator_days (only when you pick them) || Симулятори, не використані simulator_days днів (лише якщо вибереш)
+Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Settings → Components) || Runtime симулятора %s: востаннє %s, симуляторів: %s (Xcode перекачає: Settings → Components)
+never || ніколи
+Erase simulator %s (%s): its apps and data are removed || Стерти симулятор %s (%s): його програми й дані зникнуть
+Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симулятори без використання %s+ днів (%s): %s — додати знову: Xcode → Devices and Simulators
+%s: failed (see log) || %s: не вдалося (див. лог)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1046,6 +1061,14 @@ node-gyp headers || Заголовки node-gyp
 Maven repository (has your own mvn install builds) || Репозиторий Maven (есть ваши сборки из mvn install)
 Codex temporary git clones (%s, older than 7 days) || Временные git-клоны Codex (%s, старше 7 дней)
 Swap files: %s of the used space (macOS removes them on restart) || Файлы swap: %s занятого места (macOS удаляет их при перезагрузке)
+Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again) || Runtime симуляторов, которые больше не нужны (только если выберете; Xcode скачает их заново)
+Erase the apps and data of a simulator (only when you pick it) || Стереть приложения и данные симулятора (только если выберете)
+Simulators unused for simulator_days (only when you pick them) || Симуляторы, не использованные simulator_days дней (только если выберете)
+Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Settings → Components) || Runtime симулятора %s: последний раз %s, симуляторов: %s (Xcode скачает заново: Settings → Components)
+never || никогда
+Erase simulator %s (%s): its apps and data are removed || Стереть симулятор %s (%s): его приложения и данные удалятся
+Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симуляторы без использования %s+ дней (%s): %s — добавить снова: Xcode → Devices and Simulators
+%s: failed (see log) || %s: не удалось (см. лог)
 EOF
   ;;
   esac
@@ -1485,10 +1508,14 @@ run_key(){ local out
     uv)        run uv cache prune ;;
     go)        run go clean -cache ;;
     quicklook) run qlmanage -r cache ;;
+    simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
+    simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
+    simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     docker)    out=$({ docker builder prune -f; docker image prune -f; } 2>&1); echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
   esac
 }
+sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1" >>"$RAW"; return 1 ;; esac; }
 del(){ # one path, re-checked right before deleting; symlinks are never followed or removed
   [ -L "$1" ] && return 0
   [ -e "$1" ] || return 0
@@ -1514,7 +1541,7 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kb "${C_MDIR[i]}")
-           run_key "${C_PATHS[i]}"
+           if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kb "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
@@ -1524,7 +1551,7 @@ EOF2
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ]; }
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; }; }   # small pick-only commands too
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag
   for ((i = 0; i < C_N; i++)); do
@@ -1621,6 +1648,49 @@ cover "$HOME/.npm"
 for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done
+# --- simulators, only when you pick them: runtimes (A), erasing one (B), unused ones (C). Running ones are left alone.
+if have xcrun && have python3 && { task_allowed clean.sim_runtimes || task_allowed clean.sim_erase || task_allowed clean.sim_unused; }; then
+  SIMS=$( { xcrun simctl list devices -j 2>/dev/null; echo '@@'; xcrun simctl runtime list -j 2>/dev/null; } | python3 -c '
+import json, sys
+dev_raw, rt_raw = sys.stdin.read().split("@@", 1)
+try: devs = json.loads(dev_raw).get("devices", {})
+except Exception: devs = {}
+try: rts = json.loads(rt_raw)
+except Exception: rts = {}
+for rid, ds in devs.items():
+    for d in ds:
+        print("D", d.get("udid", ""), d.get("state", ""), rid, d.get("name", "").replace("\t", " "), sep="\t")
+for uid, r in rts.items():
+    if not r.get("deletable", True): continue
+    ds = devs.get(r.get("runtimeIdentifier", ""), [])
+    booted = any(d.get("state") == "Booted" for d in ds)
+    plat = r.get("runtimeIdentifier", "").split(".")[-1].split("-")[0]
+    print("R", uid, int(r.get("sizeBytes", 0)) // 1024, (r.get("lastUsedAt") or "-")[:10], len(ds), int(booted), plat, r.get("version", "?"), sep="\t")
+' 2>/dev/null)
+  T=$(printf '\t')
+  printf '%s\n' "$SIMS" | while IFS="$T" read -r k uid kb last n booted plat ver; do
+    if [ "$k" = R ] && [ "$booted" = 0 ]; then
+      [ "$last" = - ] && last=$(_ never)
+      echo "$uid|$kb|$last|$n|$plat $ver"
+    fi
+  done > "$BODY.rt"
+  while IFS='|' read -r uid kb last n name; do
+    cand clean.sim_runtimes 2 "$(_f 'Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Settings → Components)' "$name" "$last" "$n")" "$kb" cmd "simrt:$uid $kb"
+  done < "$BODY.rt"
+  UNUSED=""; UNAMES=""
+  while IFS="$T" read -r k uid state rid name; do
+    [ "$k" = D ] && [ "$state" = Shutdown ] && sim_id "$uid" 2>/dev/null || continue
+    d="$DEV/CoreSimulator/Devices/$uid"; [ -d "$d" ] && [ ! -L "$d" ] || continue
+    s=$(kb "$d/data")
+    [ "$s" -ge 102400 ] && cand clean.sim_erase 3 "$(_f 'Erase simulator %s (%s): its apps and data are removed' "$name" "$(echo "$rid" | sed 's/.*SimRuntime\.//; s/-/ /; s/-/./g')")" "$s" cmd "simerase:$uid" "" "$d"
+    [ -n "$(find "$d" -maxdepth 4 -mtime -"$SIM_DAYS" -print 2>/dev/null | head -1)" ] && continue
+    UNUSED="$UNUSED $uid"; UNAMES="$UNAMES${UNAMES:+, }$name"
+  done <<EOF2
+$SIMS
+EOF2
+  [ -n "$UNUSED" ] && cand clean.sim_unused 2 "$(_f 'Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators' "$SIM_DAYS" "$(echo $UNUSED | wc -w | tr -d ' ')" "$UNAMES")" "$(kbl "$(for u in $UNUSED; do echo "$DEV/CoreSimulator/Devices/$u"; done)")" cmd "simdel:${UNUSED# }" "" "$DEV/CoreSimulator/Devices"
+  rm -f "$BODY.rt"
+fi
 clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
 if task_allowed clean.sim_unavailable && have xcrun; then
   NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')

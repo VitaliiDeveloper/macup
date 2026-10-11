@@ -67,6 +67,49 @@ cover "$HOME/.npm"
 for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done
+# --- simulators, only when you pick them: runtimes (A), erasing one (B), unused ones (C). Running ones are left alone.
+if have xcrun && have python3 && { task_allowed clean.sim_runtimes || task_allowed clean.sim_erase || task_allowed clean.sim_unused; }; then
+  SIMS=$( { xcrun simctl list devices -j 2>/dev/null; echo '@@'; xcrun simctl runtime list -j 2>/dev/null; } | python3 -c '
+import json, sys
+dev_raw, rt_raw = sys.stdin.read().split("@@", 1)
+try: devs = json.loads(dev_raw).get("devices", {})
+except Exception: devs = {}
+try: rts = json.loads(rt_raw)
+except Exception: rts = {}
+for rid, ds in devs.items():
+    for d in ds:
+        print("D", d.get("udid", ""), d.get("state", ""), rid, d.get("name", "").replace("\t", " "), sep="\t")
+for uid, r in rts.items():
+    if not r.get("deletable", True): continue
+    ds = devs.get(r.get("runtimeIdentifier", ""), [])
+    booted = any(d.get("state") == "Booted" for d in ds)
+    plat = r.get("runtimeIdentifier", "").split(".")[-1].split("-")[0]
+    print("R", uid, int(r.get("sizeBytes", 0)) // 1024, (r.get("lastUsedAt") or "-")[:10], len(ds), int(booted), plat, r.get("version", "?"), sep="\t")
+' 2>/dev/null)
+  T=$(printf '\t')
+  printf '%s\n' "$SIMS" | while IFS="$T" read -r k uid kb last n booted plat ver; do
+    if [ "$k" = R ] && [ "$booted" = 0 ]; then
+      [ "$last" = - ] && last=$(_ never)
+      echo "$uid|$kb|$last|$n|$plat $ver"
+    fi
+  done > "$BODY.rt"
+  while IFS='|' read -r uid kb last n name; do
+    cand clean.sim_runtimes 2 "$(_f 'Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Settings → Components)' "$name" "$last" "$n")" "$kb" cmd "simrt:$uid $kb"
+  done < "$BODY.rt"
+  UNUSED=""; UNAMES=""
+  while IFS="$T" read -r k uid state rid name; do
+    [ "$k" = D ] && [ "$state" = Shutdown ] && sim_id "$uid" 2>/dev/null || continue
+    d="$DEV/CoreSimulator/Devices/$uid"; [ -d "$d" ] && [ ! -L "$d" ] || continue
+    s=$(kb "$d/data")
+    [ "$s" -ge 102400 ] && cand clean.sim_erase 3 "$(_f 'Erase simulator %s (%s): its apps and data are removed' "$name" "$(echo "$rid" | sed 's/.*SimRuntime\.//; s/-/ /; s/-/./g')")" "$s" cmd "simerase:$uid" "" "$d"
+    [ -n "$(find "$d" -maxdepth 4 -mtime -"$SIM_DAYS" -print 2>/dev/null | head -1)" ] && continue
+    UNUSED="$UNUSED $uid"; UNAMES="$UNAMES${UNAMES:+, }$name"
+  done <<EOF2
+$SIMS
+EOF2
+  [ -n "$UNUSED" ] && cand clean.sim_unused 2 "$(_f 'Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators' "$SIM_DAYS" "$(echo $UNUSED | wc -w | tr -d ' ')" "$UNAMES")" "$(kbl "$(for u in $UNUSED; do echo "$DEV/CoreSimulator/Devices/$u"; done)")" cmd "simdel:${UNUSED# }" "" "$DEV/CoreSimulator/Devices"
+  rm -f "$BODY.rt"
+fi
 clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
 if task_allowed clean.sim_unavailable && have xcrun; then
   NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')

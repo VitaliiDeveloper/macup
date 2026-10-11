@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
   - 🟢 **safe** (типово; відновлюється само): Xcode DerivedData і прев'ю SwiftUI, старий DeviceSupport і логи пристроїв, кеші симуляторів; кеші SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv і Go; кеші VS Code, Cursor, Windsurf, Antigravity, Claude і Codex; залишки Codex; старі логи.
   - 🟡 **standard** (перекачається при наступному використанні): Gradle, Android Studio, Maven; кеш збірки Docker і непотрібні образи; старі браузери Playwright/Puppeteer; старіші патч-версії в nvm, rbenv, pyenv, mise і asdf.
   - 🔴 **aggressive** (програми якийсь час повільніші або виходять з акаунта): кеш браузерів (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
-  - **Лише якщо вибереш:** інші великі папки в `~/Library/Caches`, старі `node_modules`, Кошик.
+  - **Лише якщо вибереш:** runtime-и симуляторів (з датою використання й кількістю симуляторів на них), стирання програм і даних симулятора, симулятори без використання 30 днів; інші великі папки в `~/Library/Caches`; старі `node_modules`; Кошик. Запущені симулятори пропускаються.
 - **Вимірює, ніколи не видаляє:** кеші рендеру й прев'ю Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic і Camera Raw (з пунктом меню самої програми, щоб їх очистити), історію чатів Codex, AI-моделі, Android SDK і емулятори, Xcode Archives, симулятори.
 - **Перевіряє:** час роботи, місце на диску і SMART, пам'ять і swap, CPU і перегрів, батарею; FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine; сторонні й «осиротілі» служби автозапуску; MCP-сервери Claude Code; `brew doctor`; Xcode і runtime-и симуляторів; Docker; розміри того, що macup ніколи не видаляє.
 
@@ -75,6 +75,7 @@ clean_level = safe                     # що можуть видаляти clea
 project_dirs = ~/Developer, ~/Code     # для --deep і старих node_modules
 device_support_days = 90
 stale_project_days = 90
+simulator_days = 30
 keep_reports_days = 60
 ```
 

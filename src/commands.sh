@@ -36,6 +36,9 @@ clean_level = safe
 # Delete DeviceSupport folders older than this many days
 device_support_days = 90
 
+# Offer to delete simulators nobody used for this many days
+simulator_days = 30
+
 # A project counts as stale when nothing in it changed for this many days
 stale_project_days = 90
 

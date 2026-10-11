@@ -7,10 +7,12 @@ W=$(mktemp -d "${TMPDIR:-/tmp}/macup-tests.XXXXXX"); trap 'rm -rf "$W"' EXIT
 F=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; F=1; }
 M="$PWD/macup"; X='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.sim_unavailable,clean.quicklook,clean.docker,check.*'
 
-# lines for apps that are open on this machine are expected to be skipped, so drop them from both sides
-open_apps(){ local a; for a in "Claude:Application Support/Claude/" "Cursor:Application Support/Cursor/" "Visual Studio Code:Application Support/Code/" \
-  "Arc:Caches/Arc/" "Google Chrome:Caches/Google/Chrome/" "Microsoft Edge:Caches/Microsoft Edge/"; do pgrep -f "/${a%%:*}.app/Contents/" >/dev/null 2>&1 && echo "${a#*:}"; done; }
-OPEN=$(open_apps); unopen(){ if [ -n "$OPEN" ]; then grep -vF "$OPEN"; else cat; fi; }
+# `running` asks pgrep which apps are open; a fake one answers from FAKE_RUNNING (command lines, one per line), so results never depend on this machine
+mkdir -p "$W/bin"; cat >"$W/bin/pgrep" <<'FAKE'
+#!/bin/bash
+[ "$1" = "-f" ] && [ -n "$2" ] && printf '%s\n' "${FAKE_RUNNING:-}" | grep -qE -- "$2"
+FAKE
+chmod +x "$W/bin/pgrep"; export PATH="$W/bin:$PATH"
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local H=$1; shift; tests/fixture.sh "$H"; (cd "$H" && find . \( -type f -o -type l \) | sort) >"$H.b"
   env HOME="$H" /bin/bash "$M" "$@" </dev/null >"$H.out" 2>&1
@@ -46,18 +48,19 @@ done
 # --- each level deletes exactly its set; data, secrets, pins and symlink targets always survive
 exp=""; for lv in safe standard aggressive; do
   exp=$(printf '%s\n%s' "$exp" "$(cat tests/expect-$lv.txt)" | grep . | sort)
-  got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color | unopen)
-  [ "$got" = "$(echo "$exp" | unopen)" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp" | unopen) <(echo "$got") | head; }
+  got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
+  [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
 echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
-# --- an app that is open is skipped
+# --- an app that is open is skipped, and the summary says so
 H="$W/run"; tests/fixture.sh "$H"
-bash -c 'exec -a "/Applications/Cursor.app/Contents/MacOS/Cursor" sleep 30' & P=$!; sleep 0.5
-env HOME="$H" /bin/bash "$M" clean --skip "$X" --no-color </dev/null >"$W/run.out" 2>&1; kill $P 2>/dev/null; wait $P 2>/dev/null
+FAKE_RUNNING='/Applications/Cursor.app/Contents/MacOS/Cursor' env HOME="$H" /bin/bash "$M" clean --skip "$X" --no-color </dev/null >"$W/run.out" 2>&1
 [ -f "$H/Library/Application Support/Cursor/Cache/c/blob" ] && grep -q 'Cursor caches.*skipped' "$W/run.out" && pass "open app is skipped" || fail "open app was cleaned"
+grep -q 'Skipped because the app is open (1)' "$W/run.out" && grep -q '    · Cursor caches' "$W/run.out" && pass "summary lists what was skipped" || fail "summary does not list the skipped app"
+grep -q 'Needs attention: nothing' "$W/run.out" && pass "a skipped app is not a warning" || fail "skipped app became a warning"
 
 # --- picking after an interactive check
 # keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)
@@ -75,7 +78,7 @@ pick '' >/dev/null; n1=$(num 'Xcode DerivedData'); n2=$(num 'SwiftPM cache'); nt
 [ -z "$(pick "$nt" n)" ] && pass "pick: opt-in item needs a yes" || fail "pick: confirmation"
 [ "$(pick "$nt" y)" = "./.Trash/thing/blob" ] && pass "pick: opt-in item after yes" || fail "pick: yes"
 got=$(PL=uk pick 'безпечна')
-[ "$(echo "$got" | LC_ALL=C sort)" = "$(unopen <tests/expect-safe.txt | LC_ALL=C sort)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(unopen <tests/expect-safe.txt) <(echo "$got") | head; }
+[ "$(echo "$got" | LC_ALL=C sort)" = "$(LC_ALL=C sort <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(LC_ALL=C sort <tests/expect-safe.txt) <(echo "$got") | head; }
 
 # --- simulators: only on pick, never a booted one; a fake xcrun records what macup asks for
 H="$W/sim"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"

@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.3.0"
+MACUP_VERSION="2.3.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
 set -o pipefail
@@ -154,7 +154,7 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
-WARN=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
+WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
 section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }

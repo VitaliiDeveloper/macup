@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.3.0"
+MACUP_VERSION="2.3.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
 set -o pipefail
@@ -154,7 +154,7 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
-WARN=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
+WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
 section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
@@ -538,7 +538,8 @@ Time Machine: last backup %s || Time Machine: останній бекап %s
 Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: налаштовано (дата бекапу потребує повного доступу до диска для Terminal)
 Time Machine: no backup destination configured || Time Machine: диск для бекапів не налаштований
 Updates || Оновлення
-Available updates (not installed) || Доступні оновлення (не встановлено)
+Skipped because the app is open (%s), quit it and run again: || Пропущено, бо застосунок відкритий (%s), закрий його й запусти знову:
+Update status (check only, nothing installed) || Стан оновлень (лише перевірка, нічого не встановлено)
 %s: %s is on npm (fine if you're on the stable channel) || %s: на npm є %s (це нормально, якщо в тебе канал stable)
 Plugin marketplaces || Маркетплейси плагінів
 Plugin marketplaces refreshed || Маркетплейси плагінів оновлено
@@ -573,7 +574,7 @@ pipx tools || Інструменти pipx
 uv tools || Інструменти uv
 Rust toolchains || Тулчейни Rust
 gh extensions || Розширення gh
-Updated on a full run (no version check): %s || Оновлюються при повному запуску (без перевірки версій): %s
+Not checked in this mode, updated by macup update: %s || Не перевіряється в цьому режимі, оновлюється командою macup update: %s
 Looking for macOS updates (up to a minute) || Шукаю оновлення macOS (до хвилини)
 macOS: up to date || macOS: оновлень немає
 macOS: updates available — System Settings → General → Software Update || macOS: є оновлення — Системні параметри → Загальні → Оновлення ПЗ
@@ -849,7 +850,8 @@ Time Machine: last backup %s || Time Machine: последний бэкап %s
 Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: настроена (для даты бэкапа нужен полный доступ к диску для Terminal)
 Time Machine: no backup destination configured || Time Machine: диск для бэкапов не настроен
 Updates || Обновления
-Available updates (not installed) || Доступные обновления (не установлены)
+Skipped because the app is open (%s), quit it and run again: || Пропущено, потому что приложение открыто (%s), закрой его и запусти снова:
+Update status (check only, nothing installed) || Состояние обновлений (только проверка, ничего не установлено)
 %s: %s is on npm (fine if you're on the stable channel) || %s: на npm есть %s (это нормально, если у вас канал stable)
 Plugin marketplaces || Маркетплейсы плагинов
 Plugin marketplaces refreshed || Маркетплейсы плагинов обновлены
@@ -884,7 +886,7 @@ pipx tools || Инструменты pipx
 uv tools || Инструменты uv
 Rust toolchains || Тулчейны Rust
 gh extensions || Расширения gh
-Updated on a full run (no version check): %s || Обновляются при полном запуске (без проверки версий): %s
+Not checked in this mode, updated by macup update: %s || Не проверяется в этом режиме, обновляется командой macup update: %s
 Looking for macOS updates (up to a minute) || Ищу обновления macOS (до минуты)
 macOS: up to date || macOS: обновлений нет
 macOS: updates available — System Settings → General → Software Update || macOS: есть обновления — Системные настройки → Основные → Обновление ПО
@@ -1239,7 +1241,7 @@ fi
 
 # ================================================================ UPDATES
 if WANT_UPD; then
-if UPD; then section "Updates"; else section "Available updates (not installed)"; fi
+if UPD; then section "Updates"; else section "Update status (check only, nothing installed)"; fi
 
 if task update.claude && have claude; then
   v1=$(claude --version 2>/dev/null | awk '{print $1}')
@@ -1332,7 +1334,7 @@ EOF
     else fail 'Agent skills: update failed (see log)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
-    LATER_SKILLS="$(_ 'Agent skills') ($(cnt "$S1"))"
+    LATER_SKILLS="$(_ 'Agent skills')"
   fi
 fi
 
@@ -1376,7 +1378,7 @@ have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --a
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
 have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
-[ -n "$LATER" ] && info 'Updated on a full run (no version check): %s' "$LATER"
+[ -n "$LATER" ] && info 'Not checked in this mode, updated by macup update: %s' "$LATER"
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'
@@ -1524,7 +1526,10 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
 }
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p
-  if running "${C_PROC[i]}"; then info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"; return 0; fi
+  if running "${C_PROC[i]}"; then
+    info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
+    SKIPPED+=("$lbl ($(hum "${C_KB[i]}"))"); return 0
+  fi
   step '%s' "$lbl"
   case "${C_KIND[i]}" in
     empty) b=$(kbl "${C_PATHS[i]}")
@@ -2016,6 +2021,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
   if CLEAN || [ "$DID_CLEAN" = 1 ]; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"
   elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"; fi
+  if [ ${#SKIPPED[@]} -gt 0 ]; then echo "- **$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")**"; for s in "${SKIPPED[@]}"; do echo "    - $s"; done; fi
   WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && echo "- $(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
@@ -2032,6 +2038,9 @@ if [ ${#UPDATED[@]} -gt 0 ]; then
 elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
 if CLEAN || [ "$DID_CLEAN" = 1 ]; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
 elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POT_AUTO")")"; fi
+if [ ${#SKIPPED[@]} -gt 0 ]; then
+  printf '  %s%s%s\n' "$Y" "$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")" "$N"; for s in "${SKIPPED[@]}"; do printf '    · %s\n' "$s"; done
+fi
 WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && printf '  %s\n' "$(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
 printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2")"
 if [ ${#WARN[@]} -gt 0 ]; then

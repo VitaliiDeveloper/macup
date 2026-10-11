@@ -57,6 +57,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
   if CLEAN || [ "$DID_CLEAN" = 1 ]; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"
   elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"; fi
+  if [ ${#SKIPPED[@]} -gt 0 ]; then echo "- **$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")**"; for s in "${SKIPPED[@]}"; do echo "    - $s"; done; fi
   WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && echo "- $(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
@@ -73,6 +74,9 @@ if [ ${#UPDATED[@]} -gt 0 ]; then
 elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
 if CLEAN || [ "$DID_CLEAN" = 1 ]; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
 elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POT_AUTO")")"; fi
+if [ ${#SKIPPED[@]} -gt 0 ]; then
+  printf '  %s%s%s\n' "$Y" "$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")" "$N"; for s in "${SKIPPED[@]}"; do printf '    · %s\n' "$s"; done
+fi
 WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && printf '  %s\n' "$(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
 printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2")"
 if [ ${#WARN[@]} -gt 0 ]; then

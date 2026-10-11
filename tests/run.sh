@@ -60,9 +60,11 @@ env HOME="$H" /bin/bash "$M" clean --skip "$X" --no-color </dev/null >"$W/run.ou
 [ -f "$H/Library/Application Support/Cursor/Cache/c/blob" ] && grep -q 'Cursor caches.*skipped' "$W/run.out" && pass "open app is skipped" || fail "open app was cleaned"
 
 # --- picking after an interactive check
+# keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)
+until_done(){ local i=0; while [ $i -lt 240 ]; do grep -qE 'Report: |Звіт: |Отчёт: ' "$1" 2>/dev/null && return; sleep 0.5; i=$((i + 1)); done; }
 pick(){ # answer [confirm] → files deleted
   local H="$W/p"; tests/fixture.sh "$H"; (cd "$H" && find . -type f | sort) >"$W/pb"
-  (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "${2:-}"; sleep 2) | script -q /dev/null env HOME="$H" /bin/bash "$M" check --no-color --skip "$X" ${PL:+--lang $PL} >"$W/po" 2>&1
+  (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "${2:-}"; until_done "$W/po") | script -q /dev/null env HOME="$H" /bin/bash "$M" check --no-color --skip "$X" ${PL:+--lang $PL} >"$W/po" 2>&1
   (cd "$H" && find . -type f | sort) | comm -23 "$W/pb" - | grep -v -e 'Logs/macup/' -e 'Support/macup/'
 }
 num(){ tr -d '\r' <"$W/po" | grep -E "^ +[0-9]+ .*$1" | head -1 | awk '{print $1}'; }
@@ -72,7 +74,8 @@ pick '' >/dev/null; n1=$(num 'Xcode DerivedData'); n2=$(num 'SwiftPM cache'); nt
 [ "$(pick "$n1,$n2")" = "$(printf '%s\n' './Library/Caches/org.swift.swiftpm/repos/blob' './Library/Developer/Xcode/DerivedData/App-abc/blob')" ] && pass "pick: numbers delete exactly those" || fail "pick: numbers"
 [ -z "$(pick "$nt" n)" ] && pass "pick: opt-in item needs a yes" || fail "pick: confirmation"
 [ "$(pick "$nt" y)" = "./.Trash/thing/blob" ] && pass "pick: opt-in item after yes" || fail "pick: yes"
-[ "$(PL=uk pick 'безпечна')" = "$(unopen <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || fail "pick: localized level"
+got=$(PL=uk pick 'безпечна')
+[ "$got" = "$(unopen <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(unopen <tests/expect-safe.txt) <(echo "$got") | head; }
 
 # --- simulators: only on pick, never a booted one; a fake xcrun records what macup asks for
 H="$W/sim"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
@@ -93,7 +96,7 @@ FAKE
 chmod +x "$H/.local/bin/xcrun"; SO='clean.sim_runtimes,clean.sim_erase,clean.sim_unused'
 env HOME="$H" /bin/bash "$M" clean --level aggressive --only "$SO" --no-color </dev/null >/dev/null 2>&1
 [ ! -s "$H/xcrun.log" ] && pass "simulators: nothing without a pick, even at --level aggressive" || { fail "simulators touched without a pick"; cat "$H/xcrun.log"; }
-(sleep 2; printf '1-20\n'; sleep 1; printf 'y\n'; sleep 2) | script -q /dev/null env HOME="$H" /bin/bash "$M" check --only "$SO" --no-color >"$W/sim.out" 2>&1
+(sleep 2; printf '1-20\n'; sleep 1; printf 'y\n'; until_done "$W/sim.out") | script -q /dev/null env HOME="$H" /bin/bash "$M" check --only "$SO" --no-color >"$W/sim.out" 2>&1
 want=$(printf '%s\n' 'simctl runtime delete A1B2-0027' 'simctl runtime delete A1B2-0025' 'simctl erase BBBB-0002' 'simctl delete CCCC-0003' | sort)
 [ "$(sort "$H/xcrun.log" 2>/dev/null)" = "$want" ] && pass "simulators: exactly the picked runtimes and devices; booted and recent ones stay" \
   || { fail "simulators"; echo "want:"; echo "$want"; echo "got:"; cat "$H/xcrun.log"; tr -d '\r' <"$W/sim.out" | grep -iE 'simulat|runtime' | head; }

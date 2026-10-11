@@ -1,0 +1,1202 @@
+{
+  "keep your Mac healthy": {
+    "uk": "догляд за Маком",
+    "ru": "уход за Маком"
+  },
+  "Check": {
+    "uk": "Перевірити",
+    "ru": "Проверить"
+  },
+  "health, security, updates, then pick what to clean": {
+    "uk": "стан, безпека, оновлення, потім вибір, що чистити",
+    "ru": "состояние, безопасность, обновления, потом выбор, что чистить"
+  },
+  "Update & clean": {
+    "uk": "Оновити й почистити",
+    "ru": "Обновить и почистить"
+  },
+  "everything + report": {
+    "uk": "усе разом + звіт",
+    "ru": "всё вместе + отчёт"
+  },
+  "Update only": {
+    "uk": "Лише оновити",
+    "ru": "Только обновить"
+  },
+  "Clean only": {
+    "uk": "Лише почистити",
+    "ru": "Только почистить"
+  },
+  "Deep check": {
+    "uk": "Глибока перевірка",
+    "ru": "Глубокая проверка"
+  },
+  "also largest folders, Downloads, project artifacts": {
+    "uk": "ще й найбільші папки, Downloads, артефакти проєктів",
+    "ru": "ещё и самые большие папки, Downloads, артефакты проектов"
+  },
+  "History & trends": {
+    "uk": "Історія і тренди",
+    "ru": "История и тренды"
+  },
+  "Latest report": {
+    "uk": "Останній звіт",
+    "ru": "Последний отчёт"
+  },
+  "Tasks & settings": {
+    "uk": "Задачі й налаштування",
+    "ru": "Задачи и настройки"
+  },
+  "what runs, how to turn things off": {
+    "uk": "що виконується і як вимкнути",
+    "ru": "что выполняется и как отключить"
+  },
+  "Language": {
+    "uk": "Мова",
+    "ru": "Язык"
+  },
+  "Help": {
+    "uk": "Довідка",
+    "ru": "Справка"
+  },
+  "Quit": {
+    "uk": "Вийти",
+    "ru": "Выйти"
+  },
+  "Choose [1]: ": {
+    "uk": "Вибір [1]:",
+    "ru": "Выбор [1]:"
+  },
+  "Open the config now? [y/N] ": {
+    "uk": "Відкрити налаштування? [y/N]",
+    "ru": "Открыть настройки? [y/N]"
+  },
+  "Language: %s": {
+    "uk": "Мова: %s",
+    "ru": "Язык: %s"
+  },
+  "TASK": {
+    "uk": "ЗАДАЧА",
+    "ru": "ЗАДАЧА"
+  },
+  "STATE": {
+    "uk": "СТАН",
+    "ru": "СТАТУС"
+  },
+  "WHAT IT DOES": {
+    "uk": "ЩО РОБИТЬ",
+    "ru": "ЧТО ДЕЛАЕТ"
+  },
+  "on": {
+    "uk": "увімк",
+    "ru": "вкл"
+  },
+  "off": {
+    "uk": "вимк",
+    "ru": "выкл"
+  },
+  "Turn tasks off or on in %s (skip = … / enable = …)": {
+    "uk": "Вмикати й вимикати задачі: %s (skip = … / enable = …)",
+    "ru": "Включать и отключать задачи: %s (skip = … / enable = …)"
+  },
+  "Created %s": {
+    "uk": "Створено %s",
+    "ru": "Создан %s"
+  },
+  "No reports yet. Run: macup check": {
+    "uk": "Звітів ще немає. Запусти: macup check",
+    "ru": "Отчётов пока нет. Запустите: macup check"
+  },
+  "No history yet. Every run adds a line; run: macup check": {
+    "uk": "Історії ще немає. Кожен запуск додає рядок; запусти: macup check",
+    "ru": "Истории пока нет. Каждый запуск добавляет строку; запустите: macup check"
+  },
+  "Last runs": {
+    "uk": "Останні запуски",
+    "ru": "Последние запуски"
+  },
+  "DATE": {
+    "uk": "ДАТА",
+    "ru": "ДАТА"
+  },
+  "MODE": {
+    "uk": "РЕЖИМ",
+    "ru": "РЕЖИМ"
+  },
+  "FREE": {
+    "uk": "ВІЛЬНО",
+    "ru": "СВОБОДНО"
+  },
+  "CHANGE": {
+    "uk": "ЗМІНА",
+    "ru": "ИЗМЕН."
+  },
+  "SWAP": {
+    "uk": "SWAP",
+    "ru": "SWAP"
+  },
+  "BATTERY": {
+    "uk": "БАТАРЕЯ",
+    "ru": "БАТАРЕЯ"
+  },
+  "UPDATED": {
+    "uk": "ОНОВЛ.",
+    "ru": "ОБНОВЛ."
+  },
+  "FREED": {
+    "uk": "ЗВІЛЬН.",
+    "ru": "ОСВОБ."
+  },
+  "WARN": {
+    "uk": "УВАГА",
+    "ru": "ВНИМ."
+  },
+  "Free space trend:": {
+    "uk": "Тренд вільного місця:",
+    "ru": "Тренд свободного места:"
+  },
+  "This copy has no GitHub repo configured.": {
+    "uk": "У цієї копії не вказано репозиторій GitHub.",
+    "ru": "У этой копии не указан репозиторий GitHub."
+  },
+  "Download failed: %s": {
+    "uk": "Не вдалося завантажити: %s",
+    "ru": "Не удалось скачать: %s"
+  },
+  "The downloaded file looks broken; nothing changed.": {
+    "uk": "Завантажений файл пошкоджений; нічого не змінено.",
+    "ru": "Скачанный файл повреждён; ничего не изменено."
+  },
+  "macup %s is already the latest.": {
+    "uk": "macup %s — це вже остання версія.",
+    "ru": "macup %s — это уже последняя версия."
+  },
+  "macup updated: %s → %s": {
+    "uk": "macup оновлено: %s → %s",
+    "ru": "macup обновлён: %s → %s"
+  },
+  "Couldn't write %s": {
+    "uk": "Не вдалося записати %s",
+    "ru": "Не удалось записать %s"
+  },
+  "Remove %s? [y/N] ": {
+    "uk": "Видалити %s? [y/N]",
+    "ru": "Удалить %s? [y/N]"
+  },
+  "Removed.": {
+    "uk": "Видалено.",
+    "ru": "Удалено."
+  },
+  "Nothing removed.": {
+    "uk": "Нічого не видалено.",
+    "ru": "Ничего не удалено."
+  },
+  "Also remove config, history and reports? [y/N] ": {
+    "uk": "Видалити також налаштування, історію і звіти? [y/N]",
+    "ru": "Удалить также настройки, историю и отчёты? [y/N]"
+  },
+  "Removed config, history and reports.": {
+    "uk": "Налаштування, історію і звіти видалено.",
+    "ru": "Настройки, история и отчёты удалены."
+  },
+  "Unknown command: %s": {
+    "uk": "Невідома команда: %s",
+    "ru": "Неизвестная команда: %s"
+  },
+  "Type  macup  for the menu or  macup help  for all commands.": {
+    "uk": "Набери  macup  для меню або  macup help  для всіх команд.",
+    "ru": "Наберите  macup  для меню или  macup help  для всех команд."
+  },
+  "Interrupted. Log: %s": {
+    "uk": "Перервано. Лог: %s",
+    "ru": "Прервано. Лог: %s"
+  },
+  "System": {
+    "uk": "Система",
+    "ru": "Система"
+  },
+  "macOS %s (%s) · %s · up %s": {
+    "uk": "macOS %s (%s) · %s · працює %s",
+    "ru": "macOS %s (%s) · %s · работает %s"
+  },
+  "macOS %s (%s) · %s · up %s — restart recommended (%s days without restart)": {
+    "uk": "macOS %s (%s) · %s · працює %s — варто перезавантажити (%s днів без перезавантаження)",
+    "ru": "macOS %s (%s) · %s · работает %s — стоит перезагрузить (%s дней без перезагрузки)"
+  },
+  "Disk: %s free of %s (%s%%)": {
+    "uk": "Диск: вільно %s з %s (%s%%)",
+    "ru": "Диск: свободно %s из %s (%s%%)"
+  },
+  "Disk: %s free of %s (%s%%) — critically low": {
+    "uk": "Диск: вільно %s з %s (%s%%) — критично мало",
+    "ru": "Диск: свободно %s из %s (%s%%) — критически мало"
+  },
+  "Disk: %s free of %s (%s%%) — getting low": {
+    "uk": "Диск: вільно %s з %s (%s%%) — місця стає мало",
+    "ru": "Диск: свободно %s из %s (%s%%) — места становится мало"
+  },
+  "Disk health (SMART): %s": {
+    "uk": "Стан диска (SMART): %s",
+    "ru": "Состояние диска (SMART): %s"
+  },
+  "Disk health (SMART): %s — back up now": {
+    "uk": "Стан диска (SMART): %s — терміново зроби бекап",
+    "ru": "Состояние диска (SMART): %s — срочно сделайте бэкап"
+  },
+  "Local Time Machine snapshots: %s (macOS frees them automatically when space runs low)": {
+    "uk": "Локальні знімки Time Machine: %s (macOS прибирає їх сама, коли бракує місця)",
+    "ru": "Локальные снимки Time Machine: %s (macOS удаляет их сама, когда не хватает места)"
+  },
+  "Memory: %s GB, %s%% free, swap %s": {
+    "uk": "Пам'ять: %s GB, вільно %s%%, swap %s",
+    "ru": "Память: %s GB, свободно %s%%, swap %s"
+  },
+  "Memory: %s GB, %s%% free, swap %s — memory is tight; quit heavy apps or restart": {
+    "uk": "Пам'ять: %s GB, вільно %s%%, swap %s — пам'яті замало; закрий важкі програми або перезавантаж",
+    "ru": "Память: %s GB, свободно %s%%, swap %s — памяти мало; закройте тяжёлые приложения или перезагрузитесь"
+  },
+  "CPU: load %s on %s cores": {
+    "uk": "CPU: навантаження %s на %s ядер",
+    "ru": "CPU: нагрузка %s на %s ядер"
+  },
+  "CPU: load %s on %s cores — something is busy": {
+    "uk": "CPU: навантаження %s на %s ядер — щось активно працює",
+    "ru": "CPU: нагрузка %s на %s ядер — что-то активно работает"
+  },
+  "Top CPU:    %s": {
+    "uk": "Найбільше CPU:     %s",
+    "ru": "Больше всего CPU:    %s"
+  },
+  "Top memory: %s": {
+    "uk": "Найбільше пам'яті: %s",
+    "ru": "Больше всего памяти: %s"
+  },
+  "Thermal: the Mac is throttling right now": {
+    "uk": "Нагрів: Мак зараз скидає частоту",
+    "ru": "Нагрев: Мак сейчас сбрасывает частоту"
+  },
+  "Battery: %s charged, %s cycles, %s%% capacity, %s": {
+    "uk": "Батарея: заряд %s, циклів %s, ємність %s%%, стан %s",
+    "ru": "Батарея: заряд %s, циклов %s, ёмкость %s%%, состояние %s"
+  },
+  "Battery: %s charged, %s cycles, %s%% capacity, %s — capacity under 80%%": {
+    "uk": "Батарея: заряд %s, циклів %s, ємність %s%%, стан %s — ємність нижче 80%%",
+    "ru": "Батарея: заряд %s, циклов %s, ёмкость %s%%, состояние %s — ёмкость ниже 80%%"
+  },
+  "Security": {
+    "uk": "Безпека",
+    "ru": "Безопасность"
+  },
+  "FileVault: on": {
+    "uk": "FileVault: увімкнено",
+    "ru": "FileVault: включён"
+  },
+  "FileVault: off — your disk is not encrypted (System Settings → Privacy & Security)": {
+    "uk": "FileVault: вимкнено — диск не зашифрований (Системні параметри → Приватність і безпека)",
+    "ru": "FileVault: выключен — диск не зашифрован (Системные настройки → Конфиденциальность и безопасность)"
+  },
+  "Firewall: on": {
+    "uk": "Брандмауер: увімкнено",
+    "ru": "Брандмауэр: включён"
+  },
+  "Firewall: off (System Settings → Network → Firewall)": {
+    "uk": "Брандмауер: вимкнено (Системні параметри → Мережа → Брандмауер)",
+    "ru": "Брандмауэр: выключен (Системные настройки → Сеть → Брандмауэр)"
+  },
+  "System Integrity Protection: on": {
+    "uk": "System Integrity Protection: увімкнено",
+    "ru": "System Integrity Protection: включена"
+  },
+  "System Integrity Protection: off": {
+    "uk": "System Integrity Protection: вимкнено",
+    "ru": "System Integrity Protection: выключена"
+  },
+  "Gatekeeper: on": {
+    "uk": "Gatekeeper: увімкнено",
+    "ru": "Gatekeeper: включён"
+  },
+  "Gatekeeper: off — apps from anywhere can run": {
+    "uk": "Gatekeeper: вимкнено — запускаються програми з будь-яких джерел",
+    "ru": "Gatekeeper: выключен — запускаются приложения из любых источников"
+  },
+  "Automatic update checks: off": {
+    "uk": "Автоперевірка оновлень: вимкнена",
+    "ru": "Автопроверка обновлений: выключена"
+  },
+  "Security responses & system files: not installed automatically": {
+    "uk": "Оновлення безпеки та системні файли: не ставляться автоматично",
+    "ru": "Обновления безопасности и системные файлы: не ставятся автоматически"
+  },
+  "Automatic security updates: on": {
+    "uk": "Автоматичні оновлення безпеки: увімкнено",
+    "ru": "Автоматические обновления безопасности: включены"
+  },
+  "Time Machine: last backup %s (%s days ago)": {
+    "uk": "Time Machine: останній бекап %s (%s днів тому)",
+    "ru": "Time Machine: последний бэкап %s (%s дней назад)"
+  },
+  "Time Machine: last backup %s": {
+    "uk": "Time Machine: останній бекап %s",
+    "ru": "Time Machine: последний бэкап %s"
+  },
+  "Time Machine: configured (last backup date needs Full Disk Access for Terminal)": {
+    "uk": "Time Machine: налаштовано (дата бекапу потребує повного доступу до диска для Terminal)",
+    "ru": "Time Machine: настроена (для даты бэкапа нужен полный доступ к диску для Terminal)"
+  },
+  "Time Machine: no backup destination configured": {
+    "uk": "Time Machine: диск для бекапів не налаштований",
+    "ru": "Time Machine: диск для бэкапов не настроен"
+  },
+  "Updates": {
+    "uk": "Оновлення",
+    "ru": "Обновления"
+  },
+  "Available updates (not installed)": {
+    "uk": "Доступні оновлення (не встановлено)",
+    "ru": "Доступные обновления (не установлены)"
+  },
+  "%s: %s is on npm (fine if you're on the stable channel)": {
+    "uk": "%s: на npm є %s (це нормально, якщо в тебе канал stable)",
+    "ru": "%s: на npm есть %s (это нормально, если у вас канал stable)"
+  },
+  "Plugin marketplaces": {
+    "uk": "Маркетплейси плагінів",
+    "ru": "Маркетплейсы плагинов"
+  },
+  "Plugin marketplaces refreshed": {
+    "uk": "Маркетплейси плагінів оновлено",
+    "ru": "Маркетплейсы плагинов обновлены"
+  },
+  "Plugin marketplaces: refresh failed (see log)": {
+    "uk": "Маркетплейси плагінів: помилка оновлення (див. лог)",
+    "ru": "Маркетплейсы плагинов: ошибка обновления (см. лог)"
+  },
+  "Plugin %s": {
+    "uk": "Плагін %s",
+    "ru": "Плагин %s"
+  },
+  "Plugin %s: %s → %s": {
+    "uk": "Плагін %s: %s → %s",
+    "ru": "Плагин %s: %s → %s"
+  },
+  "plugin %s %s → %s": {
+    "uk": "плагін %s %s → %s",
+    "ru": "плагин %s %s → %s"
+  },
+  "Claude Code plugins: %s installed": {
+    "uk": "Плагіни Claude Code: встановлено %s",
+    "ru": "Плагины Claude Code: установлено %s"
+  },
+  "npm globals": {
+    "uk": "npm (глобальні)",
+    "ru": "npm (глобальные)"
+  },
+  "npm globals: up to date": {
+    "uk": "npm (глобальні): усе актуальне",
+    "ru": "npm (глобальные): всё актуально"
+  },
+  "npm globals: %s outdated": {
+    "uk": "npm (глобальні): застаріло %s",
+    "ru": "npm (глобальные): устарело %s"
+  },
+  "%s: update failed (see log)": {
+    "uk": "%s: не вдалося оновити (див. лог)",
+    "ru": "%s: не удалось обновить (см. лог)"
+  },
+  "Agent skills": {
+    "uk": "Скіли агентів",
+    "ru": "Скиллы агентов"
+  },
+  "Agent skills: %s installed, %s updated": {
+    "uk": "Скіли агентів: встановлено %s, оновлено %s",
+    "ru": "Скиллы агентов: установлено %s, обновлено %s"
+  },
+  "skill %s": {
+    "uk": "скіл %s",
+    "ru": "скилл %s"
+  },
+  "Agent skills: update failed (see log)": {
+    "uk": "Скіли агентів: не вдалося оновити (див. лог)",
+    "ru": "Скиллы агентов: не удалось обновить (см. лог)"
+  },
+  "Homebrew: up to date": {
+    "uk": "Homebrew: усе актуальне",
+    "ru": "Homebrew: всё актуально"
+  },
+  "brew upgrade (%s formulae, %s casks)": {
+    "uk": "brew upgrade (формули: %s, програми: %s)",
+    "ru": "brew upgrade (формулы: %s, приложения: %s)"
+  },
+  "Homebrew: upgraded %s formulae, %s casks": {
+    "uk": "Homebrew: оновлено — формули: %s, програми: %s",
+    "ru": "Homebrew: обновлено — формулы: %s, приложения: %s"
+  },
+  "Homebrew: upgraded with errors (see log)": {
+    "uk": "Homebrew: оновлено з помилками (див. лог)",
+    "ru": "Homebrew: обновлено с ошибками (см. лог)"
+  },
+  "Homebrew: %s formulae, %s casks": {
+    "uk": "Homebrew: формули: %s, програми: %s",
+    "ru": "Homebrew: формулы: %s, приложения: %s"
+  },
+  "Homebrew: %s formulae, %s casks outdated": {
+    "uk": "Homebrew: застаріли — формули: %s, програми: %s",
+    "ru": "Homebrew: устарели — формулы: %s, приложения: %s"
+  },
+  "%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy": {
+    "uk": "Ще %s програм оновлюються самі (Chrome, Slack…). Примусово: brew upgrade --cask --greedy",
+    "ru": "Ещё %s приложений обновляются сами (Chrome, Slack…). Принудительно: brew upgrade --cask --greedy"
+  },
+  "App Store: up to date": {
+    "uk": "App Store: усе актуальне",
+    "ru": "App Store: всё актуально"
+  },
+  "App Store: %s apps updated": {
+    "uk": "App Store: оновлено програм: %s",
+    "ru": "App Store: обновлено приложений: %s"
+  },
+  "App Store: %s apps": {
+    "uk": "App Store: програм: %s",
+    "ru": "App Store: приложений: %s"
+  },
+  "App Store: %s updates didn't install — open the App Store": {
+    "uk": "App Store: %s оновлень не встановились — відкрий App Store",
+    "ru": "App Store: %s обновлений не установились — откройте App Store"
+  },
+  "App Store: %s updates": {
+    "uk": "App Store: оновлень: %s",
+    "ru": "App Store: обновлений: %s"
+  },
+  "App Store apps aren't checked: brew install mas": {
+    "uk": "App Store не перевіряється: brew install mas",
+    "ru": "App Store не проверяется: brew install mas"
+  },
+  "%s: updated": {
+    "uk": "%s: оновлено",
+    "ru": "%s: обновлено"
+  },
+  "pipx tools": {
+    "uk": "Інструменти pipx",
+    "ru": "Инструменты pipx"
+  },
+  "uv tools": {
+    "uk": "Інструменти uv",
+    "ru": "Инструменты uv"
+  },
+  "Rust toolchains": {
+    "uk": "Тулчейни Rust",
+    "ru": "Тулчейны Rust"
+  },
+  "gh extensions": {
+    "uk": "Розширення gh",
+    "ru": "Расширения gh"
+  },
+  "Updated on a full run (no version check): %s": {
+    "uk": "Оновлюються при повному запуску (без перевірки версій): %s",
+    "ru": "Обновляются при полном запуске (без проверки версий): %s"
+  },
+  "Looking for macOS updates (up to a minute)": {
+    "uk": "Шукаю оновлення macOS (до хвилини)",
+    "ru": "Ищу обновления macOS (до минуты)"
+  },
+  "macOS: up to date": {
+    "uk": "macOS: оновлень немає",
+    "ru": "macOS: обновлений нет"
+  },
+  "macOS: updates available — System Settings → General → Software Update": {
+    "uk": "macOS: є оновлення — Системні параметри → Загальні → Оновлення ПЗ",
+    "ru": "macOS: есть обновления — Системные настройки → Основные → Обновление ПО"
+  },
+  "Tools & services": {
+    "uk": "Інструменти й сервіси",
+    "ru": "Инструменты и сервисы"
+  },
+  "Checking MCP servers": {
+    "uk": "Перевіряю MCP-сервери",
+    "ru": "Проверяю MCP-серверы"
+  },
+  "Claude Code MCP servers: none configured": {
+    "uk": "MCP-сервери Claude Code: не налаштовані",
+    "ru": "MCP-серверы Claude Code: не настроены"
+  },
+  "Claude Code MCP servers: all %s connected": {
+    "uk": "MCP-сервери Claude Code: усі %s працюють",
+    "ru": "MCP-серверы Claude Code: все %s работают"
+  },
+  "Claude Code MCP servers: %s of %s not working": {
+    "uk": "MCP-сервери Claude Code: %s з %s не працюють",
+    "ru": "MCP-серверы Claude Code: %s из %s не работают"
+  },
+  "brew doctor: %s warnings (details in the log)": {
+    "uk": "brew doctor: попереджень: %s (деталі в лозі)",
+    "ru": "brew doctor: предупреждений: %s (подробности в логе)"
+  },
+  "brew doctor: all good": {
+    "uk": "brew doctor: без зауважень",
+    "ru": "brew doctor: без замечаний"
+  },
+  "Developer tools: %s (%s)": {
+    "uk": "Інструменти розробника: %s (%s)",
+    "ru": "Инструменты разработчика: %s (%s)"
+  },
+  "Command Line Tools only": {
+    "uk": "лише Command Line Tools",
+    "ru": "только Command Line Tools"
+  },
+  "Developer tools: not installed or broken — run: xcode-select --install": {
+    "uk": "Інструменти розробника не встановлені або зламані — запусти: xcode-select --install",
+    "ru": "Инструменты разработчика не установлены или сломаны — запустите: xcode-select --install"
+  },
+  "Simulator runtimes: %s, %s — remove old ones in Xcode → Settings → Components": {
+    "uk": "Runtime-и симуляторів: %s, %s — старі видаляй у Xcode → Settings → Components",
+    "ru": "Runtime симуляторов: %s, %s — старые удаляйте в Xcode → Settings → Components"
+  },
+  "Claude Desktop %s (updates itself)": {
+    "uk": "Claude Desktop %s (оновлюється сам)",
+    "ru": "Claude Desktop %s (обновляется сам)"
+  },
+  "Cleanup": {
+    "uk": "Чистка",
+    "ru": "Очистка"
+  },
+  "%s: freed %s": {
+    "uk": "%s: звільнено %s",
+    "ru": "%s: освобождено %s"
+  },
+  "%s: cleaned": {
+    "uk": "%s: почищено",
+    "ru": "%s: почищено"
+  },
+  "%s: %s": {
+    "uk": "%s: %s",
+    "ru": "%s: %s"
+  },
+  "%s (%s items, older than %s days)": {
+    "uk": "%s (%s шт., старші за %s днів)",
+    "ru": "%s (%s шт., старше %s дней)"
+  },
+  "Xcode DerivedData": {
+    "uk": "Xcode DerivedData",
+    "ru": "Xcode DerivedData"
+  },
+  "SwiftUI previews": {
+    "uk": "Прев'ю SwiftUI",
+    "ru": "Превью SwiftUI"
+  },
+  "iOS device logs": {
+    "uk": "Логи iOS-пристроїв",
+    "ru": "Логи iOS-устройств"
+  },
+  "Unavailable simulators": {
+    "uk": "Недоступні симулятори",
+    "ru": "Недоступные симуляторы"
+  },
+  "Unavailable simulators (%s)": {
+    "uk": "Недоступні симулятори (%s)",
+    "ru": "Недоступные симуляторы (%s)"
+  },
+  "Simulator caches": {
+    "uk": "Кеш симуляторів",
+    "ru": "Кэш симуляторов"
+  },
+  "SwiftPM cache": {
+    "uk": "Кеш SwiftPM",
+    "ru": "Кэш SwiftPM"
+  },
+  "CocoaPods cache": {
+    "uk": "Кеш CocoaPods",
+    "ru": "Кэш CocoaPods"
+  },
+  "Carthage cache": {
+    "uk": "Кеш Carthage",
+    "ru": "Кэш Carthage"
+  },
+  "Homebrew cleanup": {
+    "uk": "Чистка Homebrew",
+    "ru": "Очистка Homebrew"
+  },
+  "Homebrew old versions & downloads": {
+    "uk": "Старі версії й завантаження Homebrew",
+    "ru": "Старые версии и загрузки Homebrew"
+  },
+  "npm cache": {
+    "uk": "Кеш npm",
+    "ru": "Кэш npm"
+  },
+  "Yarn cache": {
+    "uk": "Кеш Yarn",
+    "ru": "Кэш Yarn"
+  },
+  "pnpm store": {
+    "uk": "Сховище pnpm",
+    "ru": "Хранилище pnpm"
+  },
+  "pip cache": {
+    "uk": "Кеш pip",
+    "ru": "Кэш pip"
+  },
+  "uv cache": {
+    "uk": "Кеш uv",
+    "ru": "Кэш uv"
+  },
+  "Go build cache": {
+    "uk": "Кеш збірки Go",
+    "ru": "Кэш сборки Go"
+  },
+  "Old logs & crash reports (%s files)": {
+    "uk": "Старі логи й крешрепорти (файлів: %s)",
+    "ru": "Старые логи и крэш-репорты (файлов: %s)"
+  },
+  "Trash": {
+    "uk": "Кошик",
+    "ru": "Корзина"
+  },
+  "Looking for stale node_modules": {
+    "uk": "Шукаю старі node_modules",
+    "ru": "Ищу старые node_modules"
+  },
+  "Stale node_modules (%s projects untouched for %s days; npm install brings them back)": {
+    "uk": "Старі node_modules (%s проєктів без змін %s днів; npm install поверне їх)",
+    "ru": "Старые node_modules (%s проектов без изменений %s дней; npm install вернёт их)"
+  },
+  "Not touched by macup": {
+    "uk": "macup цього не чіпає",
+    "ru": "macup это не трогает"
+  },
+  "Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes)": {
+    "uk": "Xcode Archives: %s — видали старі білди в Xcode → Organizer (лиши потрібні для символікації крешів)",
+    "ru": "Xcode Archives: %s — удалите старые билды в Xcode → Organizer (оставьте нужные для символикации крэшей)"
+  },
+  "Xcode Archives: %s": {
+    "uk": "Xcode Archives: %s",
+    "ru": "Xcode Archives: %s"
+  },
+  "Simulator devices: %s (Xcode → Window → Devices and Simulators)": {
+    "uk": "Пристрої симуляторів: %s (Xcode → Window → Devices and Simulators)",
+    "ru": "Устройства симуляторов: %s (Xcode → Window → Devices and Simulators)"
+  },
+  "Flutter pub-cache: %s (full reset: dart pub cache clean)": {
+    "uk": "Flutter pub-cache: %s (повна очистка: dart pub cache clean)",
+    "ru": "Flutter pub-cache: %s (полная очистка: dart pub cache clean)"
+  },
+  "App caches (~/Library/Caches): %s — macOS trims these itself when space is low": {
+    "uk": "Кеші програм (~/Library/Caches): %s — macOS чистить їх сама при нестачі місця",
+    "ru": "Кэши приложений (~/Library/Caches): %s — macOS чистит их сама при нехватке места"
+  },
+  "Trash: %s — empty it": {
+    "uk": "Кошик: %s — очисти його",
+    "ru": "Корзина: %s — очистите её"
+  },
+  "Trash: %s": {
+    "uk": "Кошик: %s",
+    "ru": "Корзина: %s"
+  },
+  "Startup items": {
+    "uk": "Автозапуск",
+    "ru": "Автозапуск"
+  },
+  "Third-party background services: %s (full list in the report)": {
+    "uk": "Фонові служби сторонніх програм: %s (повний список у звіті)",
+    "ru": "Фоновые службы сторонних приложений: %s (полный список в отчёте)"
+  },
+  "Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps)": {
+    "uk": "Осиротілі елементи автозапуску: %s посилаються на програми, яких уже немає (імовірно, залишки видалених програм)",
+    "ru": "Осиротевшие элементы автозапуска: %s ссылаются на программы, которых уже нет (вероятно, остатки удалённых приложений)"
+  },
+  "Login items: System Settings → General → Login Items & Extensions": {
+    "uk": "Об'єкти входу: Системні параметри → Загальні → Об'єкти входу",
+    "ru": "Объекты входа: Системные настройки → Основные → Объекты входа"
+  },
+  "Deep scan": {
+    "uk": "Глибока перевірка",
+    "ru": "Глубокая проверка"
+  },
+  "Measuring your home folder (can take a few minutes)": {
+    "uk": "Рахую розміри домашньої теки (кілька хвилин)",
+    "ru": "Считаю размеры домашней папки (несколько минут)"
+  },
+  "Largest folders in your home:": {
+    "uk": "Найбільші папки в домашній теці:",
+    "ru": "Самые большие папки в домашней папке:"
+  },
+  "Downloads older than 90 days: %s items, %s — review and delete what you don't need": {
+    "uk": "Downloads старші за 90 днів: %s шт., %s — переглянь і видали непотрібне",
+    "ru": "Downloads старше 90 дней: %s шт., %s — просмотрите и удалите ненужное"
+  },
+  "Files over 1 GB in Downloads:": {
+    "uk": "Файли понад 1 GB у Downloads:",
+    "ru": "Файлы больше 1 GB в Downloads:"
+  },
+  "Scanning projects for build artifacts": {
+    "uk": "Шукаю артефакти збірки в проєктах",
+    "ru": "Ищу артефакты сборки в проектах"
+  },
+  "Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest:": {
+    "uk": "Артефакти збірки (node_modules, Pods, .build, .dart_tool): разом %s; найбільші:",
+    "ru": "Артефакты сборки (node_modules, Pods, .build, .dart_tool): всего %s; самые большие:"
+  },
+  "Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days": {
+    "uk": "Порада: увімкни clean.stale_node_modules у налаштуваннях, щоб прибирати node_modules з проєктів, які ти не чіпав %s днів",
+    "ru": "Совет: включите clean.stale_node_modules в настройках, чтобы удалять node_modules из проектов, которые вы не трогали %s дней"
+  },
+  "No project folders found. Set project_dirs in %s": {
+    "uk": "Папок з проєктами не знайдено. Вкажи project_dirs у %s",
+    "ru": "Папки с проектами не найдены. Укажите project_dirs в %s"
+  },
+  "No build artifacts in: %s": {
+    "uk": "Артефактів збірки немає в: %s",
+    "ru": "Артефактов сборки нет в: %s"
+  },
+  "Since last run": {
+    "uk": "Від минулого запуску",
+    "ru": "С прошлого запуска"
+  },
+  "Free space: %s since %s — something is filling the disk (try: macup check --deep)": {
+    "uk": "Вільне місце: %s від %s — щось заповнює диск (спробуй: macup check --deep)",
+    "ru": "Свободное место: %s с %s — что-то заполняет диск (попробуйте: macup check --deep)"
+  },
+  "Free space: %s since %s": {
+    "uk": "Вільне місце: %s від %s",
+    "ru": "Свободное место: %s с %s"
+  },
+  "Battery capacity: %s%% → %s%%": {
+    "uk": "Ємність батареї: %s%% → %s%%",
+    "ru": "Ёмкость батареи: %s%% → %s%%"
+  },
+  "Battery cycles: +%s": {
+    "uk": "Цикли батареї: +%s",
+    "ru": "Циклы батареи: +%s"
+  },
+  "Full history: macup history": {
+    "uk": "Повна історія: macup history",
+    "ru": "Полная история: macup history"
+  },
+  "Summary": {
+    "uk": "Підсумок",
+    "ru": "Итог"
+  },
+  "macup report — %s": {
+    "uk": "Звіт macup — %s",
+    "ru": "Отчёт macup — %s"
+  },
+  "Mode: %s · macup %s · took %s": {
+    "uk": "Режим: %s · macup %s · тривалість %s",
+    "ru": "Режим: %s · macup %s · длительность %s"
+  },
+  "Updated (%s):": {
+    "uk": "Оновлено (%s):",
+    "ru": "Обновлено (%s):"
+  },
+  "Updates: everything was already up to date": {
+    "uk": "Оновлення: усе вже було актуальне",
+    "ru": "Обновления: всё уже было актуально"
+  },
+  "Freed: %s": {
+    "uk": "Звільнено: %s",
+    "ru": "Освобождено: %s"
+  },
+  "Could free: ~%s": {
+    "uk": "Можна звільнити: ~%s",
+    "ru": "Можно освободить: ~%s"
+  },
+  "Could free: ~%s  (to free it: macup all)": {
+    "uk": "Можна звільнити: ~%s  (щоб звільнити: macup all)",
+    "ru": "Можно освободить: ~%s  (чтобы освободить: macup all)"
+  },
+  "Free disk space: %s (%s%%), was %s": {
+    "uk": "Вільно на диску: %s (%s%%), було %s",
+    "ru": "Свободно на диске: %s (%s%%), было %s"
+  },
+  "Free disk space: %s (%s%%)": {
+    "uk": "Вільно на диску: %s (%s%%)",
+    "ru": "Свободно на диске: %s (%s%%)"
+  },
+  "Needs attention (%s):": {
+    "uk": "Потребує уваги (%s):",
+    "ru": "Требует внимания (%s):"
+  },
+  "Needs attention: %s": {
+    "uk": "Потребує уваги: %s",
+    "ru": "Требует внимания: %s"
+  },
+  "Needs attention: nothing": {
+    "uk": "Потребує уваги: нічого",
+    "ru": "Требует внимания: ничего"
+  },
+  "macup %s is available: macup self-update": {
+    "uk": "Вийшов macup %s: macup self-update",
+    "ru": "Вышел macup %s: macup self-update"
+  },
+  "Command log: %s": {
+    "uk": "Лог команд: %s",
+    "ru": "Лог команд: %s"
+  },
+  "Report: %s · %s": {
+    "uk": "Звіт: %s · %s",
+    "ru": "Отчёт: %s · %s"
+  },
+  "Menu: macup · trends: macup history · help: macup help": {
+    "uk": "Меню: macup · тренди: macup history · довідка: macup help",
+    "ru": "Меню: macup · тренды: macup history · справка: macup help"
+  },
+  "Updated: %s": {
+    "uk": "Оновлено: %s",
+    "ru": "Обновлено: %s"
+  },
+  "macOS version, model, uptime (warns after 14 days without restart)": {
+    "uk": "Версія macOS, модель, час роботи (попереджає після 14 днів без перезавантаження)",
+    "ru": "Версия macOS, модель, время работы (предупреждает после 14 дней без перезагрузки)"
+  },
+  "Free space, disk health (SMART), local Time Machine snapshots": {
+    "uk": "Вільне місце, стан диска (SMART), локальні знімки Time Machine",
+    "ru": "Свободное место, состояние диска (SMART), локальные снимки Time Machine"
+  },
+  "Memory pressure and swap usage": {
+    "uk": "Навантаження на пам'ять і swap",
+    "ru": "Нагрузка на память и swap"
+  },
+  "Load average, top CPU and memory processes, thermal throttling": {
+    "uk": "Навантаження CPU, найважчі процеси, перегрів",
+    "ru": "Нагрузка CPU, самые тяжёлые процессы, перегрев"
+  },
+  "Charge, cycle count, maximum capacity, condition": {
+    "uk": "Заряд, цикли, максимальна ємність, стан",
+    "ru": "Заряд, циклы, максимальная ёмкость, состояние"
+  },
+  "FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine": {
+    "uk": "FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine",
+    "ru": "FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine"
+  },
+  "Third-party launch agents/daemons, orphaned ones pointing at deleted apps": {
+    "uk": "Сторонні служби автозапуску, зокрема від видалених програм",
+    "ru": "Сторонние службы автозапуска, в т. ч. от удалённых приложений"
+  },
+  "Claude Code MCP servers that fail to connect": {
+    "uk": "MCP-сервери Claude Code, що не підключаються",
+    "ru": "MCP-серверы Claude Code, которые не подключаются"
+  },
+  "brew doctor warnings": {
+    "uk": "Попередження brew doctor",
+    "ru": "Предупреждения brew doctor"
+  },
+  "Pending macOS updates (never installed automatically)": {
+    "uk": "Оновлення macOS (ніколи не ставляться автоматично)",
+    "ru": "Обновления macOS (никогда не ставятся автоматически)"
+  },
+  "Xcode, command line tools, simulator runtimes": {
+    "uk": "Xcode, Command Line Tools, runtime-и симуляторів",
+    "ru": "Xcode, Command Line Tools, runtime симуляторов"
+  },
+  "Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex": {
+    "uk": "Версії Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex",
+    "ru": "Версии Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex"
+  },
+  "Docker disk usage (if Docker is running)": {
+    "uk": "Місце, зайняте Docker (якщо він запущений)",
+    "ru": "Место, занятое Docker (если он запущен)"
+  },
+  "Sizes of things macup never deletes: Archives, Trash, caches, pub-cache": {
+    "uk": "Розміри того, що macup не видаляє: Archives, Кошик, кеші, pub-cache",
+    "ru": "Размеры того, что macup не удаляет: Archives, Корзина, кэши, pub-cache"
+  },
+  "Compare with the previous run: free space, swap, battery capacity": {
+    "uk": "Порівняння з минулим запуском: місце, swap, батарея",
+    "ru": "Сравнение с прошлым запуском: место, swap, батарея"
+  },
+  "Tell when a newer macup is on GitHub (once a week)": {
+    "uk": "Повідомляти про нову версію macup на GitHub (раз на тиждень)",
+    "ru": "Сообщать о новой версии macup на GitHub (раз в неделю)"
+  },
+  "Claude Code CLI, plugin marketplaces, plugins": {
+    "uk": "Claude Code CLI, маркетплейси плагінів, плагіни",
+    "ru": "Claude Code CLI, маркетплейсы плагинов, плагины"
+  },
+  "Global npm packages (Codex, Playwright, ...)": {
+    "uk": "Глобальні npm-пакети (Codex, Playwright, ...)",
+    "ru": "Глобальные npm-пакеты (Codex, Playwright, ...)"
+  },
+  "Agent skills in ~/.agents (npx skills update -g)": {
+    "uk": "Скіли агентів у ~/.agents (npx skills update -g)",
+    "ru": "Скиллы агентов в ~/.agents (npx skills update -g)"
+  },
+  "Homebrew formulae and casks": {
+    "uk": "Формули й програми Homebrew",
+    "ru": "Формулы и приложения Homebrew"
+  },
+  "App Store apps (needs mas)": {
+    "uk": "Програми App Store (потрібен mas)",
+    "ru": "Приложения App Store (нужен mas)"
+  },
+  "pipx-installed tools": {
+    "uk": "Інструменти, встановлені через pipx",
+    "ru": "Инструменты, установленные через pipx"
+  },
+  "uv-installed tools": {
+    "uk": "Інструменти, встановлені через uv",
+    "ru": "Инструменты, установленные через uv"
+  },
+  "GitHub CLI extensions": {
+    "uk": "Розширення GitHub CLI",
+    "ru": "Расширения GitHub CLI"
+  },
+  "Xcode DerivedData (skipped while Xcode is open)": {
+    "uk": "Xcode DerivedData (пропускається, коли Xcode відкритий)",
+    "ru": "Xcode DerivedData (пропускается, когда Xcode открыт)"
+  },
+  "SwiftUI previews cache (skipped while Xcode is open)": {
+    "uk": "Кеш прев'ю SwiftUI (пропускається, коли Xcode відкритий)",
+    "ru": "Кэш превью SwiftUI (пропускается, когда Xcode открыт)"
+  },
+  "iOS/watchOS DeviceSupport folders older than device_support_days": {
+    "uk": "Папки DeviceSupport, старші за device_support_days",
+    "ru": "Папки DeviceSupport старше device_support_days"
+  },
+  "iOS device logs older than 90 days": {
+    "uk": "Логи iOS-пристроїв, старші за 90 днів",
+    "ru": "Логи iOS-устройств старше 90 дней"
+  },
+  "Simulators whose runtime is gone": {
+    "uk": "Симулятори без runtime",
+    "ru": "Симуляторы без runtime"
+  },
+  "CoreSimulator caches": {
+    "uk": "Кеші CoreSimulator",
+    "ru": "Кэши CoreSimulator"
+  },
+  "npm cache garbage (npm cache verify)": {
+    "uk": "Сміття в кеші npm (npm cache verify)",
+    "ru": "Мусор в кэше npm (npm cache verify)"
+  },
+  "pnpm store: unreferenced packages": {
+    "uk": "Сховище pnpm: невикористані пакети",
+    "ru": "Хранилище pnpm: неиспользуемые пакеты"
+  },
+  "uv cache: unused entries": {
+    "uk": "Кеш uv: невикористані записи",
+    "ru": "Кэш uv: неиспользуемые записи"
+  },
+  "Old Homebrew versions and downloads": {
+    "uk": "Старі версії й завантаження Homebrew",
+    "ru": "Старые версии и загрузки Homebrew"
+  },
+  "Your app logs and crash reports older than 30 days": {
+    "uk": "Логи програм і крешрепорти, старші за 30 днів",
+    "ru": "Логи приложений и крэш-репорты старше 30 дней"
+  },
+  "Quick Look thumbnail cache": {
+    "uk": "Кеш мініатюр Quick Look",
+    "ru": "Кэш миниатюр Quick Look"
+  },
+  "macup reports older than keep_reports_days": {
+    "uk": "Звіти macup, старші за keep_reports_days",
+    "ru": "Отчёты macup старше keep_reports_days"
+  },
+  "node_modules in projects untouched for stale_project_days (opt-in)": {
+    "uk": "node_modules у проєктах без змін stale_project_days днів (вмикається вручну)",
+    "ru": "node_modules в проектах без изменений stale_project_days дней (включается вручную)"
+  },
+  "Empty the Trash (opt-in)": {
+    "uk": "Очищати Кошик (вмикається вручну)",
+    "ru": "Очищать Корзину (включается вручную)"
+  },
+  "%s cache": {
+    "uk": "Кеш %s",
+    "ru": "Кэш %s"
+  },
+  "%s caches": {
+    "uk": "Кеші %s",
+    "ru": "Кэши %s"
+  },
+  "%s: %s — skipped while the app is open": {
+    "uk": "%s: %s — пропущено, програма відкрита",
+    "ru": "%s: %s — пропущено, приложение открыто"
+  },
+  "(only if you pick it)": {
+    "uk": "(лише якщо вибереш)",
+    "ru": "(только если выберете)"
+  },
+  "AI models (Hugging Face, Ollama, LM Studio): %s": {
+    "uk": "AI-моделі (Hugging Face, Ollama, LM Studio): %s",
+    "ru": "AI-модели (Hugging Face, Ollama, LM Studio): %s"
+  },
+  "Adobe media cache (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete": {
+    "uk": "Медіакеш Adobe (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete",
+    "ru": "Медиакэш Adobe (Premiere, After Effects): %s — Premiere: Settings → Media Cache → Delete"
+  },
+  "Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager)": {
+    "uk": "Android SDK та емулятори: %s (Android Studio → SDK Manager, Device Manager)",
+    "ru": "Android SDK и эмуляторы: %s (Android Studio → SDK Manager, Device Manager)"
+  },
+  "Android Studio cache (%s)": {
+    "uk": "Кеш Android Studio (%s)",
+    "ru": "Кэш Android Studio (%s)"
+  },
+  "Android and Android Studio caches (standard); SDK, emulators and keys stay": {
+    "uk": "Кеші Android і Android Studio (стандартна); SDK, емулятори й ключі лишаються",
+    "ru": "Кэши Android и Android Studio (стандартная); SDK, эмуляторы и ключи остаются"
+  },
+  "Android cache": {
+    "uk": "Кеш Android",
+    "ru": "Кэш Android"
+  },
+  "App cache: %s": {
+    "uk": "Кеш програми: %s",
+    "ru": "Кэш приложения: %s"
+  },
+  "Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open)": {
+    "uk": "Кеш браузерів: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агресивна, пропускається, коли відкритий)",
+    "ru": "Кэш браузеров: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агрессивная, пропускается, когда открыт)"
+  },
+  "Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open)": {
+    "uk": "Кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаються, коли відкриті)",
+    "ru": "Кэши VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаются, когда открыты)"
+  },
+  "Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache": {
+    "uk": "Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache",
+    "ru": "Кэш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache"
+  },
+  "Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip: ": {
+    "uk": "Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: ",
+    "ru": "Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: "
+  },
+  "Codex chat history: %s (not a cache; delete old chats in Codex itself)": {
+    "uk": "Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)",
+    "ru": "История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)"
+  },
+  "Codex temporary files and unfinished downloads; chat history is never touched": {
+    "uk": "Тимчасові файли й недокачані завантаження Codex; історія чатів не чіпається",
+    "ru": "Временные файлы и недокачанные загрузки Codex; история чатов не трогается"
+  },
+  "DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache": {
+    "uk": "Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache",
+    "ru": "Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache"
+  },
+  "Docker build cache and dangling images (never containers or volumes)": {
+    "uk": "Кеш збірки Docker і непотрібні образи (не контейнери й не томи)",
+    "ru": "Кэш сборки Docker и ненужные образы (не контейнеры и не тома)"
+  },
+  "Docker build cache and dangling images (standard); never containers or volumes": {
+    "uk": "Кеш збірки Docker і непотрібні образи (стандартна); не контейнери й не томи",
+    "ru": "Кэш сборки Docker и ненужные образы (стандартная); не контейнеры и не тома"
+  },
+  "Docker: %s": {
+    "uk": "Docker: %s",
+    "ru": "Docker: %s"
+  },
+  "Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files": {
+    "uk": "Файли рендеру Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files",
+    "ru": "Файлы рендера Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files"
+  },
+  "Gradle caches": {
+    "uk": "Кеші Gradle",
+    "ru": "Кэши Gradle"
+  },
+  "Gradle caches and old Gradle wrappers (standard)": {
+    "uk": "Кеші Gradle і старі Gradle wrapper (стандартна)",
+    "ru": "Кэши Gradle и старые Gradle wrapper (стандартная)"
+  },
+  "Lightroom Classic previews: %s — Lightroom: Library → Previews → Discard 1:1 Previews": {
+    "uk": "Прев'ю Lightroom Classic: %s — Lightroom: Library → Previews → Discard 1:1 Previews",
+    "ru": "Превью Lightroom Classic: %s — Lightroom: Library → Previews → Discard 1:1 Previews"
+  },
+  "Maven repository": {
+    "uk": "Репозиторій Maven",
+    "ru": "Репозиторий Maven"
+  },
+  "Maven repository ~/.m2/repository (standard); settings.xml stays": {
+    "uk": "Репозиторій Maven ~/.m2/repository (стандартна); settings.xml лишається",
+    "ru": "Репозиторий Maven ~/.m2/repository (стандартная); settings.xml остаётся"
+  },
+  "More with a higher level or by picking: ~%s": {
+    "uk": "Ще можна вищим рівнем або вибором: ~%s",
+    "ru": "Ещё можно уровнем выше или выбором: ~%s"
+  },
+  "Nothing to clean at level %s": {
+    "uk": "На рівні %s чистити нічого",
+    "ru": "На уровне %s чистить нечего"
+  },
+  "Old Gradle wrappers": {
+    "uk": "Старі Gradle wrapper",
+    "ru": "Старые Gradle wrapper"
+  },
+  "Old Playwright and Puppeteer browser builds (standard)": {
+    "uk": "Старі збірки браузерів Playwright і Puppeteer (стандартна)",
+    "ru": "Старые сборки браузеров Playwright и Puppeteer (стандартная)"
+  },
+  "Old Playwright/Puppeteer browsers (%s)": {
+    "uk": "Старі браузери Playwright/Puppeteer (%s)",
+    "ru": "Старые браузеры Playwright/Puppeteer (%s)"
+  },
+  "Older %s versions (%s): %s": {
+    "uk": "Старіші версії %s (%s): %s",
+    "ru": "Более старые версии %s (%s): %s"
+  },
+  "Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay": {
+    "uk": "Старіші патч-версії в nvm, rbenv, pyenv, mise, asdf (стандартна); закріплені лишаються",
+    "ru": "Более старые патч-версии в nvm, rbenv, pyenv, mise, asdf (стандартная); закреплённые остаются"
+  },
+  "Other big folders in ~/Library/Caches (aggressive, only when you pick them)": {
+    "uk": "Інші великі папки в ~/Library/Caches (агресивна, лише якщо вибереш)",
+    "ru": "Другие большие папки в ~/Library/Caches (агрессивная, только если выберете)"
+  },
+  "Quick Look cache": {
+    "uk": "Кеш Quick Look",
+    "ru": "Кэш Quick Look"
+  },
+  "Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only)": {
+    "uk": "Кеші рендеру й прев'ю Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (лише вимірюються)",
+    "ru": "Кэши рендера и превью Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (только измеряются)"
+  },
+  "This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ": {
+    "uk": "Тут є агресивні або ручні пункти: програми можуть вийти з акаунта чи повільно відновлювати кеш. Спершу закрий ці програми. Продовжити? [y/N] ",
+    "ru": "Здесь есть агрессивные или ручные пункты: приложения могут выйти из аккаунта или медленно восстанавливать кэш. Сначала закройте эти приложения. Продолжить? [y/N] "
+  },
+  "Unfinished Codex runtime downloads": {
+    "uk": "Недокачані середовища Codex",
+    "ru": "Недокачанные среды Codex"
+  },
+  "Video & photo": {
+    "uk": "Відео і фото",
+    "ru": "Видео и фото"
+  },
+  "What can be cleaned": {
+    "uk": "Що можна почистити",
+    "ru": "Что можно почистить"
+  },
+  "aggressive": {
+    "uk": "агресивна",
+    "ru": "агрессивная"
+  },
+  "nothing is installed or deleted unless you pick it": {
+    "uk": "нічого не ставиться й не видаляється без твого вибору",
+    "ru": "ничего не ставится и не удаляется без вашего выбора"
+  },
+  "safe": {
+    "uk": "безпечна",
+    "ru": "безопасная"
+  },
+  "standard": {
+    "uk": "стандартна",
+    "ru": "стандартная"
+  },
+  "pnpm metadata cache": {
+    "uk": "Кеш метаданих pnpm",
+    "ru": "Кэш метаданных pnpm"
+  },
+  "node-gyp headers": {
+    "uk": "Заголовки node-gyp",
+    "ru": "Заголовки node-gyp"
+  },
+  "Maven repository (has your own mvn install builds)": {
+    "uk": "Репозиторій Maven (є твої збірки з mvn install)",
+    "ru": "Репозиторий Maven (есть ваши сборки из mvn install)"
+  },
+  "Codex temporary git clones (%s, older than 7 days)": {
+    "uk": "Тимчасові git-клони Codex (%s, старші за 7 днів)",
+    "ru": "Временные git-клоны Codex (%s, старше 7 дней)"
+  },
+  "Swap files: %s of the used space (macOS removes them on restart)": {
+    "uk": "Файли swap: %s зайнятого місця (macOS прибирає їх під час перезавантаження)",
+    "ru": "Файлы swap: %s занятого места (macOS удаляет их при перезагрузке)"
+  }
+}

@@ -1198,5 +1198,37 @@
   "Swap files: %s of the used space (macOS removes them on restart)": {
     "uk": "Файли swap: %s зайнятого місця (macOS прибирає їх під час перезавантаження)",
     "ru": "Файлы swap: %s занятого места (macOS удаляет их при перезагрузке)"
+  },
+  "Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again)": {
+    "uk": "Runtime-и симуляторів, які вже не потрібні (лише якщо вибереш; Xcode перекачає їх)",
+    "ru": "Runtime симуляторов, которые больше не нужны (только если выберете; Xcode скачает их заново)"
+  },
+  "Erase the apps and data of a simulator (only when you pick it)": {
+    "uk": "Стерти програми й дані симулятора (лише якщо вибереш)",
+    "ru": "Стереть приложения и данные симулятора (только если выберете)"
+  },
+  "Simulators unused for simulator_days (only when you pick them)": {
+    "uk": "Симулятори, не використані simulator_days днів (лише якщо вибереш)",
+    "ru": "Симуляторы, не использованные simulator_days дней (только если выберете)"
+  },
+  "Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Settings → Components)": {
+    "uk": "Runtime симулятора %s: востаннє %s, симуляторів: %s (Xcode перекачає: Settings → Components)",
+    "ru": "Runtime симулятора %s: последний раз %s, симуляторов: %s (Xcode скачает заново: Settings → Components)"
+  },
+  "never": {
+    "uk": "ніколи",
+    "ru": "никогда"
+  },
+  "Erase simulator %s (%s): its apps and data are removed": {
+    "uk": "Стерти симулятор %s (%s): його програми й дані зникнуть",
+    "ru": "Стереть симулятор %s (%s): его приложения и данные удалятся"
+  },
+  "Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators": {
+    "uk": "Симулятори без використання %s+ днів (%s): %s — додати знову: Xcode → Devices and Simulators",
+    "ru": "Симуляторы без использования %s+ дней (%s): %s — добавить снова: Xcode → Devices and Simulators"
+  },
+  "%s: failed (see log)": {
+    "uk": "%s: не вдалося (див. лог)",
+    "ru": "%s: не удалось (см. лог)"
   }
 }

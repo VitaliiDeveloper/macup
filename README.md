@@ -72,7 +72,7 @@ Every run ends with a summary and saves a report to `~/Library/Logs/macup/`:
   - 🟢 **safe** (default; rebuilds itself): Xcode DerivedData and SwiftUI previews, old DeviceSupport and device logs, simulator caches; SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv and Go caches; caches of VS Code, Cursor, Windsurf, Antigravity, Claude and Codex; Codex leftovers; old logs.
   - 🟡 **standard** (downloaded again on next use): Gradle, Android Studio, Maven; Docker build cache and dangling images; old Playwright/Puppeteer browsers; older patch versions in nvm, rbenv, pyenv, mise and asdf.
   - 🔴 **aggressive** (apps may be slow for a while or sign you out): browser caches (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
-  - **Only when you pick them:** other big folders in `~/Library/Caches`, stale `node_modules`, the Trash.
+  - **Only when you pick them:** simulator runtimes (with last use and how many simulators need them), erasing a simulator's apps and data, simulators unused for 30 days; other big folders in `~/Library/Caches`; stale `node_modules`; the Trash. Running simulators are skipped.
 - **Measures, never deletes:** render and preview caches of Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic and Camera Raw (with the app's own menu item to clear them), Codex chat history, AI models, Android SDK and emulators, Xcode Archives, simulators.
 - **Checks:** uptime, disk space and SMART, memory and swap, CPU and throttling, battery; FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine; third-party and orphaned launch agents; Claude Code MCP servers; `brew doctor`; Xcode and simulator runtimes; Docker; sizes of what macup never deletes.
 
@@ -101,6 +101,7 @@ clean_level = safe                     # what clean/all may remove: safe, standa
 project_dirs = ~/Developer, ~/Code     # used by --deep and stale node_modules
 device_support_days = 90
 stale_project_days = 90
+simulator_days = 30
 keep_reports_days = 60
 ```
 

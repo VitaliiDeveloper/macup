@@ -1501,9 +1501,11 @@ measure_cmd(){ # id label dir key — a tool's own clean command; the dir is mea
 
 # --- running
 KEY_FREED=""
-run_key(){ local out
+run_key(){ local out r=0
   case "$1" in
-    sim)       run xcrun simctl delete unavailable ;;
+    sim:*)     case "$1" in *default*) run xcrun simctl delete unavailable || r=1 ;; esac   # sim:[default] [tests]: the sets that have some
+               case "$1" in *tests*) run xcrun simctl --set "$DEV/XCTestDevices" delete unavailable || r=1 ;; esac
+               return $r ;;
     brew)      out=$(brew cleanup -s --prune=7 2>&1); echo "$out" >>"$RAW"
                KEY_FREED=$(tokb "$(echo "$out" | grep -o 'freed approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')") ;;
     npm)       run npm cache verify ;;
@@ -1547,9 +1549,9 @@ EOF2
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kb "${C_MDIR[i]}")
+    cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
            if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
-           [ -n "${C_MDIR[i]}" ] && a=$(kb "${C_MDIR[i]}")
+           [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
   d=$((b - a)); [ "$d" -lt 0 ] && d=0
@@ -1701,8 +1703,12 @@ EOF2
 fi
 clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
 if task_allowed clean.sim_unavailable && have xcrun; then
-  NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')
-  [ "$NU" -gt 0 ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$NU")" 0 cmd sim "" "$DEV/CoreSimulator/Devices"
+  unav_dirs(){ grep '(unavailable' | grep -oE '[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}' | sed "s|^|$1/|"; }   # simctl list → device folders in set $1
+  UD=$(xcrun simctl list devices unavailable 2>/dev/null | unav_dirs "$DEV/CoreSimulator/Devices")
+  UX=""   # Xcode's parallel-test clones are a device set of their own
+  [ -d "$DEV/XCTestDevices" ] && UX=$(xcrun simctl --set "$DEV/XCTestDevices" list devices unavailable 2>/dev/null | unav_dirs "$DEV/XCTestDevices")
+  UL=$(printf '%s\n%s\n' "$UD" "$UX" | grep .)
+  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" '/Xcode.app/Contents/MacOS/Xcode|/usr/bin/xcodebuild( |$)' "$UL"
 fi
 if task_allowed clean.brew && have brew; then
   BC=$(brew --cache 2>/dev/null); cover "$BC"

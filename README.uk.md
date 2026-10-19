@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 
 - **Оновлює:** Claude Code (CLI, плагіни, маркетплейси), глобальні npm-пакети, скіли агентів у `~/.agents`, Homebrew, програми App Store (через [`mas`](https://github.com/mas-cli/mas)), pipx, інструменти uv, rustup, Oh My Zsh, розширення GitHub CLI. Оновлення macOS лише показує, ніколи не встановлює.
 - **Чистить, три рівні:**
-  - 🟢 **safe** (типово; відновлюється само): Xcode DerivedData і прев'ю SwiftUI, старий DeviceSupport і логи пристроїв, кеші симуляторів; кеші SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv і Go; кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex і Postman; залишки Codex; старі логи.
+  - 🟢 **safe** (типово; відновлюється само): Xcode DerivedData і прев'ю SwiftUI, старий DeviceSupport і логи пристроїв, кеші симуляторів, симулятори без runtime (і клони для паралельних тестів Xcode); кеші SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv і Go; кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex і Postman; залишки Codex; старі логи.
   - 🟡 **standard** (перекачається при наступному використанні): Gradle, Android Studio, Maven; кеш збірки Docker і непотрібні образи; старі браузери Playwright/Puppeteer; старіші патч-версії в nvm, rbenv, pyenv, mise і asdf.
   - 🔴 **aggressive** (програми якийсь час повільніші або виходять з акаунта): кеш браузерів (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
   - **Лише якщо вибереш:** runtime-и симуляторів (з датою використання й кількістю симуляторів на них), стирання програм і даних симулятора, симулятори без використання 30 днів; інші великі папки в `~/Library/Caches`; старі `node_modules`; Кошик. Запущені симулятори пропускаються.

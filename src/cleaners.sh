@@ -113,8 +113,12 @@ EOF2
 fi
 clean_old  clean.device_logs    'iOS device logs'      "$DEV/Xcode/iOS Device Logs" 90 f
 if task_allowed clean.sim_unavailable && have xcrun; then
-  NU=$(xcrun simctl list devices unavailable 2>/dev/null | grep -c '(unavailable')
-  [ "$NU" -gt 0 ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$NU")" 0 cmd sim "" "$DEV/CoreSimulator/Devices"
+  unav_dirs(){ grep '(unavailable' | grep -oE '[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}' | sed "s|^|$1/|"; }   # simctl list → device folders in set $1
+  UD=$(xcrun simctl list devices unavailable 2>/dev/null | unav_dirs "$DEV/CoreSimulator/Devices")
+  UX=""   # Xcode's parallel-test clones are a device set of their own
+  [ -d "$DEV/XCTestDevices" ] && UX=$(xcrun simctl --set "$DEV/XCTestDevices" list devices unavailable 2>/dev/null | unav_dirs "$DEV/XCTestDevices")
+  UL=$(printf '%s\n%s\n' "$UD" "$UX" | grep .)
+  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" '/Xcode.app/Contents/MacOS/Xcode|/usr/bin/xcodebuild( |$)' "$UL"
 fi
 if task_allowed clean.brew && have brew; then
   BC=$(brew --cache 2>/dev/null); cover "$BC"

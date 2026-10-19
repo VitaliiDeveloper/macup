@@ -69,7 +69,7 @@ Every run ends with a summary and saves a report to `~/Library/Logs/macup/`:
 
 - **Updates:** Claude Code (CLI, plugins, marketplaces), global npm packages, agent skills in `~/.agents`, Homebrew, App Store apps (with [`mas`](https://github.com/mas-cli/mas)), pipx, uv tools, rustup, Oh My Zsh, GitHub CLI extensions. macOS updates are reported, never installed.
 - **Cleans, in three levels:**
-  - 🟢 **safe** (default; rebuilds itself): Xcode DerivedData and SwiftUI previews, old DeviceSupport and device logs, simulator caches; SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv and Go caches; caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex and Postman; Codex leftovers; old logs.
+  - 🟢 **safe** (default; rebuilds itself): Xcode DerivedData and SwiftUI previews, old DeviceSupport and device logs, simulator caches, simulators whose runtime is gone (also Xcode's parallel-test clones); SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, pip, uv and Go caches; caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex and Postman; Codex leftovers; old logs.
   - 🟡 **standard** (downloaded again on next use): Gradle, Android Studio, Maven; Docker build cache and dangling images; old Playwright/Puppeteer browsers; older patch versions in nvm, rbenv, pyenv, mise and asdf.
   - 🔴 **aggressive** (apps may be slow for a while or sign you out): browser caches (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
   - **Only when you pick them:** simulator runtimes (with last use and how many simulators need them), erasing a simulator's apps and data, simulators unused for 30 days; other big folders in `~/Library/Caches`; stale `node_modules`; the Trash. Running simulators are skipped.

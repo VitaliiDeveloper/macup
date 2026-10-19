@@ -50,9 +50,11 @@ measure_cmd(){ # id label dir key — a tool's own clean command; the dir is mea
 
 # --- running
 KEY_FREED=""
-run_key(){ local out
+run_key(){ local out r=0
   case "$1" in
-    sim)       run xcrun simctl delete unavailable ;;
+    sim:*)     case "$1" in *default*) run xcrun simctl delete unavailable || r=1 ;; esac   # sim:[default] [tests]: the sets that have some
+               case "$1" in *tests*) run xcrun simctl --set "$DEV/XCTestDevices" delete unavailable || r=1 ;; esac
+               return $r ;;
     brew)      out=$(brew cleanup -s --prune=7 2>&1); echo "$out" >>"$RAW"
                KEY_FREED=$(tokb "$(echo "$out" | grep -o 'freed approximately [0-9.]*[KMGT]*B' | tail -1 | awk '{print $3}')") ;;
     npm)       run npm cache verify ;;
@@ -96,9 +98,9 @@ EOF2
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kb "${C_MDIR[i]}")
+    cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
            if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
-           [ -n "${C_MDIR[i]}" ] && a=$(kb "${C_MDIR[i]}")
+           [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
   d=$((b - a)); [ "$d" -lt 0 ] && d=0

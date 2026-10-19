@@ -109,6 +109,29 @@ want=$(printf '%s\n' 'simctl runtime delete A1B2-0027' 'simctl runtime delete A1
 [ "$(sort "$H/xcrun.log" 2>/dev/null)" = "$want" ] && pass "simulators: exactly the picked runtimes and devices; booted and recent ones stay" \
   || { fail "simulators"; echo "want:"; echo "$want"; echo "got:"; cat "$H/xcrun.log"; tr -d '\r' <"$W/sim.out" | grep -iE 'simulat|runtime' | head; }
 
+# --- unavailable simulators: the default set and Xcode's test clones (XCTestDevices), with their real size; never while Xcode runs
+H="$W/unav"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+U1=11111111-AAAA-4AAA-8AAA-111111111111; U2=22222222-BBBB-4BBB-8BBB-222222222222; XT="$H/Library/Developer/XCTestDevices"
+for d in "$H/Library/Developer/CoreSimulator/Devices/$U1" "$XT/$U2"; do mkdir -p "$d/data"; dd if=/dev/zero of="$d/data/x" bs=1024 count=3072 2>/dev/null; done
+cat >"$H/.local/bin/xcrun" <<FAKE
+#!/bin/bash
+case "\$*" in
+  "simctl list devices unavailable") [ -z "\$NODEFAULT" ] && echo "    iPhone A ($U1) (Shutdown) (unavailable, runtime profile not found)" ;;
+  "simctl --set $XT list devices unavailable") echo "    Clone 2 of iPhone B ($U2) (Shutdown) (unavailable, runtime profile not found)" ;;
+  simctl\ *list*) ;;
+  *) echo "\$*" >>"\$HOME/xcrun.log" ;;
+esac
+FAKE
+chmod +x "$H/.local/bin/xcrun"
+env HOME="$H" /bin/bash "$M" check --only clean.sim_unavailable --no-color </dev/null >"$W/unav.out" 2>&1
+grep -qE 'safe +6 MB +Unavailable simulators \(2\)' "$W/unav.out" && [ ! -s "$H/xcrun.log" ] && pass "unavailable simulators: check shows both sets with their size" || { fail "unavailable simulators: check"; grep -i simulat "$W/unav.out"; }
+FAKE_RUNNING='/Applications/Xcode.app/Contents/MacOS/Xcode' env HOME="$H" /bin/bash "$M" clean --only clean.sim_unavailable --no-color </dev/null >"$W/unav.out" 2>&1
+[ ! -s "$H/xcrun.log" ] && grep -q 'Unavailable simulators (2).*skipped' "$W/unav.out" && pass "unavailable simulators: skipped while Xcode is open" || fail "unavailable simulators deleted while Xcode is open"
+env HOME="$H" /bin/bash "$M" clean --only clean.sim_unavailable --no-color </dev/null >"$W/unav.out" 2>&1
+[ "$(cat "$H/xcrun.log" 2>/dev/null)" = "$(printf '%s\n' 'simctl delete unavailable' "simctl --set $XT delete unavailable")" ] && pass "unavailable simulators: both sets deleted" || { fail "unavailable simulators: delete"; cat "$H/xcrun.log"; }
+rm -f "$H/xcrun.log"; env NODEFAULT=1 HOME="$H" /bin/bash "$M" clean --only clean.sim_unavailable --no-color </dev/null >"$W/unav.out" 2>&1
+[ "$(cat "$H/xcrun.log" 2>/dev/null)" = "simctl --set $XT delete unavailable" ] && pass "unavailable simulators: only the set that has some" || { fail "unavailable simulators: only test clones"; cat "$H/xcrun.log"; }
+
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?

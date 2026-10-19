@@ -37,6 +37,8 @@ blob "$L/Caches/ms-playwright/chromium-1100"; blob "$L/Caches/ms-playwright/chro
 blob "$H/.codex/.tmp/git-abc"; old "$H/.codex/.tmp/git-abc"; blob "$H/.codex/.tmp/git-new" 64
 blob "$H/.cache/codex-runtimes/codex-primary-runtime" 1024; blob "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"; old "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"
 for a in Code Cursor Claude; do blob "$L/Application Support/$a/Cache/c"; blob "$L/Application Support/$a/Code Cache/js" 64; done
+P="$L/Application Support/Codex/Default/Partitions/browser"; blob "$P/Code Cache/js"; mkdir -p "$P/Local Storage"; echo site >"$P/Local Storage/leveldb"   # site data next to a partition cache: stays
+mkdir -p "$H/elsewhere3/Cache" "$L/Application Support/Codex/Partitions"; dd if=/dev/zero of="$H/elsewhere3/Cache/big" bs=1024 count=6144 2>/dev/null; ln -s "$H/elsewhere3" "$L/Application Support/Codex/Partitions/linked"
 blob "$L/Caches/Arc/data"; blob "$L/Caches/Google/Chrome/Default/Cache"
 mkdir -p "$H/elsewhere2"; echo precious >"$H/elsewhere2/precious"; dd if=/dev/zero of="$H/elsewhere2/big" bs=1024 count=6144 2>/dev/null; ln -s "$H/elsewhere2" "$L/Caches/Firefox"
 blob "$L/Caches/BigApp" 103424; blob "$L/Caches/com.apple.bigdaemon" 103424

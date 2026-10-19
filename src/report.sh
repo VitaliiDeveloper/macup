@@ -68,6 +68,8 @@ if [ "$DEEP" = 1 ]; then
   step 'Measuring your home folder (can take a few minutes)'
   info 'Largest folders in your home:'
   du -sk "$HOME"/* "$HOME"/.[!.]* 2>/dev/null | sort -rn | head -12 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
+  info 'Largest folders in Application Support (mostly app data, not caches):'
+  du -sk "$HOME/Library/Application Support"/* 2>/dev/null | sort -rn | head -10 | while read -r s p; do sub "$(hum "$s")  ${p##*/}"; done
   if [ -d "$HOME/Downloads" ]; then
     DL=$(find "$HOME/Downloads" -mindepth 1 -maxdepth 1 -mtime +90 2>/dev/null)
     if [ -n "$DL" ]; then

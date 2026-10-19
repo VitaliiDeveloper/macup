@@ -24,8 +24,8 @@ clean.pip|1|pip cache|pip3|pip|~/Library/Caches/pip
 clean.uv|1|uv cache|uv|uv|@uv
 clean.go|1|Go build cache|go|go|@go'
 
-# Electron apps: only these cache subfolders, never User/ (settings) or Backups/ (unsaved files).
-# folder in ~/Library/Application Support | app name (skipped while it runs)
+# Electron apps: only these cache subfolders (also in Default/ and Partitions/*), never User/ (settings) or Backups/ (unsaved files).
+# folder in ~/Library/Application Support | app name (skipped while it runs, as is anything started with that folder as --user-data-dir)
 ELECTRON_APPS='Code|Visual Studio Code
 Code - Insiders|Visual Studio Code - Insiders
 Cursor|Cursor
@@ -33,8 +33,9 @@ Windsurf|Windsurf
 Antigravity|Antigravity
 VSCodium|VSCodium
 Claude|Claude
-Codex|Codex'
-ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache'
+Codex|Codex
+Postman|Postman'
+ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache|GraphiteDawnCache|GrShaderCache|ShaderCache'
 
 # Browsers: cache only, in ~/Library/Caches; never profiles, history or passwords.
 # name | app name (skipped while it runs) | cache folders in ~/Library/Caches, separated by ;
@@ -232,9 +233,12 @@ dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one 
   local d; echo "$2" | tr '|;' '\n\n' | while IFS= read -r d; do
     [ -n "$d" ] && [ -d "$1/$d" ] && [ ! -L "$1/$d" ] && echo "$1/$d"; done; }
 while IFS='|' read -r folder name; do
-  L=$(dirs_in "$HOME/Library/Application Support/$folder" "$ELECTRON_CACHES"); [ -n "$L" ] || continue
+  A="$HOME/Library/Application Support/$folder"
+  L=$(for b in "$A" "$A/Default" "$A/Partitions/"* "$A/Default/Partitions/"*; do
+    [ -d "$b" ] && [ ! -L "$b" ] && dirs_in "$b" "$ELECTRON_CACHES"; done); [ -n "$L" ] || continue
   s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
-  cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/"
+  # Application Support/Codex belongs to ChatGPT.app, so the app name alone misses it
+  cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/|user-data-dir=$A( --|/|$)"
 done <<EOF2
 $ELECTRON_APPS
 EOF2

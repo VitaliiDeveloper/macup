@@ -723,6 +723,10 @@
     "uk": "Найбільші папки в домашній теці:",
     "ru": "Самые большие папки в домашней папке:"
   },
+  "Largest folders in Application Support (mostly app data, not caches):": {
+    "uk": "Найбільші папки в Application Support (здебільшого дані програм, а не кеші):",
+    "ru": "Самые большие папки в Application Support (в основном данные приложений, а не кэши):"
+  },
   "Downloads older than 90 days: %s items, %s — review and delete what you don't need": {
     "uk": "Downloads старші за 90 днів: %s шт., %s — переглянь і видали непотрібне",
     "ru": "Downloads старше 90 дней: %s шт., %s — просмотрите и удалите ненужное"

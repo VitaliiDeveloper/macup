@@ -631,6 +631,7 @@ Login items: System Settings → General → Login Items & Extensions || Об'є
 Deep scan || Глибока перевірка
 Measuring your home folder (can take a few minutes) || Рахую розміри домашньої теки (кілька хвилин)
 Largest folders in your home: || Найбільші папки в домашній теці:
+Largest folders in Application Support (mostly app data, not caches): || Найбільші папки в Application Support (здебільшого дані програм, а не кеші):
 Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старші за 90 днів: %s шт., %s — переглянь і видали непотрібне
 Files over 1 GB in Downloads: || Файли понад 1 GB у Downloads:
 Scanning projects for build artifacts || Шукаю артефакти збірки в проєктах
@@ -943,6 +944,7 @@ Login items: System Settings → General → Login Items & Extensions || Объ�
 Deep scan || Глубокая проверка
 Measuring your home folder (can take a few minutes) || Считаю размеры домашней папки (несколько минут)
 Largest folders in your home: || Самые большие папки в домашней папке:
+Largest folders in Application Support (mostly app data, not caches): || Самые большие папки в Application Support (в основном данные приложений, а не кэши):
 Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старше 90 дней: %s шт., %s — просмотрите и удалите ненужное
 Files over 1 GB in Downloads: || Файлы больше 1 GB в Downloads:
 Scanning projects for build artifacts || Ищу артефакты сборки в проектах
@@ -1610,8 +1612,8 @@ clean.pip|1|pip cache|pip3|pip|~/Library/Caches/pip
 clean.uv|1|uv cache|uv|uv|@uv
 clean.go|1|Go build cache|go|go|@go'
 
-# Electron apps: only these cache subfolders, never User/ (settings) or Backups/ (unsaved files).
-# folder in ~/Library/Application Support | app name (skipped while it runs)
+# Electron apps: only these cache subfolders (also in Default/ and Partitions/*), never User/ (settings) or Backups/ (unsaved files).
+# folder in ~/Library/Application Support | app name (skipped while it runs, as is anything started with that folder as --user-data-dir)
 ELECTRON_APPS='Code|Visual Studio Code
 Code - Insiders|Visual Studio Code - Insiders
 Cursor|Cursor
@@ -1619,8 +1621,9 @@ Windsurf|Windsurf
 Antigravity|Antigravity
 VSCodium|VSCodium
 Claude|Claude
-Codex|Codex'
-ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache'
+Codex|Codex
+Postman|Postman'
+ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache|GraphiteDawnCache|GrShaderCache|ShaderCache'
 
 # Browsers: cache only, in ~/Library/Caches; never profiles, history or passwords.
 # name | app name (skipped while it runs) | cache folders in ~/Library/Caches, separated by ;
@@ -1818,9 +1821,12 @@ dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one 
   local d; echo "$2" | tr '|;' '\n\n' | while IFS= read -r d; do
     [ -n "$d" ] && [ -d "$1/$d" ] && [ ! -L "$1/$d" ] && echo "$1/$d"; done; }
 while IFS='|' read -r folder name; do
-  L=$(dirs_in "$HOME/Library/Application Support/$folder" "$ELECTRON_CACHES"); [ -n "$L" ] || continue
+  A="$HOME/Library/Application Support/$folder"
+  L=$(for b in "$A" "$A/Default" "$A/Partitions/"* "$A/Default/Partitions/"*; do
+    [ -d "$b" ] && [ ! -L "$b" ] && dirs_in "$b" "$ELECTRON_CACHES"; done); [ -n "$L" ] || continue
   s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
-  cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/"
+  # Application Support/Codex belongs to ChatGPT.app, so the app name alone misses it
+  cand clean.editors 1 "$(_f '%s caches' "$name")" "$s" empty "$L" "/$name.app/Contents/|user-data-dir=$A( --|/|$)"
 done <<EOF2
 $ELECTRON_APPS
 EOF2
@@ -1932,6 +1938,8 @@ if [ "$DEEP" = 1 ]; then
   step 'Measuring your home folder (can take a few minutes)'
   info 'Largest folders in your home:'
   du -sk "$HOME"/* "$HOME"/.[!.]* 2>/dev/null | sort -rn | head -12 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
+  info 'Largest folders in Application Support (mostly app data, not caches):'
+  du -sk "$HOME/Library/Application Support"/* 2>/dev/null | sort -rn | head -10 | while read -r s p; do sub "$(hum "$s")  ${p##*/}"; done
   if [ -d "$HOME/Downloads" ]; then
     DL=$(find "$HOME/Downloads" -mindepth 1 -maxdepth 1 -mtime +90 2>/dev/null)
     if [ -n "$DL" ]; then

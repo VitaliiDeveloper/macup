@@ -15,3 +15,4 @@
 ./Library/Developer/Xcode/iOS Device Logs/old.crash
 ./Library/Developer/Xcode/iOS DeviceSupport/16.0 (20A1)/blob
 ./Library/Logs/SomeApp/old.log
+./Library/Application Support/Codex/Default/Partitions/browser/Code Cache/js/blob

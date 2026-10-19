@@ -51,9 +51,9 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
   [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
-[ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
+[ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
 # --- an app that is open is skipped, and the summary says so
 H="$W/run"; tests/fixture.sh "$H"
@@ -61,6 +61,11 @@ FAKE_RUNNING='/Applications/Cursor.app/Contents/MacOS/Cursor' env HOME="$H" /bin
 [ -f "$H/Library/Application Support/Cursor/Cache/c/blob" ] && grep -q 'Cursor caches.*skipped' "$W/run.out" && pass "open app is skipped" || fail "open app was cleaned"
 grep -q 'Skipped because the app is open (1)' "$W/run.out" && grep -q '    · Cursor caches' "$W/run.out" && pass "summary lists what was skipped" || fail "summary does not list the skipped app"
 grep -q 'Needs attention: nothing' "$W/run.out" && pass "a skipped app is not a warning" || fail "skipped app became a warning"
+tests/fixture.sh "$H"   # Application Support/Codex is used by ChatGPT.app, not Codex.app
+FAKE_RUNNING="/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Helpers/Codex (Service).app/Contents/MacOS/Codex (Service) --type=gpu-process --user-data-dir=$H/Library/Application Support/Codex --standard-schemes" \
+  env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
+[ -f "$H/Library/Application Support/Codex/Default/Partitions/browser/Code Cache/js/blob" ] && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] \
+  && pass "an app open under another name is skipped by its --user-data-dir" || fail "app open under another name was cleaned"
 
 # --- picking after an interactive check
 # keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)

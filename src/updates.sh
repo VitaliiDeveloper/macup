@@ -42,7 +42,10 @@ EOF
   fi
 fi
 
-if task update.npm && have npm && have python3; then
+# npm and npx are node scripts: with node unlinked (keg-only node@24) they stay on PATH but cannot run
+node_ok(){ have node || { warn '%s: skipped, node is not on PATH' "$1"; return 1; }; }
+
+if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'
   # skips npm-link'ed packages and anything whose versions don't look like registry versions
   NO=$(npm outdated -g --json 2>/dev/null | python3 -c '
@@ -71,7 +74,7 @@ EOF
 fi
 
 LOCK="$HOME/.agents/.skill-lock.json"; LATER_SKILLS=""
-if task update.skills && [ -f "$LOCK" ] && have npx && have python3; then
+if task update.skills && [ -f "$LOCK" ] && have npx && have python3 && node_ok "$(_ 'Agent skills')"; then
   skills(){ python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1]))

@@ -132,6 +132,16 @@ env HOME="$H" /bin/bash "$M" clean --only clean.sim_unavailable --no-color </dev
 rm -f "$H/xcrun.log"; env NODEFAULT=1 HOME="$H" /bin/bash "$M" clean --only clean.sim_unavailable --no-color </dev/null >"$W/unav.out" 2>&1
 [ "$(cat "$H/xcrun.log" 2>/dev/null)" = "simctl --set $XT delete unavailable" ] && pass "unavailable simulators: only the set that has some" || { fail "unavailable simulators: only test clones"; cat "$H/xcrun.log"; }
 
+# --- npm/npx on PATH without node (unlinked keg-only node@24): both steps say so instead of a false "up to date"
+if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" command -v node >/dev/null; then
+  H="$W/nonode"; mkdir -p "$H/.local/bin" "$H/.agents" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"; echo '{"skills":{}}' >"$H/.agents/.skill-lock.json"
+  for c in npm npx; do printf '#!/bin/bash\necho "%s $*" >>"$HOME/npm.log"\n' "$c" >"$H/.local/bin/$c"; chmod +x "$H/.local/bin/$c"; done
+  env PATH="$W/bin:/usr/bin:/bin" HOME="$H" /bin/bash "$M" check --only update.npm,update.skills --no-color </dev/null >"$W/nonode.out" 2>&1
+  grep -q 'npm globals: skipped, node is not on PATH' "$W/nonode.out" && grep -q 'Agent skills: skipped, node is not on PATH' "$W/nonode.out" \
+    && ! grep -q 'up to date' "$W/nonode.out" && [ ! -e "$H/npm.log" ] && pass "no node: npm globals and agent skills skipped with a warning" \
+    || { fail "no node"; grep -iE 'npm|skill' "$W/nonode.out"; cat "$H/npm.log" 2>/dev/null; }
+else echo "SKIP no node: node is installed here"; fi
+
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?

@@ -551,6 +551,7 @@ Claude Code plugins: %s installed || Плагіни Claude Code: встанов�
 npm globals || npm (глобальні)
 npm globals: up to date || npm (глобальні): усе актуальне
 npm globals: %s outdated || npm (глобальні): застаріло %s
+%s: skipped, node is not on PATH || %s: пропущено, node немає в PATH
 %s: update failed (see log) || %s: не вдалося оновити (див. лог)
 Agent skills || Скіли агентів
 Agent skills: %s installed, %s updated || Скіли агентів: встановлено %s, оновлено %s
@@ -864,6 +865,7 @@ Claude Code plugins: %s installed || Плагины Claude Code: установ�
 npm globals || npm (глобальные)
 npm globals: up to date || npm (глобальные): всё актуально
 npm globals: %s outdated || npm (глобальные): устарело %s
+%s: skipped, node is not on PATH || %s: пропущено, node нет в PATH
 %s: update failed (see log) || %s: не удалось обновить (см. лог)
 Agent skills || Скиллы агентов
 Agent skills: %s installed, %s updated || Скиллы агентов: установлено %s, обновлено %s
@@ -1285,7 +1287,10 @@ EOF
   fi
 fi
 
-if task update.npm && have npm && have python3; then
+# npm and npx are node scripts: with node unlinked (keg-only node@24) they stay on PATH but cannot run
+node_ok(){ have node || { warn '%s: skipped, node is not on PATH' "$1"; return 1; }; }
+
+if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'
   # skips npm-link'ed packages and anything whose versions don't look like registry versions
   NO=$(npm outdated -g --json 2>/dev/null | python3 -c '
@@ -1314,7 +1319,7 @@ EOF
 fi
 
 LOCK="$HOME/.agents/.skill-lock.json"; LATER_SKILLS=""
-if task update.skills && [ -f "$LOCK" ] && have npx && have python3; then
+if task update.skills && [ -f "$LOCK" ] && have npx && have python3 && node_ok "$(_ 'Agent skills')"; then
   skills(){ python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1]))

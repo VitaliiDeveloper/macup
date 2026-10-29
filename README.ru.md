@@ -48,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
   - 🔴 **aggressive** (приложения какое-то время медленнее или выходят из аккаунта): кэш браузеров (Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi).
   - **Только если выберете:** runtime симуляторов (с датой использования и числом симуляторов на них), стирание приложений и данных симулятора, симуляторы без использования 30 дней; другие большие папки в `~/Library/Caches`; старые `node_modules`; Корзина. Запущенные симуляторы пропускаются.
 - **Измеряет, никогда не удаляет:** кэши рендера и превью Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic и Camera Raw (с пунктом меню самого приложения, чтобы их очистить), историю чатов Codex, AI-модели, Android SDK и эмуляторы, Xcode Archives, симуляторы.
-- **Проверяет:** время работы, место на диске и SMART, память и swap, CPU и перегрев, батарею; FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine; сторонние и «осиротевшие» службы автозапуска; MCP-серверы Claude Code; `brew doctor`; Xcode и runtime симуляторов; Docker; размеры того, что macup никогда не удаляет.
+- **Проверяет:** время работы, место на диске и SMART, память и swap, CPU и перегрев, батарею; FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine; сторонние и «осиротевшие» службы автозапуска; MCP-серверы Claude Code; `brew doctor`; команды, которые не запускаются, потому что пропал node или Python, и командой для исправления, если она есть; Xcode и runtime симуляторов; Docker; размеры того, что macup никогда не удаляет.
 
 Инструменты, которых у вас нет, пропускаются.
 

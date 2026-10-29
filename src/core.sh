@@ -37,6 +37,7 @@ check.brew_doctor|on|brew doctor warnings
 check.macos_updates|on|Pending macOS updates (never installed automatically)
 check.xcode|on|Xcode, command line tools, simulator runtimes
 check.devtools|on|Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
+check.commands|on|Commands that cannot start: a missing interpreter (node, python) or a broken link
 check.docker|on|Docker disk usage (if Docker is running)
 check.sizes|on|Sizes of things macup never deletes: Archives, Trash, caches, pub-cache
 check.creative|on|Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only)

@@ -903,6 +903,30 @@
     "uk": "Версії Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex",
     "ru": "Версии Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex"
   },
+  "Commands that cannot start: a missing interpreter (node, python) or a broken link": {
+    "uk": "Команди, які не запускаються: немає інтерпретатора (node, python) або посилання зламане",
+    "ru": "Команды, которые не запускаются: нет интерпретатора (node, python) или ссылка битая"
+  },
+  "Checking commands": {
+    "uk": "Перевірка команд",
+    "ru": "Проверка команд"
+  },
+  "Commands: all %s scripts in your bin folders can start": {
+    "uk": "Команди: усі скрипти в папках bin запускаються (%s)",
+    "ru": "Команды: все скрипты в папках bin запускаются (%s)"
+  },
+  "Commands that cannot start, the file they link to is gone (%s): %s": {
+    "uk": "Команди не запускаються, файл, на який вони посилаються, видалено (%s): %s",
+    "ru": "Команды не запускаются, файл, на который они ссылаются, удалён (%s): %s"
+  },
+  "Commands that cannot start, %s is missing: %s": {
+    "uk": "Команди не запускаються, немає %s: %s",
+    "ru": "Команды не запускаются, нет %s: %s"
+  },
+  "Commands that cannot start, %s is missing: %s — run: %s": {
+    "uk": "Команди не запускаються, немає %s: %s — запусти: %s",
+    "ru": "Команды не запускаются, нет %s: %s — запустите: %s"
+  },
   "Docker disk usage (if Docker is running)": {
     "uk": "Місце, зайняте Docker (якщо він запущений)",
     "ru": "Место, занятое Docker (если он запущен)"

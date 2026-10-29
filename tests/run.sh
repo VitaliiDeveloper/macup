@@ -142,6 +142,21 @@ if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" co
     || { fail "no node"; grep -iE 'npm|skill' "$W/nonode.out"; cat "$H/npm.log" 2>/dev/null; }
 else echo "SKIP no node: node is installed here"; fi
 
+# --- commands that cannot start: missing interpreter, pipx venv whose Python is gone, broken link; working ones stay quiet
+H="$W/cmds"; B="$H/.local/bin"; V="$H/.local/pipx/venvs/tool/bin"; mkdir -p "$B" "$H/.npm-global/bin" "$V" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/usr/bin/env macup_no_such_interp\n' >"$B/nodecli"; printf '#!/usr/bin/env -S macup_no_such_interp --flag\n' >"$H/.npm-global/bin/flagcli"
+printf '#!/bin/sh\necho ok\n' >"$B/okscript"; cp /usr/bin/true "$B/okbinary"
+ln -s "$H/gone/python3.12" "$V/python"; printf '#!%s\n' "$V/python" >"$V/tool"; ln -s "$V/tool" "$B/pipxtool"
+for i in 01 02 03 04 05 06 07 08 09 10 11; do ln -s "$H/gone/thing" "$B/gone$i"; done; ln -s "$H/gone/thing" "$B/gonelink"
+mkdir -p "$H/Cellar/x/1/bin"; printf '#!/usr/bin/env macup_no_such_interp\n' >"$H/Cellar/x/1/bin/brewcli"; ln -s "$H/Cellar/x/1/bin/brewcli" "$B/brewcli"; ln -s "$H/Cellar/y/1/bin/gone" "$B/brewgone"   # Homebrew's own files are brew doctor's job
+chmod +x "$B"/* "$V/tool" "$H/.npm-global/bin/flagcli" "$H/Cellar/x/1/bin/brewcli"
+env HOME="$H" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/cmds.out" 2>&1
+grep -q 'cannot start, macup_no_such_interp is missing: flagcli, nodecli$' "$W/cmds.out" \
+  && grep -q 'cannot start, python is missing: .*pipxtool.* — run: pipx reinstall-all' "$W/cmds.out" \
+  && grep -q 'cannot start, the file they link to is gone (~/.local/bin): gone01, .*, gone10 +2$' "$W/cmds.out" \
+  && ! grep 'cannot start' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
+  && pass "commands that cannot start are listed with a fix; working ones are not" || { fail "commands that cannot start"; cat "$W/cmds.out"; }
+
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?

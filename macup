@@ -82,8 +82,8 @@ clean.docker|on|Docker build cache and dangling images (standard); never contain
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
 clean.ai_tools|on|Codex temporary files and unfinished downloads; chat history is never touched
-clean.editors|on|Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open)
-clean.browsers|on|Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open)
+clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
+clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
 clean.trash|off|Empty the Trash (opt-in)'
@@ -721,8 +721,8 @@ Android Studio cache (%s) || Кеш Android Studio (%s)
 Android and Android Studio caches (standard); SDK, emulators and keys stay || Кеші Android і Android Studio (стандартна); SDK, емулятори й ключі лишаються
 Android cache || Кеш Android
 App cache: %s || Кеш програми: %s
-Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open) || Кеш браузерів: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агресивна, пропускається, коли відкритий)
-Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open) || Кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаються, коли відкриті)
+Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open) || Кеш браузерів: Chrome, Arc, Edge, Brave, Firefox та будь-яких інших на Chromium чи Firefox (агресивна, пропускається, коли відкритий)
+Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open) || Кеші Electron-застосунків: VS Code, Cursor, Claude, Slack, Discord та будь-яких інших, знайдених за будовою папок (пропускаються, коли відкриті)
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)
@@ -1041,8 +1041,8 @@ Android Studio cache (%s) || Кэш Android Studio (%s)
 Android and Android Studio caches (standard); SDK, emulators and keys stay || Кэши Android и Android Studio (стандартная); SDK, эмуляторы и ключи остаются
 Android cache || Кэш Android
 App cache: %s || Кэш приложения: %s
-Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open) || Кэш браузеров: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агрессивная, пропускается, когда открыт)
-Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open) || Кэши VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаются, когда открыты)
+Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open) || Кэш браузеров: Chrome, Arc, Edge, Brave, Firefox и любых других на Chromium или Firefox (агрессивная, пропускается, когда открыт)
+Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open) || Кэши Electron-приложений: VS Code, Cursor, Claude, Slack, Discord и любых других, найденных по устройству папок (пропускаются, когда открыты)
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кэш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)
@@ -1533,27 +1533,47 @@ fi
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=()
+C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
   case "$1" in "$HOME"/Library/*|"$HOME"/.*) ;; *) return 1 ;; esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
-    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|"$HOME/Library/Application Support/Google/Chrome"*) return 1 ;; esac
+    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
+  # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
+  case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
   return 0
 }
+in_cache_dir(){ local n; while IFS= read -r n; do case "$1/" in *"/$n/"*) return 0 ;; esac; done <<EOF2
+$(printf '%s\n' "$ELECTRON_CACHES" | tr '|' '\n')
+EOF2
+  return 1; }
 kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$((s + $(kb "$p"))); done <<EOF2
 $1
 EOF2
   echo "$s"; }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
-  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8
+  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
   [ "$5" = cmd ] || cover "$6"
   C_N=$((C_N + 1))
 }
+cand_more(){ # label level kb paths open-dirs — adds to the candidate with this label and level; false if there is none
+  local i; for ((i = 0; i < C_N; i++)); do
+    [ "${C_LBL[i]}" = "$1" ] && [ "${C_LVL[i]}" = "$2" ] && [ "${C_KIND[i]}" = empty ] || continue
+    C_KB[i]=$((C_KB[i] + $3)); C_PATHS[i]="${C_PATHS[i]}"$'\n'"$4"; C_OPEN[i]="${C_OPEN[i]}${C_OPEN[i]:+$'\n'}$5"; cover "$4"; return 0
+  done; return 1
+}
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
+open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
+  [ -n "$1" ] || return 1
+  local s d; s=$(lsof -n -P -Fn -u "$(id -u)" 2>/dev/null); [ -n "$s" ] || return 0
+  while IFS= read -r d; do [ -n "$d" ] && printf '%s\n' "$s" | grep -qF "n$d/" && return 0; done <<EOF2
+$1
+EOF2
+  return 1
+}
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
@@ -1606,7 +1626,7 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
 }
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p
-  if running "${C_PROC[i]}"; then
+  if running "${C_PROC[i]}" || open_in "${C_OPEN[i]}"; then
     info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
     SKIPPED+=("$lbl ($(hum "${C_KB[i]}"))"); return 0
   fi
@@ -1700,12 +1720,17 @@ Antigravity|Antigravity
 VSCodium|VSCodium
 Claude|Claude
 Codex|Codex
-Postman|Postman'
+Postman|Postman
+Slack|Slack
+discord|Discord
+Notion|Notion
+obsidian|Obsidian
+Signal|Signal'
 ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache|GraphiteDawnCache|GrShaderCache|ShaderCache'
 
 # Browsers: cache only, in ~/Library/Caches; never profiles, history or passwords.
 # name | app name (skipped while it runs) | cache folders in ~/Library/Caches, separated by ;
-BROWSERS='Arc|Arc|Arc;company.thebrowser.Browser
+BROWSERS='Arc|Arc|Arc
 Google Chrome|Google Chrome|Google/Chrome
 Firefox|Firefox|Firefox
 Microsoft Edge|Microsoft Edge|Microsoft Edge
@@ -1920,12 +1945,73 @@ done <<EOF2
 $BROWSERS
 EOF2
 
+# --- any other Chromium, Electron or Firefox cache, found by its layout instead of a name in the tables:
+# in Application Support a cache folder (ELECTRON_CACHES) next to Chromium's own files; in ~/Library/Caches the
+# name is enough (cache2 is Firefox's). A browser (History next to it) is aggressive, an app safe. Never inside an
+# .app or an updater's folder: ShipIt and Sparkle keep downloaded updates there until they are installed.
+# Skipped while any process has a file open in the app's folders (lsof); the tables still give the known names.
+if have python3; then
+  GEN=$(NAMES=$ELECTRON_CACHES APPS=$ELECTRON_APPS BRS=$BROWSERS COVERED=$COVERED python3 - "$HOME/Library/Application Support" "$HOME/Library/Caches" <<'PY' 2>/dev/null
+import os, sys
+A, K = sys.argv[1], sys.argv[2]
+names = set(os.environ["NAMES"].split("|"))
+covered = [c for c in os.environ["COVERED"].split("\n") if c]
+apps = dict(l.split("|", 1) for l in os.environ["APPS"].split("\n") if "|" in l)
+browsers = {d: f[0] for f in (l.split("|") for l in os.environ["BRS"].split("\n")) if len(f) > 2 for d in f[2].split(";")}
+has = lambda p, n: os.path.exists(os.path.join(p, n))
+def chromium(p):
+    return has(p, "Local State") or (has(p, "Preferences") and any(has(p, n) for n in ("Cookies", "TransportSecurity", "Network Persistent State", "DIPS")))
+groups = {}
+def record(root, path):
+    if any(path == c or path.startswith(c + "/") for c in covered): return
+    top = os.path.relpath(path, root).split(os.sep)[0]
+    prof = os.path.dirname(path)
+    aprof = prof if root == A else os.path.join(A, os.path.relpath(prof, K))
+    udr = aprof
+    while udr.startswith(A + os.sep) and not has(udr, "Local State"): udr = os.path.dirname(udr)
+    key = os.path.relpath(udr, A) if udr.startswith(A + os.sep) else top
+    if key.endswith("/User Data"): key = key[: -len("/User Data")]
+    if top in apps: kind, name = "app", apps[top]
+    else:
+        name = browsers.get(key) or browsers.get(top) or (key.replace("/", " ") if key.count("/") < 2 else top)
+        browser = path.endswith("/cache2") or has(aprof, "History") or has(aprof, "Default/History") or has(udr, "Default/History")
+        kind = "browser" if browser else "app"
+    g = groups.setdefault((kind, name), (set(), {os.path.join(A, top), os.path.join(K, top)}))
+    g[0].add(path)
+for root in (A, K):
+    for dp, dns, _ in os.walk(root):
+        depth = 0 if dp == root else os.path.relpath(dp, root).count(os.sep) + 1
+        keep = []
+        for d in dns:
+            p = os.path.join(dp, d)
+            if os.path.islink(p) or d.endswith((".app", ".ShipIt")) or d == "org.sparkle-project.Sparkle": continue
+            if depth == 0 and (d.startswith("com.apple.") or d == "macup"): continue
+            if d in names or (d == "cache2" and root == K):
+                if depth > 0 and (root == K or (d != "cache2" and chromium(dp))): record(root, p)
+                continue
+            if depth < 5: keep.append(d)
+        dns[:] = keep
+for (kind, name), (paths, opened) in sorted(groups.items()):
+    print("3" if kind == "browser" else "1", kind, name, "\x1f".join(sorted(opened)), "\x1f".join(sorted(paths)), sep="\t")
+PY
+)
+  while IFS=$'\t' read -r lv kind name opened paths; do
+    [ -n "$paths" ] || continue
+    L=$(printf '%s' "$paths" | tr '\037' '\n'); O=$(printf '%s' "$opened" | tr '\037' '\n')
+    s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
+    if [ "$kind" = browser ]; then id=clean.browsers; lbl=$(_f '%s cache' "$name"); else id=clean.editors; lbl=$(_f '%s caches' "$name"); fi
+    cand_more "$lbl" "$lv" "$s" "$L" "$O" || cand "$id" "$lv" "$lbl" "$s" empty "$L" "" "" "$O"
+  done <<EOF2
+$GEN
+EOF2
+fi
+
 # --- other big folders in ~/Library/Caches (100 MB+), except macOS's own and what is already listed above
 if task_allowed clean.app_caches; then
   du -sk "$HOME/Library/Caches/"* 2>/dev/null | sort -rn | while read -r s e; do
     [ "$s" -lt 102400 ] && break
     b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
-    case "$b" in com.apple.*|Adobe\ Camera\ Raw*) continue ;; esac
+    case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
     printf '%s' "$COVERED" | grep -qxF "$e" && continue
     printf '%s' "$COVERED" | grep -qF "$e/" && continue
     printf '%s\t%s\n' "$s" "$e"

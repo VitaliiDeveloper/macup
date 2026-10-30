@@ -6,27 +6,47 @@
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=()
+C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
   case "$1" in "$HOME"/Library/*|"$HOME"/.*) ;; *) return 1 ;; esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
-    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|"$HOME/Library/Application Support/Google/Chrome"*) return 1 ;; esac
+    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
+  # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
+  case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
   return 0
 }
+in_cache_dir(){ local n; while IFS= read -r n; do case "$1/" in *"/$n/"*) return 0 ;; esac; done <<EOF2
+$(printf '%s\n' "$ELECTRON_CACHES" | tr '|' '\n')
+EOF2
+  return 1; }
 kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$((s + $(kb "$p"))); done <<EOF2
 $1
 EOF2
   echo "$s"; }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
-  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8
+  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
   [ "$5" = cmd ] || cover "$6"
   C_N=$((C_N + 1))
 }
+cand_more(){ # label level kb paths open-dirs — adds to the candidate with this label and level; false if there is none
+  local i; for ((i = 0; i < C_N; i++)); do
+    [ "${C_LBL[i]}" = "$1" ] && [ "${C_LVL[i]}" = "$2" ] && [ "${C_KIND[i]}" = empty ] || continue
+    C_KB[i]=$((C_KB[i] + $3)); C_PATHS[i]="${C_PATHS[i]}"$'\n'"$4"; C_OPEN[i]="${C_OPEN[i]}${C_OPEN[i]:+$'\n'}$5"; cover "$4"; return 0
+  done; return 1
+}
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
+open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
+  [ -n "$1" ] || return 1
+  local s d; s=$(lsof -n -P -Fn -u "$(id -u)" 2>/dev/null); [ -n "$s" ] || return 0
+  while IFS= read -r d; do [ -n "$d" ] && printf '%s\n' "$s" | grep -qF "n$d/" && return 0; done <<EOF2
+$1
+EOF2
+  return 1
+}
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
@@ -79,7 +99,7 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
 }
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p
-  if running "${C_PROC[i]}"; then
+  if running "${C_PROC[i]}" || open_in "${C_OPEN[i]}"; then
     info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
     SKIPPED+=("$lbl ($(hum "${C_KB[i]}"))"); return 0
   fi

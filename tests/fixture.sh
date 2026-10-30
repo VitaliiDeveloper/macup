@@ -36,10 +36,17 @@ for v in 3.11.1 3.11.9; do blob "$H/.pyenv/versions/$v" 1024; done; blob "$H/.py
 blob "$L/Caches/ms-playwright/chromium-1100"; blob "$L/Caches/ms-playwright/chromium-1234"; blob "$L/Caches/ms-playwright/ffmpeg-1011" 64
 blob "$H/.codex/.tmp/git-abc"; old "$H/.codex/.tmp/git-abc"; blob "$H/.codex/.tmp/git-new" 64
 blob "$H/.cache/codex-runtimes/codex-primary-runtime" 1024; blob "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"; old "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"
-for a in Code Cursor Claude; do blob "$L/Application Support/$a/Cache/c"; blob "$L/Application Support/$a/Code Cache/js" 64; done
+for a in Code Cursor Claude discord; do blob "$L/Application Support/$a/Cache/c"; blob "$L/Application Support/$a/Code Cache/js" 64; done
 P="$L/Application Support/Codex/Default/Partitions/browser"; blob "$P/Code Cache/js"; mkdir -p "$P/Local Storage"; echo site >"$P/Local Storage/leveldb"   # site data next to a partition cache: stays
 mkdir -p "$H/elsewhere3/Cache" "$L/Application Support/Codex/Partitions"; dd if=/dev/zero of="$H/elsewhere3/Cache/big" bs=1024 count=6144 2>/dev/null; ln -s "$H/elsewhere3" "$L/Application Support/Codex/Partitions/linked"
-blob "$L/Caches/Arc/data"; blob "$L/Caches/Google/Chrome/Default/Cache"
+blob "$L/Caches/Arc/data"; blob "$L/Caches/Google/Chrome/Default/Cache"; blob "$L/Caches/Arc/org.sparkle-project.Sparkle/Installation/z"   # a pending update inside a browser cache folder stays
+# found by layout, not by name: an unknown Electron app, Chrome's profile caches, a Firefox-based browser.
+# A non-Chromium app with a Cache folder, Chrome's data and staged app updates stay.
+E="$L/Application Support/SomeApp"; mkdir -p "$E"; echo '{}' >"$E/Preferences"; : >"$E/Cookies"; blob "$E/Cache/c"; blob "$E/Code Cache/js" 64; blob "$L/Caches/SomeApp/Default/Cache"
+mkdir -p "$L/Application Support/QtApp"; echo x >"$L/Application Support/QtApp/Preferences"; blob "$L/Application Support/QtApp/Cache/q"
+G="$L/Application Support/Google/Chrome"; echo '{}' >"$G/Local State"; echo '{}' >"$G/Default/Preferences"; echo h >"$G/Default/History"; echo c >"$G/Default/Cookies"; blob "$G/Default/Code Cache/js"; blob "$G/GrShaderCache/g"
+blob "$L/Caches/zen/Profiles/abc.default/cache2/entries"
+blob "$L/Caches/com.foo.ShipIt/update.x/Foo.app/Contents/Resources/Cache/r"; blob "$L/Caches/com.bar/org.sparkle-project.Sparkle/Installation/y/Bar.app/Contents/GPUCache/g"
 mkdir -p "$H/elsewhere2"; echo precious >"$H/elsewhere2/precious"; dd if=/dev/zero of="$H/elsewhere2/big" bs=1024 count=6144 2>/dev/null; ln -s "$H/elsewhere2" "$L/Caches/Firefox"
 blob "$L/Caches/BigApp" 103424; blob "$L/Caches/com.apple.bigdaemon" 103424
 # a project venv built on an exact Python patch, an nvm alias chain, and a local mvn install: all must stay

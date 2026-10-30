@@ -82,8 +82,8 @@ clean.docker|on|Docker build cache and dangling images (standard); never contain
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
 clean.ai_tools|on|Codex temporary files and unfinished downloads; chat history is never touched
-clean.editors|on|Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open)
-clean.browsers|on|Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open)
+clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
+clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
 clean.trash|off|Empty the Trash (opt-in)'

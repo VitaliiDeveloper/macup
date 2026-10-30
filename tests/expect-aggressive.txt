@@ -1,3 +1,6 @@
 ./Library/Caches/Arc/data/blob
 ./Library/Caches/Google/Chrome/Default/Cache/blob
 ./Library/Caches/Microsoft Edge/Cache/blob
+./Library/Application Support/Google/Chrome/Default/Code Cache/js/blob
+./Library/Application Support/Google/Chrome/GrShaderCache/g/blob
+./Library/Caches/zen/Profiles/abc.default/cache2/entries/blob

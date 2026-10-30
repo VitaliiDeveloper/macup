@@ -6,6 +6,11 @@
 ./Library/Application Support/Code/Code Cache/js/blob
 ./Library/Application Support/Cursor/Cache/c/blob
 ./Library/Application Support/Cursor/Code Cache/js/blob
+./Library/Application Support/SomeApp/Cache/c/blob
+./Library/Application Support/SomeApp/Code Cache/js/blob
+./Library/Caches/SomeApp/Default/Cache/blob
+./Library/Application Support/discord/Cache/c/blob
+./Library/Application Support/discord/Code Cache/js/blob
 ./Library/Caches/CocoaPods/Pods/blob
 ./Library/Caches/org.carthage.CarthageKit/x/blob
 ./Library/Caches/org.swift.swiftpm/repos/blob

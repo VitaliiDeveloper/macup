@@ -1079,13 +1079,13 @@
     "uk": "Кеш програми: %s",
     "ru": "Кэш приложения: %s"
   },
-  "Browser caches: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (aggressive, skipped while open)": {
-    "uk": "Кеш браузерів: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агресивна, пропускається, коли відкритий)",
-    "ru": "Кэш браузеров: Arc, Chrome, Firefox, Edge, Brave, Opera, Vivaldi (агрессивная, пропускается, когда открыт)"
+  "Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)": {
+    "uk": "Кеш браузерів: Chrome, Arc, Edge, Brave, Firefox та будь-яких інших на Chromium чи Firefox (агресивна, пропускається, коли відкритий)",
+    "ru": "Кэш браузеров: Chrome, Arc, Edge, Brave, Firefox и любых других на Chromium или Firefox (агрессивная, пропускается, когда открыт)"
   },
-  "Caches of VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (skipped while open)": {
-    "uk": "Кеші VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаються, коли відкриті)",
-    "ru": "Кэши VS Code, Cursor, Windsurf, Antigravity, Claude, Codex (пропускаются, когда открыты)"
+  "Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)": {
+    "uk": "Кеші Electron-застосунків: VS Code, Cursor, Claude, Slack, Discord та будь-яких інших, знайдених за будовою папок (пропускаються, коли відкриті)",
+    "ru": "Кэши Electron-приложений: VS Code, Cursor, Claude, Slack, Discord и любых других, найденных по устройству папок (пропускаются, когда открыты)"
   },
   "Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache": {
     "uk": "Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache",

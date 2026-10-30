@@ -12,7 +12,13 @@ mkdir -p "$W/bin"; cat >"$W/bin/pgrep" <<'FAKE'
 #!/bin/bash
 [ "$1" = "-f" ] && [ -n "$2" ] && printf '%s\n' "${FAKE_RUNNING:-}" | grep -qE -- "$2"
 FAKE
-chmod +x "$W/bin/pgrep"; export PATH="$W/bin:$PATH"
+# `lsof` tells which app folders have open files: a fake one lists FAKE_OPEN paths (one per line), or fails with FAKE_LSOF_FAIL
+cat >"$W/bin/lsof" <<'FAKE'
+#!/bin/bash
+[ -n "$FAKE_LSOF_FAIL" ] && exit 1
+printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
+FAKE
+chmod +x "$W/bin/pgrep" "$W/bin/lsof"; export PATH="$W/bin:$PATH"
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local H=$1; shift; tests/fixture.sh "$H"; (cd "$H" && find . \( -type f -o -type l \) | sort) >"$H.b"
   env HOME="$H" /bin/bash "$M" "$@" </dev/null >"$H.out" 2>&1
@@ -51,7 +57,7 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
   [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
@@ -66,6 +72,14 @@ FAKE_RUNNING="/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.fram
   env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
 [ -f "$H/Library/Application Support/Codex/Default/Partitions/browser/Code Cache/js/blob" ] && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] \
   && pass "an app open under another name is skipped by its --user-data-dir" || fail "app open under another name was cleaned"
+tests/fixture.sh "$H"   # an app macup has no name for: open while it has files open in its folder; unknown when lsof fails
+FAKE_OPEN="$H/Library/Application Support/SomeApp/Cookies" env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
+[ -f "$H/Library/Application Support/SomeApp/Cache/c/blob" ] && [ -f "$H/Library/Caches/SomeApp/Default/Cache/blob" ] && grep -q 'SomeApp caches.*skipped' "$W/run.out" \
+  && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] && pass "an unknown app with open files is skipped" || fail "an unknown open app was cleaned"
+tests/fixture.sh "$H"
+FAKE_LSOF_FAIL=1 env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
+[ -f "$H/Library/Application Support/SomeApp/Cache/c/blob" ] && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] \
+  && pass "lsof fails: unknown apps are left alone, known ones still cleaned" || fail "lsof failed and an unknown app was cleaned"
 
 # --- picking after an interactive check
 # keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)

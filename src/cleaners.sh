@@ -34,12 +34,17 @@ Antigravity|Antigravity
 VSCodium|VSCodium
 Claude|Claude
 Codex|Codex
-Postman|Postman'
+Postman|Postman
+Slack|Slack
+discord|Discord
+Notion|Notion
+obsidian|Obsidian
+Signal|Signal'
 ELECTRON_CACHES='Cache|CachedData|Code Cache|GPUCache|CachedExtensionVSIXs|logs|DawnGraphiteCache|DawnWebGPUCache|GraphiteDawnCache|GrShaderCache|ShaderCache'
 
 # Browsers: cache only, in ~/Library/Caches; never profiles, history or passwords.
 # name | app name (skipped while it runs) | cache folders in ~/Library/Caches, separated by ;
-BROWSERS='Arc|Arc|Arc;company.thebrowser.Browser
+BROWSERS='Arc|Arc|Arc
 Google Chrome|Google Chrome|Google/Chrome
 Firefox|Firefox|Firefox
 Microsoft Edge|Microsoft Edge|Microsoft Edge
@@ -254,12 +259,73 @@ done <<EOF2
 $BROWSERS
 EOF2
 
+# --- any other Chromium, Electron or Firefox cache, found by its layout instead of a name in the tables:
+# in Application Support a cache folder (ELECTRON_CACHES) next to Chromium's own files; in ~/Library/Caches the
+# name is enough (cache2 is Firefox's). A browser (History next to it) is aggressive, an app safe. Never inside an
+# .app or an updater's folder: ShipIt and Sparkle keep downloaded updates there until they are installed.
+# Skipped while any process has a file open in the app's folders (lsof); the tables still give the known names.
+if have python3; then
+  GEN=$(NAMES=$ELECTRON_CACHES APPS=$ELECTRON_APPS BRS=$BROWSERS COVERED=$COVERED python3 - "$HOME/Library/Application Support" "$HOME/Library/Caches" <<'PY' 2>/dev/null
+import os, sys
+A, K = sys.argv[1], sys.argv[2]
+names = set(os.environ["NAMES"].split("|"))
+covered = [c for c in os.environ["COVERED"].split("\n") if c]
+apps = dict(l.split("|", 1) for l in os.environ["APPS"].split("\n") if "|" in l)
+browsers = {d: f[0] for f in (l.split("|") for l in os.environ["BRS"].split("\n")) if len(f) > 2 for d in f[2].split(";")}
+has = lambda p, n: os.path.exists(os.path.join(p, n))
+def chromium(p):
+    return has(p, "Local State") or (has(p, "Preferences") and any(has(p, n) for n in ("Cookies", "TransportSecurity", "Network Persistent State", "DIPS")))
+groups = {}
+def record(root, path):
+    if any(path == c or path.startswith(c + "/") for c in covered): return
+    top = os.path.relpath(path, root).split(os.sep)[0]
+    prof = os.path.dirname(path)
+    aprof = prof if root == A else os.path.join(A, os.path.relpath(prof, K))
+    udr = aprof
+    while udr.startswith(A + os.sep) and not has(udr, "Local State"): udr = os.path.dirname(udr)
+    key = os.path.relpath(udr, A) if udr.startswith(A + os.sep) else top
+    if key.endswith("/User Data"): key = key[: -len("/User Data")]
+    if top in apps: kind, name = "app", apps[top]
+    else:
+        name = browsers.get(key) or browsers.get(top) or (key.replace("/", " ") if key.count("/") < 2 else top)
+        browser = path.endswith("/cache2") or has(aprof, "History") or has(aprof, "Default/History") or has(udr, "Default/History")
+        kind = "browser" if browser else "app"
+    g = groups.setdefault((kind, name), (set(), {os.path.join(A, top), os.path.join(K, top)}))
+    g[0].add(path)
+for root in (A, K):
+    for dp, dns, _ in os.walk(root):
+        depth = 0 if dp == root else os.path.relpath(dp, root).count(os.sep) + 1
+        keep = []
+        for d in dns:
+            p = os.path.join(dp, d)
+            if os.path.islink(p) or d.endswith((".app", ".ShipIt")) or d == "org.sparkle-project.Sparkle": continue
+            if depth == 0 and (d.startswith("com.apple.") or d == "macup"): continue
+            if d in names or (d == "cache2" and root == K):
+                if depth > 0 and (root == K or (d != "cache2" and chromium(dp))): record(root, p)
+                continue
+            if depth < 5: keep.append(d)
+        dns[:] = keep
+for (kind, name), (paths, opened) in sorted(groups.items()):
+    print("3" if kind == "browser" else "1", kind, name, "\x1f".join(sorted(opened)), "\x1f".join(sorted(paths)), sep="\t")
+PY
+)
+  while IFS=$'\t' read -r lv kind name opened paths; do
+    [ -n "$paths" ] || continue
+    L=$(printf '%s' "$paths" | tr '\037' '\n'); O=$(printf '%s' "$opened" | tr '\037' '\n')
+    s=$(kbl "$L"); [ "$s" -lt 5120 ] && continue
+    if [ "$kind" = browser ]; then id=clean.browsers; lbl=$(_f '%s cache' "$name"); else id=clean.editors; lbl=$(_f '%s caches' "$name"); fi
+    cand_more "$lbl" "$lv" "$s" "$L" "$O" || cand "$id" "$lv" "$lbl" "$s" empty "$L" "" "" "$O"
+  done <<EOF2
+$GEN
+EOF2
+fi
+
 # --- other big folders in ~/Library/Caches (100 MB+), except macOS's own and what is already listed above
 if task_allowed clean.app_caches; then
   du -sk "$HOME/Library/Caches/"* 2>/dev/null | sort -rn | while read -r s e; do
     [ "$s" -lt 102400 ] && break
     b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
-    case "$b" in com.apple.*|Adobe\ Camera\ Raw*) continue ;; esac
+    case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
     printf '%s' "$COVERED" | grep -qxF "$e" && continue
     printf '%s' "$COVERED" | grep -qF "$e/" && continue
     printf '%s\t%s\n' "$s" "$e"

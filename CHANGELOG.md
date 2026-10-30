@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.6.0 — 2026-10-30
+
+- **Homebrew:** `brew install vitaliideveloper/macup/macup`. `macup self-update` and the "newer macup" notice say `brew upgrade macup` for a Homebrew install, and the installer leaves Homebrew's link alone.
+- **`macup uninstall` removes everything macup made.** It lists it all and asks once (`--yes` skips the question):
+  - the script and older copies in `~/.npm-global/bin`, `/usr/local/bin`, `/opt/homebrew/bin`
+  - settings, history and reports
+  - temporary files of interrupted runs
+  - the `PATH` line the installer added to `~/.zshrc` and `~/.bash_profile`, unless other programs live in that folder; it says which
+  - for a Homebrew install, it runs `brew uninstall macup` and removes the tap.
+- `./macup uninstall` in a source checkout no longer deletes the built file.
+- An interrupted run (Ctrl-C) no longer leaves the cleaners' temporary lists in `$TMPDIR`.
+
 ## 2.5.0 — 2026-10-30
 
 - **Commands that cannot start come with the command that fixes them.** macup prints it and never runs it.

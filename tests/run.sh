@@ -57,7 +57,7 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
   [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|v22\.1\.0|\.m2/' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
@@ -166,13 +166,16 @@ for i in 01 02 03 04 05 06 07 08 09 10 11; do ln -s "$H/gone/thing" "$B/gone$i";
 mkdir -p "$H/Cellar/x/1/bin"; printf '#!/usr/bin/env macup_no_such_interp\n' >"$H/Cellar/x/1/bin/brewcli"; ln -s "$H/Cellar/x/1/bin/brewcli" "$B/brewcli"; ln -s "$H/Cellar/y/1/bin/gone" "$B/brewgone"   # Homebrew's own files are brew doctor's job
 # interpreters a formula has but brew has not linked: the newest versioned keg, or the unversioned formula
 printf '#!/usr/bin/env macup_keg_interp\n' >"$B/kegcli"; printf '#!/usr/bin/env macup_plain_interp\n' >"$B/plaincli"
-for k in macup_keg_interp@9/bin/macup_keg_interp macup_keg_interp@10/bin/macup_keg_interp macup_plain_interp/bin/macup_plain_interp; do mkdir -p "$H/brew/opt/${k%/*}"; cp /usr/bin/true "$H/brew/opt/$k"; done
+for k in macup_keg_interp@9/bin/macup_keg_interp macup_keg_interp@10/bin/macup_keg_interp macup_plain_interp/bin/macup_plain_interp sh/bin/sh; do mkdir -p "$H/brew/opt/${k%/*}"; cp /usr/bin/true "$H/brew/opt/$k"; done
+# a dead absolute interpreter whose name is on PATH (a venv's python3): brew link would not fix it
+printf '#!%s\n' "$H/gone/bin/sh" >"$B/deadsh"
 chmod +x "$B"/* "$V/tool" "$H/.npm-global/bin/flagcli" "$H/Cellar/x/1/bin/brewcli"
 env HOME="$H" HOMEBREW_PREFIX="$H/brew" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/cmds.out" 2>&1
 grep -q 'cannot start, macup_no_such_interp is missing: flagcli, nodecli$' "$W/cmds.out" \
   && grep -q 'cannot start, python is missing: .*pipxtool.* — run: pipx reinstall-all' "$W/cmds.out" \
   && grep -qF 'macup_keg_interp is missing: kegcli — run: brew link --force --overwrite macup_keg_interp@10' "$W/cmds.out" \
   && grep -qF 'macup_plain_interp is missing: plaincli — run: brew link --overwrite macup_plain_interp' "$W/cmds.out" \
+  && grep -q 'cannot start, sh is missing: deadsh$' "$W/cmds.out" \
   && grep -q 'cannot start, the file they link to is gone (~/.local/bin): gone01, .*, gone10 +2 — ' "$W/cmds.out" \
   && grep -qF 'gone10 +2 — remove dead links there: find ~/.local/bin -maxdepth 1 -type l ! -exec test -e {} \; -print -delete' "$W/cmds.out" \
   && ! grep 'cannot start' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
@@ -182,6 +185,12 @@ fix=$(sed -n 's|.*(~/\.local/bin): .* — remove dead links there: \(find ~/\.lo
 [ -n "$fix" ] && (HOME="$H"; eval "$fix") >/dev/null 2>&1 </dev/null
 [ -n "$fix" ] && [ ! -L "$B/gone01" ] && [ ! -L "$B/gonelink" ] && [ -e "$B/okscript" ] && [ -e "$B/okbinary" ] && [ -L "$B/pipxtool" ] && [ -L "$B/brewcli" ] \
   && pass "the dead-link fix removes only dead links" || { fail "dead-link fix: $fix"; ls -la "$B"; }
+
+# --- sizes of what macup never deletes are shown by update too, not only by check and clean
+H="$W/sizes"; mkdir -p "$H/Library/Developer/Xcode/Archives/a.xcarchive" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+echo build >"$H/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist"
+env HOME="$H" /bin/bash "$M" update --only check.sizes --no-color </dev/null >"$W/sizes.out" 2>&1
+grep -q 'Xcode Archives: ' "$W/sizes.out" && pass "update shows Xcode Archives size" || { fail "update: sizes"; cat "$W/sizes.out"; }
 
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"

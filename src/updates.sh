@@ -119,12 +119,13 @@ if task update.brew && have brew; then
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
   fi
   # in a check the casks brew upgrades anyway are already listed above
-  GR=$(brew outdated --cask --greedy --quiet 2>/dev/null)
+  # not --greedy: a version :latest cask is always "outdated" and does not update itself
+  GR=$(brew outdated --cask --greedy-auto-updates --quiet 2>/dev/null)
   UPD || GR=$(printf '%s\n' "$GR" | grep -vxF -f <(printf '%s\n' "$OC" | awk 'NF{print $1}'))
   if [ -n "$GR" ]; then
     GL=$(printf '%s\n' "$GR" | head -10 | paste -sd, - | sed 's/,/, /g'); GN=$(cnt "$GR")
     [ "$GN" -gt 10 ] && GL="$GL +$((GN - 10))"
-    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy' "$GL"
+    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates' "$GL"
   fi
 fi
 

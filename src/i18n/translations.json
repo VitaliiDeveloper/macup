@@ -455,9 +455,9 @@
     "uk": "Homebrew: застаріли — формули: %s, програми: %s",
     "ru": "Homebrew: устарели — формулы: %s, приложения: %s"
   },
-  "Casks that update themselves: %s. Force with: brew upgrade --cask --greedy": {
-    "uk": "Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy",
-    "ru": "Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy"
+  "Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates": {
+    "uk": "Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy-auto-updates",
+    "ru": "Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy-auto-updates"
   },
   "App Store: up to date": {
     "uk": "App Store: усе актуальне",

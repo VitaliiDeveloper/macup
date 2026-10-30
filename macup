@@ -19,6 +19,7 @@ CONF="$CONF_DIR/config"
 STATE_DIR="$HOME/Library/Application Support/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
+DEV="$HOME/Library/Developer"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
@@ -173,6 +174,7 @@ have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
             case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
 link_fix(){ # interpreter → the brew link that puts it back on PATH; nothing when no formula has it
             local p v=""
+            have "$1" && return   # a dead venv interpreter named python3: brew's python3 is linked, a link fixes nothing
             for p in ${HOMEBREW_PREFIX:-} /opt/homebrew /usr/local; do
               [ -x "$p/opt/$1/bin/$1" ] && { echo "brew link --overwrite $1"; return; }
               v="$v$(ls -d "$p/opt/$1"@*/bin/"$1" 2>/dev/null)"$'\n'
@@ -574,7 +576,7 @@ Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: оновлено —
 Homebrew: upgraded with errors (see log) || Homebrew: оновлено з помилками (див. лог)
 Homebrew: formulae: %s, casks: %s || Homebrew: формули: %s, програми: %s
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: застаріли — формули: %s, програми: %s
-Casks that update themselves: %s. Force with: brew upgrade --cask --greedy || Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy
+Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy-auto-updates
 App Store: up to date || App Store: усе актуальне
 App Store: apps updated: %s || App Store: оновлено програм: %s
 App Store: apps: %s || App Store: програм: %s
@@ -895,7 +897,7 @@ Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: обновлено �
 Homebrew: upgraded with errors (see log) || Homebrew: обновлено с ошибками (см. лог)
 Homebrew: formulae: %s, casks: %s || Homebrew: формулы: %s, приложения: %s
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: устарели — формулы: %s, приложения: %s
-Casks that update themselves: %s. Force with: brew upgrade --cask --greedy || Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy
+Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy-auto-updates
 App Store: up to date || App Store: всё актуально
 App Store: apps updated: %s || App Store: обновлено приложений: %s
 App Store: apps: %s || App Store: приложений: %s
@@ -1388,12 +1390,13 @@ if task update.brew && have brew; then
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
   fi
   # in a check the casks brew upgrades anyway are already listed above
-  GR=$(brew outdated --cask --greedy --quiet 2>/dev/null)
+  # not --greedy: a version :latest cask is always "outdated" and does not update itself
+  GR=$(brew outdated --cask --greedy-auto-updates --quiet 2>/dev/null)
   UPD || GR=$(printf '%s\n' "$GR" | grep -vxF -f <(printf '%s\n' "$OC" | awk 'NF{print $1}'))
   if [ -n "$GR" ]; then
     GL=$(printf '%s\n' "$GR" | head -10 | paste -sd, - | sed 's/,/, /g'); GN=$(cnt "$GR")
     [ "$GN" -gt 10 ] && GL="$GL +$((GN - 10))"
-    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy' "$GL"
+    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates' "$GL"
   fi
 fi
 
@@ -1767,7 +1770,6 @@ Vivaldi|Vivaldi|Vivaldi'
 tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
 
 if WANT_CLN; then
-DEV="$HOME/Library/Developer"
 while IFS='|' read -r id lv label dir proc tool; do
   [ -n "$tool" ] && ! have "$tool" && continue
   CL_LVL=$lv clean_dir "$id" "$label" "$(expand "$dir")" "$proc"
@@ -1903,7 +1905,9 @@ fi
 if task_allowed clean.old_versions; then
   PINS=" $( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
-    find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" -maxdepth 2 \
+    # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
+    find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
+      "$HOME/.local/share/virtualenvs" "$HOME/.virtualenvs" "$HOME/Library/Application Support/hatch/env/virtual" -maxdepth 3 \
       -name pyvenv.cfg 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null
     project_roots | while IFS= read -r r; do
       find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \

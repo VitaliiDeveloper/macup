@@ -55,7 +55,6 @@ Vivaldi|Vivaldi|Vivaldi'
 tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
 
 if WANT_CLN; then
-DEV="$HOME/Library/Developer"
 while IFS='|' read -r id lv label dir proc tool; do
   [ -n "$tool" ] && ! have "$tool" && continue
   CL_LVL=$lv clean_dir "$id" "$label" "$(expand "$dir")" "$proc"
@@ -191,7 +190,9 @@ fi
 if task_allowed clean.old_versions; then
   PINS=" $( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
-    find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" -maxdepth 2 \
+    # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
+    find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
+      "$HOME/.local/share/virtualenvs" "$HOME/.virtualenvs" "$HOME/Library/Application Support/hatch/env/virtual" -maxdepth 3 \
       -name pyvenv.cfg 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null
     project_roots | while IFS= read -r r; do
       find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \

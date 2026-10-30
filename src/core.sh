@@ -19,6 +19,7 @@ CONF="$CONF_DIR/config"
 STATE_DIR="$HOME/Library/Application Support/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
+DEV="$HOME/Library/Developer"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
@@ -173,6 +174,7 @@ have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
             case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
 link_fix(){ # interpreter → the brew link that puts it back on PATH; nothing when no formula has it
             local p v=""
+            have "$1" && return   # a dead venv interpreter named python3: brew's python3 is linked, a link fixes nothing
             for p in ${HOMEBREW_PREFIX:-} /opt/homebrew /usr/local; do
               [ -x "$p/opt/$1/bin/$1" ] && { echo "brew link --overwrite $1"; return; }
               v="$v$(ls -d "$p/opt/$1"@*/bin/"$1" 2>/dev/null)"$'\n'

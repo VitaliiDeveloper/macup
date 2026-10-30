@@ -57,7 +57,7 @@ Every run ends with a summary and saves a report to `~/Library/Logs/macup/`:
 ━━━━━━━━━━━━━━━━ Summary ━━━━━━━━━━━━━━━━
   Updated: 2
     · Claude Code 2.1.280 → 2.1.286
-    · Homebrew: 4 formulae, 1 casks
+    · Homebrew: formulae: 4, casks: 1
   Freed: 14.2 GB
   Free disk space: 212.4 GB (23%)
   Needs attention: 1

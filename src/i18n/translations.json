@@ -431,11 +431,11 @@
     "uk": "Homebrew: усе актуальне",
     "ru": "Homebrew: всё актуально"
   },
-  "brew upgrade (%s formulae, %s casks)": {
+  "brew upgrade (formulae: %s, casks: %s)": {
     "uk": "brew upgrade (формули: %s, програми: %s)",
     "ru": "brew upgrade (формулы: %s, приложения: %s)"
   },
-  "Homebrew: upgraded %s formulae, %s casks": {
+  "Homebrew: upgraded — formulae: %s, casks: %s": {
     "uk": "Homebrew: оновлено — формули: %s, програми: %s",
     "ru": "Homebrew: обновлено — формулы: %s, приложения: %s"
   },
@@ -443,35 +443,35 @@
     "uk": "Homebrew: оновлено з помилками (див. лог)",
     "ru": "Homebrew: обновлено с ошибками (см. лог)"
   },
-  "Homebrew: %s formulae, %s casks": {
+  "Homebrew: formulae: %s, casks: %s": {
     "uk": "Homebrew: формули: %s, програми: %s",
     "ru": "Homebrew: формулы: %s, приложения: %s"
   },
-  "Homebrew: %s formulae, %s casks outdated": {
+  "Homebrew: outdated — formulae: %s, casks: %s": {
     "uk": "Homebrew: застаріли — формули: %s, програми: %s",
     "ru": "Homebrew: устарели — формулы: %s, приложения: %s"
   },
-  "%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy": {
-    "uk": "Ще %s програм оновлюються самі (Chrome, Slack…). Примусово: brew upgrade --cask --greedy",
-    "ru": "Ещё %s приложений обновляются сами (Chrome, Slack…). Принудительно: brew upgrade --cask --greedy"
+  "Casks that update themselves: %s. Force with: brew upgrade --cask --greedy": {
+    "uk": "Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy",
+    "ru": "Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy"
   },
   "App Store: up to date": {
     "uk": "App Store: усе актуальне",
     "ru": "App Store: всё актуально"
   },
-  "App Store: %s apps updated": {
+  "App Store: apps updated: %s": {
     "uk": "App Store: оновлено програм: %s",
     "ru": "App Store: обновлено приложений: %s"
   },
-  "App Store: %s apps": {
+  "App Store: apps: %s": {
     "uk": "App Store: програм: %s",
     "ru": "App Store: приложений: %s"
   },
-  "App Store: %s updates didn't install — open the App Store": {
-    "uk": "App Store: %s оновлень не встановились — відкрий App Store",
-    "ru": "App Store: %s обновлений не установились — откройте App Store"
+  "App Store: updates not installed: %s — open the App Store": {
+    "uk": "App Store: не встановилися оновлення: %s — відкрий App Store",
+    "ru": "App Store: не установились обновления: %s — откройте App Store"
   },
-  "App Store: %s updates": {
+  "App Store: updates: %s": {
     "uk": "App Store: оновлень: %s",
     "ru": "App Store: обновлений: %s"
   },

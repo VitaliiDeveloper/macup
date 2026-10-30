@@ -559,17 +559,17 @@ Agent skills: %s installed, %s updated || Скіли агентів: встан�
 skill %s || скіл %s
 Agent skills: update failed (see log) || Скіли агентів: не вдалося оновити (див. лог)
 Homebrew: up to date || Homebrew: усе актуальне
-brew upgrade (%s formulae, %s casks) || brew upgrade (формули: %s, програми: %s)
-Homebrew: upgraded %s formulae, %s casks || Homebrew: оновлено — формули: %s, програми: %s
+brew upgrade (formulae: %s, casks: %s) || brew upgrade (формули: %s, програми: %s)
+Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: оновлено — формули: %s, програми: %s
 Homebrew: upgraded with errors (see log) || Homebrew: оновлено з помилками (див. лог)
-Homebrew: %s formulae, %s casks || Homebrew: формули: %s, програми: %s
-Homebrew: %s formulae, %s casks outdated || Homebrew: застаріли — формули: %s, програми: %s
-%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy || Ще %s програм оновлюються самі (Chrome, Slack…). Примусово: brew upgrade --cask --greedy
+Homebrew: formulae: %s, casks: %s || Homebrew: формули: %s, програми: %s
+Homebrew: outdated — formulae: %s, casks: %s || Homebrew: застаріли — формули: %s, програми: %s
+Casks that update themselves: %s. Force with: brew upgrade --cask --greedy || Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy
 App Store: up to date || App Store: усе актуальне
-App Store: %s apps updated || App Store: оновлено програм: %s
-App Store: %s apps || App Store: програм: %s
-App Store: %s updates didn't install — open the App Store || App Store: %s оновлень не встановились — відкрий App Store
-App Store: %s updates || App Store: оновлень: %s
+App Store: apps updated: %s || App Store: оновлено програм: %s
+App Store: apps: %s || App Store: програм: %s
+App Store: updates not installed: %s — open the App Store || App Store: не встановилися оновлення: %s — відкрий App Store
+App Store: updates: %s || App Store: оновлень: %s
 App Store apps aren't checked: brew install mas || App Store не перевіряється: brew install mas
 %s: updated || %s: оновлено
 pipx tools || Інструменти pipx
@@ -879,17 +879,17 @@ Agent skills: %s installed, %s updated || Скиллы агентов: уста�
 skill %s || скилл %s
 Agent skills: update failed (see log) || Скиллы агентов: не удалось обновить (см. лог)
 Homebrew: up to date || Homebrew: всё актуально
-brew upgrade (%s formulae, %s casks) || brew upgrade (формулы: %s, приложения: %s)
-Homebrew: upgraded %s formulae, %s casks || Homebrew: обновлено — формулы: %s, приложения: %s
+brew upgrade (formulae: %s, casks: %s) || brew upgrade (формулы: %s, приложения: %s)
+Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: обновлено — формулы: %s, приложения: %s
 Homebrew: upgraded with errors (see log) || Homebrew: обновлено с ошибками (см. лог)
-Homebrew: %s formulae, %s casks || Homebrew: формулы: %s, приложения: %s
-Homebrew: %s formulae, %s casks outdated || Homebrew: устарели — формулы: %s, приложения: %s
-%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy || Ещё %s приложений обновляются сами (Chrome, Slack…). Принудительно: brew upgrade --cask --greedy
+Homebrew: formulae: %s, casks: %s || Homebrew: формулы: %s, приложения: %s
+Homebrew: outdated — formulae: %s, casks: %s || Homebrew: устарели — формулы: %s, приложения: %s
+Casks that update themselves: %s. Force with: brew upgrade --cask --greedy || Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy
 App Store: up to date || App Store: всё актуально
-App Store: %s apps updated || App Store: обновлено приложений: %s
-App Store: %s apps || App Store: приложений: %s
-App Store: %s updates didn't install — open the App Store || App Store: %s обновлений не установились — откройте App Store
-App Store: %s updates || App Store: обновлений: %s
+App Store: apps updated: %s || App Store: обновлено приложений: %s
+App Store: apps: %s || App Store: приложений: %s
+App Store: updates not installed: %s — open the App Store || App Store: не установились обновления: %s — откройте App Store
+App Store: updates: %s || App Store: обновлений: %s
 App Store apps aren't checked: brew install mas || App Store не проверяется: brew install mas
 %s: updated || %s: обновлено
 pipx tools || Инструменты pipx
@@ -1365,14 +1365,20 @@ if task update.brew && have brew; then
   if [ $((NF + NC)) -eq 0 ]; then ok 'Homebrew: up to date'
   else
     if UPD; then
-      step 'brew upgrade (%s formulae, %s casks)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded %s formulae, %s casks' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
-      done_upd 'Homebrew: %s formulae, %s casks' "$NF" "$NC"
-    else warn 'Homebrew: %s formulae, %s casks outdated' "$NF" "$NC"; fi
+      step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
+      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
+      done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
+    else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
   fi
-  GR=$(cnt "$(brew outdated --cask --greedy --quiet 2>/dev/null)"); UPD || GR=$((GR - NC))
-  [ "$GR" -gt 0 ] && info '%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy' "$GR"
+  # in a check the casks brew upgrades anyway are already listed above
+  GR=$(brew outdated --cask --greedy --quiet 2>/dev/null)
+  UPD || GR=$(printf '%s\n' "$GR" | grep -vxF -f <(printf '%s\n' "$OC" | awk 'NF{print $1}'))
+  if [ -n "$GR" ]; then
+    GL=$(printf '%s\n' "$GR" | head -10 | paste -sd, - | sed 's/,/, /g'); GN=$(cnt "$GR")
+    [ "$GN" -gt 10 ] && GL="$GL +$((GN - 10))"
+    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy' "$GL"
+  fi
 fi
 
 if task update.mas; then
@@ -1381,8 +1387,8 @@ if task update.mas; then
     OM=$(mas outdated 2>/dev/null); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
-      if run mas upgrade; then ok 'App Store: %s apps updated' "$NM"; done_upd 'App Store: %s apps' "$NM"; else warn "App Store: %s updates didn't install — open the App Store" "$NM"; fi
-    else warn 'App Store: %s updates' "$NM"; lines "$OM"; fi
+      if run mas upgrade; then ok 'App Store: apps updated: %s' "$NM"; done_upd 'App Store: apps: %s' "$NM"; else warn 'App Store: updates not installed: %s — open the App Store' "$NM"; fi
+    else warn 'App Store: updates: %s' "$NM"; lines "$OM"; fi
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 
@@ -1402,8 +1408,11 @@ have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'
-  SU=$(softwareupdate -l 2>&1 | sed -n 's/^[[:space:]]*\* Label: //p')
-  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "$SU"; fi
+  SL=$(softwareupdate -l 2>&1)
+  SU=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*\* Label: //p')
+  # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
+  ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
+  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD
 

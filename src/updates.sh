@@ -107,14 +107,20 @@ if task update.brew && have brew; then
   if [ $((NF + NC)) -eq 0 ]; then ok 'Homebrew: up to date'
   else
     if UPD; then
-      step 'brew upgrade (%s formulae, %s casks)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded %s formulae, %s casks' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
-      done_upd 'Homebrew: %s formulae, %s casks' "$NF" "$NC"
-    else warn 'Homebrew: %s formulae, %s casks outdated' "$NF" "$NC"; fi
+      step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
+      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
+      done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
+    else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
   fi
-  GR=$(cnt "$(brew outdated --cask --greedy --quiet 2>/dev/null)"); UPD || GR=$((GR - NC))
-  [ "$GR" -gt 0 ] && info '%s more casks update themselves (Chrome, Slack, …). Force with: brew upgrade --cask --greedy' "$GR"
+  # in a check the casks brew upgrades anyway are already listed above
+  GR=$(brew outdated --cask --greedy --quiet 2>/dev/null)
+  UPD || GR=$(printf '%s\n' "$GR" | grep -vxF -f <(printf '%s\n' "$OC" | awk 'NF{print $1}'))
+  if [ -n "$GR" ]; then
+    GL=$(printf '%s\n' "$GR" | head -10 | paste -sd, - | sed 's/,/, /g'); GN=$(cnt "$GR")
+    [ "$GN" -gt 10 ] && GL="$GL +$((GN - 10))"
+    info 'Casks that update themselves: %s. Force with: brew upgrade --cask --greedy' "$GL"
+  fi
 fi
 
 if task update.mas; then
@@ -123,8 +129,8 @@ if task update.mas; then
     OM=$(mas outdated 2>/dev/null); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
-      if run mas upgrade; then ok 'App Store: %s apps updated' "$NM"; done_upd 'App Store: %s apps' "$NM"; else warn "App Store: %s updates didn't install — open the App Store" "$NM"; fi
-    else warn 'App Store: %s updates' "$NM"; lines "$OM"; fi
+      if run mas upgrade; then ok 'App Store: apps updated: %s' "$NM"; done_upd 'App Store: apps: %s' "$NM"; else warn 'App Store: updates not installed: %s — open the App Store' "$NM"; fi
+    else warn 'App Store: updates: %s' "$NM"; lines "$OM"; fi
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 
@@ -144,8 +150,11 @@ have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'
-  SU=$(softwareupdate -l 2>&1 | sed -n 's/^[[:space:]]*\* Label: //p')
-  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "$SU"; fi
+  SL=$(softwareupdate -l 2>&1)
+  SU=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*\* Label: //p')
+  # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
+  ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
+  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD
 

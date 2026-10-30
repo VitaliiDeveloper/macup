@@ -22,6 +22,14 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install.sh | bash -s -- --yes --lang ru --projects "~/Code"
 ```
 
+Или через Homebrew:
+
+```bash
+brew install vitaliideveloper/macup/macup
+```
+
+Homebrew обновляет его через `brew upgrade` (и `macup update` тоже), а `macup self-update` подскажет именно эту команду. Установщика здесь нет: язык берётся из macOS, `macup lang` его меняет, `macup config` задаёт папки с проектами.
+
 ## Использование
 
 | Команда | Что делает |
@@ -88,7 +96,7 @@ keep_reports_days = 60
 | `~/Library/Logs/macup/` | Отчёты (`.md`) и логи команд (`.log`) |
 | `~/Library/Application Support/macup/history.csv` | История запусков для трендов |
 
-`macup uninstall` спрашивает, прежде чем удалить скрипт, и ещё раз — прежде чем удалить настройки, историю и отчёты. Строка `PATH`, которую установщик мог добавить в `~/.zshrc`, остаётся: `~/.local/bin` используют и другие инструменты.
+`macup uninstall` показывает всё, что удалит, и спрашивает один раз (`--yes` — без вопроса): скрипт и его старые копии, настройки, историю, отчёты, временные файлы прерванных запусков и строку `PATH`, которую установщик добавил в `~/.zshrc` и `~/.bash_profile`. Строка остаётся, если в той же папке есть другие программы (в `~/.local/bin` часто лежат `claude`, `uv` и другие). Установленный через Homebrew macup удаляется через `brew uninstall macup`.
 
 ## Лицензия
 

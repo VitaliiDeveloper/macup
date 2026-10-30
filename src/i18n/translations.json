@@ -179,25 +179,49 @@
     "uk": "Не вдалося записати %s",
     "ru": "Не удалось записать %s"
   },
-  "Remove %s? [y/N] ": {
-    "uk": "Видалити %s? [y/N]",
-    "ru": "Удалить %s? [y/N]"
-  },
   "Removed.": {
     "uk": "Видалено.",
     "ru": "Удалено."
   },
+  "macup uninstall removes:": {
+    "uk": "macup uninstall видалить:",
+    "ru": "macup uninstall удалит:"
+  },
+  "the PATH line in %s": {
+    "uk": "рядок PATH у %s",
+    "ru": "строку PATH в %s"
+  },
+  "temporary files of interrupted runs: %s": {
+    "uk": "тимчасові файли перерваних запусків: %s",
+    "ru": "временные файлы прерванных запусков: %s"
+  },
+  "Kept: the PATH line in %s, because %s also has %s": {
+    "uk": "Лишаю рядок PATH у %s, бо в %s є ще %s",
+    "ru": "Оставляю строку PATH в %s, потому что в %s есть ещё %s"
+  },
+  "Nothing to remove.": {
+    "uk": "Нічого видаляти.",
+    "ru": "Нечего удалять."
+  },
+  "Remove all of this? [y/N] ": {
+    "uk": "Видалити все це? [y/N] ",
+    "ru": "Удалить всё это? [y/N] "
+  },
+  "Couldn't remove %s, remove it yourself: sudo rm %s": {
+    "uk": "Не вдалося видалити %s, видали сам: sudo rm %s",
+    "ru": "Не удалось удалить %s, удалите сами: sudo rm %s"
+  },
+  "brew uninstall macup failed; run it yourself.": {
+    "uk": "brew uninstall macup не вдалося; запусти його сам.",
+    "ru": "brew uninstall macup не удался; запустите его сами."
+  },
+  "macup was installed with Homebrew. Update it with: brew upgrade macup": {
+    "uk": "macup встановлено через Homebrew. Онови його так: brew upgrade macup",
+    "ru": "macup установлен через Homebrew. Обновите его так: brew upgrade macup"
+  },
   "Nothing removed.": {
     "uk": "Нічого не видалено.",
     "ru": "Ничего не удалено."
-  },
-  "Also remove config, history and reports? [y/N] ": {
-    "uk": "Видалити також налаштування, історію і звіти? [y/N]",
-    "ru": "Удалить также настройки, историю и отчёты? [y/N]"
-  },
-  "Removed config, history and reports.": {
-    "uk": "Налаштування, історію і звіти видалено.",
-    "ru": "Настройки, история и отчёты удалены."
   },
   "Unknown command: %s": {
     "uk": "Невідома команда: %s",
@@ -839,9 +863,9 @@
     "uk": "Потребує уваги: нічого",
     "ru": "Требует внимания: ничего"
   },
-  "macup %s is available: macup self-update": {
-    "uk": "Вийшов macup %s: macup self-update",
-    "ru": "Вышел macup %s: macup self-update"
+  "macup %s is available: %s": {
+    "uk": "Вийшов macup %s: %s",
+    "ru": "Вышел macup %s: %s"
   },
   "Command log: %s": {
     "uk": "Лог команд: %s",

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------- arguments
-DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; YES=0
 cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
 trap cleanup_lang EXIT
 set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
@@ -18,6 +18,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --lang)               set_lang "$2"; shift ;;
   --lang=*)             set_lang "${1#*=}" ;;
   --no-color)           B=; G=; Y=; R=; C=; D=; N=; CL= ;;
+  -y|--yes)             YES=1 ;;
   lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
   last|--last)          CMD=last ;;
   history|--history)    CMD=history ;;
@@ -59,8 +60,10 @@ STAMP=$(date +%Y-%m-%d_%H-%M)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; rm -f "$BODY"; cleanup_lang; exit 130' INT
-trap 'rm -f "$BODY"; cleanup_lang' EXIT
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches"; }
+trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
+trap 'cleanup_body; cleanup_lang' EXIT
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"

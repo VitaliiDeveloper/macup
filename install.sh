@@ -144,6 +144,7 @@ VER=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$TMP" | head -1)
 say "$(t inst): macup $VER → $(tld "$TARGET")"
 
 for old in "$HOME/.npm-global/bin/macup" /usr/local/bin/macup /opt/homebrew/bin/macup; do
+  case "$(readlink "$old" 2>/dev/null)" in */Cellar/macup/*) continue ;; esac   # Homebrew's own link: brew uninstall macup
   if [ "$old" != "$TARGET" ] && [ -f "$old" ] && grep -q '^# macup' "$old" 2>/dev/null && grep -q '^MACUP_VERSION=' "$old" 2>/dev/null; then
     rm -f "$old" && say "$(t old): $(tld "$old")"
   fi

@@ -62,7 +62,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
-  [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: macup self-update' "$NEWER")"
+  [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
   echo
   _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
 } >"$SUM"
@@ -82,6 +82,6 @@ printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2
 if [ ${#WARN[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$Y" "$(_f 'Needs attention: %s' "${#WARN[@]}")" "$N"; for w in "${WARN[@]}"; do printf '    %s!%s %s\n' "$Y" "$N" "$w"; done
 else printf '  %s%s%s\n' "$G" "$(_ 'Needs attention: nothing')" "$N"; fi
-[ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: macup self-update' "$NEWER")" "$N"
+[ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")" "$N"
 printf '  %s%s%s\n' "$D" "$(_f 'Report: %s · %s' "$(tildify "$REPORT")" "$TIME")" "$N"
 printf '  %s%s%s\n' "$D" "$(_ 'Menu: macup · trends: macup history · help: macup help')" "$N"

@@ -95,10 +95,20 @@ ver_gt(){ # true when version $1 is newer than $2
   [ -n "$1" ] && [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$1" ]
 }
 resolve_self(){ local p="$0"; case "$p" in */*) ;; *) p=$(command -v "$p") ;; esac; echo "$p"; }
+brew_prefix(){ # a macup path → the Homebrew prefix that installed it; nothing for any other install
+  case "$1" in
+    */Cellar/macup/*)      echo "${1%%/Cellar/macup/*}"; return ;;
+    */opt/macup/bin/macup) echo "${1%/opt/macup/bin/macup}"; return ;;
+  esac
+  case "$(readlink "$1" 2>/dev/null)" in */Cellar/macup/*) (cd "$(dirname "$1")/.." && pwd -P) ;; esac
+}
+update_cmd(){ if [ -n "$(brew_prefix "$(resolve_self)")" ]; then echo 'brew upgrade macup'; else echo 'macup self-update'; fi; }
 
 self_update(){
   local tmp newv target
   case "$MACUP_REPO" in __*) _ 'This copy has no GitHub repo configured.'; echo; exit 1 ;; esac
+  # Homebrew owns that file, and the next brew upgrade would put its own version back
+  if [ -n "$(brew_prefix "$(resolve_self)")" ]; then _ 'macup was installed with Homebrew. Update it with: brew upgrade macup'; echo; exit 0; fi
   tmp=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if ! curl -fsSL --max-time 30 "$MACUP_RAW/macup" -o "$tmp"; then _f 'Download failed: %s' "$MACUP_RAW/macup"; echo; rm -f "$tmp"; exit 1; fi
   newv=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$tmp" | head -1)
@@ -109,12 +119,58 @@ self_update(){
   echo; rm -f "$tmp"
 }
 
-uninstall(){
-  local target ans; target=$(resolve_self)
-  ans=$(ask "$(_f 'Remove %s? [y/N] ' "$(tildify "$target")")")
-  case "$ans" in y|Y|т|Т|д|Д) rm -f "$target" && { _ 'Removed.'; echo; } ;; *) _ 'Nothing removed.'; echo; return ;; esac
-  ans=$(ask "$(_ 'Also remove config, history and reports? [y/N] ')")
-  case "$ans" in y|Y|т|Т|д|Д) rm -rf "$CONF_DIR" "$STATE_DIR" "$LOGDIR" && { _ 'Removed config, history and reports.'; echo; } ;; esac
+uninstall(){ # macup, older copies, settings, history, reports, the installer's PATH line, leftover temp files
+  local target bp f d rc l dir others tmps ans tap left="" n=0
+  local -a progs=() dirs=() rcs=() lines=()
+  target=$(resolve_self); bp=$(brew_prefix "$target")
+  # ./macup in a source checkout is the build output, not an install
+  [ -f "$(dirname "$target")/build.sh" ] && [ -d "$(dirname "$target")/src" ] && target=""
+  for f in "$target" "$HOME/.local/bin/macup" "$HOME/.npm-global/bin/macup" /usr/local/bin/macup /opt/homebrew/bin/macup; do
+    [ -n "$f" ] && [ -f "$f" ] && [ -z "$(brew_prefix "$f")" ] && grep -q '^MACUP_VERSION=' "$f" 2>/dev/null || continue
+    case " ${progs[*]} " in *" $f "*) continue ;; esac
+    progs+=("$f")
+  done
+  for d in "$CONF_DIR" "$STATE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
+  for rc in "$HOME/.zshrc" "$HOME/.bash_profile"; do
+    l=$(awk 'p && /^export PATH="/ {print; exit} {p = ($0 == "# macup")}' "$rc" 2>/dev/null); [ -n "$l" ] || continue
+    dir=$(printf '%s' "$l" | sed 's/^export PATH="//; s/:\$PATH"$//'); dir=${dir/\$HOME/$HOME}
+    # the line also serves whatever else lives in that folder
+    others=$(for f in "$dir"/* "$dir"/.[!.]*; do { [ -e "$f" ] || [ -L "$f" ]; } && [ "${f##*/}" != macup ] && printf '%s\n' "${f##*/}"; done | head -3 | paste -sd, - | sed 's/,/, /g')
+    if [ -z "$others" ]; then rcs+=("$rc"); lines+=("$l")
+    else left="$left$(_f 'Kept: the PATH line in %s, because %s also has %s' "$(tildify "$rc")" "$(tildify "$dir")" "$others")"$'\n'; fi
+  done
+  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' \) \
+    ! -name "$(basename "${LANGFILE:-none}")" 2>/dev/null)
+
+  _ 'macup uninstall removes:'; echo
+  [ -n "$bp" ] && printf '  · brew uninstall macup\n'
+  for f in "${progs[@]}"; do printf '  · %s\n' "$(tildify "$f")"; done
+  for d in "${dirs[@]}"; do printf '  · %s  %s\n' "$(tildify "$d")" "$(hum "$(kb "$d")")"; done
+  for rc in "${rcs[@]}"; do printf '  · %s\n' "$(_f 'the PATH line in %s' "$(tildify "$rc")")"; done
+  [ -n "$tmps" ] && printf '  · %s\n' "$(_f 'temporary files of interrupted runs: %s' "$(cnt "$tmps")")"
+  [ -n "$left" ] && printf '%s' "$left" | while IFS= read -r l; do printf '  %s\n' "$l"; done
+  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ]; then _ 'Nothing to remove.'; echo; return; fi
+  if [ "$YES" != 1 ]; then
+    ans=$(ask "$(_ 'Remove all of this? [y/N] ')")
+    case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return ;; esac
+  fi
+
+  for d in "${dirs[@]}"; do rm -rf "$d"; done
+  for rc in "${rcs[@]}"; do   # the installer wrote a blank line, "# macup" and the export line
+    f=$(mktemp "${TMPDIR:-/tmp}/macup-rc.XXXXXX")
+    awk -v l="${lines[n]}" '{ a[NR] = $0 } END { for (i = 1; i <= NR; i++) {
+        if (a[i] == "# macup" && a[i+1] == l) { if (o > 0 && b[o] == "") o--; i++; continue }
+        b[++o] = a[i] } for (i = 1; i <= o; i++) print b[i] }' "$rc" >"$f" && cat "$f" >"$rc"
+    rm -f "$f"; n=$((n + 1))
+  done
+  [ -n "$tmps" ] && printf '%s\n' "$tmps" | while IFS= read -r f; do rm -f "$f"; done
+  for f in "${progs[@]}"; do rm -f "$f" 2>/dev/null; [ -e "$f" ] && { _f "Couldn't remove %s, remove it yourself: sudo rm %s" "$(tildify "$f")" "$f"; echo; }; done
+  if [ -n "$bp" ]; then
+    "$bp/bin/brew" uninstall macup >/dev/null 2>&1 || { _ "brew uninstall macup failed; run it yourself."; echo; }
+    tap="$(printf '%s' "${MACUP_REPO%%/*}" | tr '[:upper:]' '[:lower:]')/macup"
+    "$bp/bin/brew" tap 2>/dev/null | grep -qx "$tap" && "$bp/bin/brew" untap "$tap" >/dev/null 2>&1
+  fi
+  _ 'Removed.'; echo
 }
 
 mline(){ # key label hint

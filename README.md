@@ -24,6 +24,14 @@ Unattended:
 curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install.sh | bash -s -- --yes --lang en --projects "~/Code"
 ```
 
+Or with Homebrew:
+
+```bash
+brew install vitaliideveloper/macup/macup
+```
+
+Homebrew keeps it up to date with `brew upgrade` (so does `macup update`), and `macup self-update` points you there. There is no installer step: the language follows macOS, `macup lang` changes it, `macup config` sets your project folders.
+
 ## Use
 
 | Command | What it does |
@@ -114,7 +122,7 @@ keep_reports_days = 60
 | `~/Library/Logs/macup/` | Reports (`.md`) and command logs (`.log`) |
 | `~/Library/Application Support/macup/history.csv` | Run history for trends |
 
-`macup uninstall` asks before removing the script, and again before removing your settings, history and reports. It leaves the `PATH` line that the installer may have added to `~/.zshrc`, because other tools use `~/.local/bin` too.
+`macup uninstall` lists everything it is going to remove and asks once (`--yes` skips the question): the script and older copies of it, settings, history, reports, temporary files of interrupted runs, and the `PATH` line the installer added to `~/.zshrc` and `~/.bash_profile`. That line stays when other programs live in the same folder (`~/.local/bin` often holds `claude`, `uv` and others). A Homebrew install is removed with `brew uninstall macup`.
 
 ## Development
 

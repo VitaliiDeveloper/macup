@@ -186,6 +186,35 @@ fix=$(sed -n 's|.*(~/\.local/bin): .* — remove dead links there: \(find ~/\.lo
 [ -n "$fix" ] && [ ! -L "$B/gone01" ] && [ ! -L "$B/gonelink" ] && [ -e "$B/okscript" ] && [ -e "$B/okbinary" ] && [ -L "$B/pipxtool" ] && [ -L "$B/brewcli" ] \
   && pass "the dead-link fix removes only dead links" || { fail "dead-link fix: $fix"; ls -la "$B"; }
 
+# --- uninstall removes every file macup made, keeps a PATH line other programs need, and leaves a Homebrew install to brew
+# it also looks for older copies in /usr/local/bin and /opt/homebrew/bin: never run it where a real one is there
+if [ -e /usr/local/bin/macup ] || [ -e /opt/homebrew/bin/macup ]; then echo "SKIP uninstall: a real macup is in /usr/local/bin or /opt/homebrew/bin"
+else
+  H="$W/un"; T="$H/tmp"; mkdir -p "$T" "$H/.local/bin" "$H/.npm-global/bin" "$H/.config/macup" "$H/Library/Logs/macup" "$H/Library/Application Support/macup"
+  cp macup "$H/.local/bin/macup"; cp macup "$H/.npm-global/bin/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+  echo r >"$H/Library/Logs/macup/macup_x.md"; echo h >"$H/Library/Application Support/macup/history.csv"
+  printf 'alias ll=ls\n\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\nexport EDITOR=vim\n' >"$H/.zshrc"
+  touch "$T/macup.Ab12Cd" "$T/macup.Ab12Cd.rt" "$T/macup-lang.Zz99Yy" "$T/other.txt"
+  env HOME="$H" TMPDIR="$T/" /bin/bash "$H/.local/bin/macup" uninstall --no-color </dev/null >"$W/un0.out" 2>&1
+  [ -e "$H/.local/bin/macup" ] && [ -d "$H/.config/macup" ] && grep -q 'Nothing removed' "$W/un0.out" && pass "uninstall without a terminal or --yes removes nothing" || { fail "uninstall: no answer"; cat "$W/un0.out"; }
+  env HOME="$H" TMPDIR="$T/" /bin/bash "$H/.local/bin/macup" uninstall --yes --no-color </dev/null >"$W/un.out" 2>&1
+  [ ! -e "$H/.local/bin/macup" ] && [ ! -e "$H/.npm-global/bin/macup" ] && [ ! -e "$H/.config/macup" ] && [ ! -e "$H/Library/Logs/macup" ] \
+    && [ ! -e "$H/Library/Application Support/macup" ] && [ "$(cat "$H/.zshrc")" = "$(printf 'alias ll=ls\nexport EDITOR=vim')" ] \
+    && [ "$(ls "$T")" = other.txt ] && pass "uninstall --yes removes macup, older copies, settings, history, reports, the PATH line, temp files" \
+    || { fail "uninstall --yes"; cat "$W/un.out"; cat "$H/.zshrc"; ls -la "$T"; }
+  H="$W/un2"; mkdir -p "$H/.local/bin" "$H/brew/Cellar/macup/9.9.9/bin" "$H/brew/bin"; cp macup "$H/.local/bin/macup"; cp /usr/bin/true "$H/.local/bin/claude"
+  printf '\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\n' >"$H/.zshrc"
+  env HOME="$H" TMPDIR="$H/" /bin/bash "$H/.local/bin/macup" uninstall --yes --no-color </dev/null >"$W/un2.out" 2>&1
+  [ ! -e "$H/.local/bin/macup" ] && [ -e "$H/.local/bin/claude" ] && grep -q '^# macup' "$H/.zshrc" && grep -q 'Kept: the PATH line in ~/.zshrc, because ~/.local/bin also has claude' "$W/un2.out" \
+    && pass "uninstall keeps the PATH line when other programs live in that folder" || { fail "uninstall: PATH line kept"; cat "$W/un2.out"; }
+  cp macup "$H/brew/Cellar/macup/9.9.9/bin/macup"; ln -s ../Cellar/macup/9.9.9/bin/macup "$H/brew/bin/macup"
+  printf '#!/bin/bash\necho "brew $*" >>"%s/brew.log"\n' "$H" >"$H/brew/bin/brew"; chmod +x "$H/brew/bin/brew"
+  env HOME="$H" /bin/bash "$H/brew/bin/macup" self-update --no-color </dev/null >"$W/un3.out" 2>&1
+  env HOME="$H" TMPDIR="$H/" /bin/bash "$H/brew/bin/macup" uninstall --yes --no-color </dev/null >>"$W/un3.out" 2>&1
+  grep -q 'installed with Homebrew. Update it with: brew upgrade macup' "$W/un3.out" && grep -qx 'brew uninstall macup' "$H/brew.log" \
+    && pass "a Homebrew install: self-update points to brew upgrade, uninstall runs brew uninstall" || { fail "uninstall: Homebrew"; cat "$W/un3.out" "$H/brew.log"; }
+fi
+
 # --- sizes of what macup never deletes are shown by update too, not only by check and clean
 H="$W/sizes"; mkdir -p "$H/Library/Developer/Xcode/Archives/a.xcarchive" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
 echo build >"$H/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist"

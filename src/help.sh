@@ -17,8 +17,8 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup tasks        Усі задачі з id і чи вони увімкнені
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
-  macup self-update  Встановити свіжу версію з GitHub
-  macup uninstall    Видалити macup
+  macup self-update  Встановити свіжу версію з GitHub (через Homebrew: brew upgrade macup)
+  macup uninstall    Видалити macup і все, що він створив; --yes без питання
   macup help         Ця довідка
 
 Опції (до будь-якої команди запуску)
@@ -52,8 +52,8 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup tasks        Все задачи с id и включены ли они
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
-  macup self-update  Установить свежую версию с GitHub
-  macup uninstall    Удалить macup
+  macup self-update  Установить свежую версию с GitHub (через Homebrew: brew upgrade macup)
+  macup uninstall    Удалить macup и всё, что он создал; --yes без вопроса
   macup help         Эта справка
 
 Опции (к любой команде запуска)
@@ -87,8 +87,8 @@ Commands
   macup tasks        List every task id and whether it's on
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
-  macup self-update  Install the latest macup from GitHub
-  macup uninstall    Remove macup
+  macup self-update  Install the latest macup from GitHub (with Homebrew: brew upgrade macup)
+  macup uninstall    Remove macup and everything it made; --yes skips the question
   macup help         This help
 
 Options (combine with any run command)

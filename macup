@@ -218,8 +218,8 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup tasks        Усі задачі з id і чи вони увімкнені
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
-  macup self-update  Встановити свіжу версію з GitHub
-  macup uninstall    Видалити macup
+  macup self-update  Встановити свіжу версію з GitHub (через Homebrew: brew upgrade macup)
+  macup uninstall    Видалити macup і все, що він створив; --yes без питання
   macup help         Ця довідка
 
 Опції (до будь-якої команди запуску)
@@ -253,8 +253,8 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup tasks        Все задачи с id и включены ли они
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
-  macup self-update  Установить свежую версию с GitHub
-  macup uninstall    Удалить macup
+  macup self-update  Установить свежую версию с GitHub (через Homebrew: brew upgrade macup)
+  macup uninstall    Удалить macup и всё, что он создал; --yes без вопроса
   macup help         Эта справка
 
 Опции (к любой команде запуска)
@@ -288,8 +288,8 @@ Commands
   macup tasks        List every task id and whether it's on
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
-  macup self-update  Install the latest macup from GitHub
-  macup uninstall    Remove macup
+  macup self-update  Install the latest macup from GitHub (with Homebrew: brew upgrade macup)
+  macup uninstall    Remove macup and everything it made; --yes skips the question
   macup help         This help
 
 Options (combine with any run command)
@@ -407,10 +407,20 @@ ver_gt(){ # true when version $1 is newer than $2
   [ -n "$1" ] && [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$1" ]
 }
 resolve_self(){ local p="$0"; case "$p" in */*) ;; *) p=$(command -v "$p") ;; esac; echo "$p"; }
+brew_prefix(){ # a macup path → the Homebrew prefix that installed it; nothing for any other install
+  case "$1" in
+    */Cellar/macup/*)      echo "${1%%/Cellar/macup/*}"; return ;;
+    */opt/macup/bin/macup) echo "${1%/opt/macup/bin/macup}"; return ;;
+  esac
+  case "$(readlink "$1" 2>/dev/null)" in */Cellar/macup/*) (cd "$(dirname "$1")/.." && pwd -P) ;; esac
+}
+update_cmd(){ if [ -n "$(brew_prefix "$(resolve_self)")" ]; then echo 'brew upgrade macup'; else echo 'macup self-update'; fi; }
 
 self_update(){
   local tmp newv target
   case "$MACUP_REPO" in __*) _ 'This copy has no GitHub repo configured.'; echo; exit 1 ;; esac
+  # Homebrew owns that file, and the next brew upgrade would put its own version back
+  if [ -n "$(brew_prefix "$(resolve_self)")" ]; then _ 'macup was installed with Homebrew. Update it with: brew upgrade macup'; echo; exit 0; fi
   tmp=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if ! curl -fsSL --max-time 30 "$MACUP_RAW/macup" -o "$tmp"; then _f 'Download failed: %s' "$MACUP_RAW/macup"; echo; rm -f "$tmp"; exit 1; fi
   newv=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$tmp" | head -1)
@@ -421,12 +431,58 @@ self_update(){
   echo; rm -f "$tmp"
 }
 
-uninstall(){
-  local target ans; target=$(resolve_self)
-  ans=$(ask "$(_f 'Remove %s? [y/N] ' "$(tildify "$target")")")
-  case "$ans" in y|Y|т|Т|д|Д) rm -f "$target" && { _ 'Removed.'; echo; } ;; *) _ 'Nothing removed.'; echo; return ;; esac
-  ans=$(ask "$(_ 'Also remove config, history and reports? [y/N] ')")
-  case "$ans" in y|Y|т|Т|д|Д) rm -rf "$CONF_DIR" "$STATE_DIR" "$LOGDIR" && { _ 'Removed config, history and reports.'; echo; } ;; esac
+uninstall(){ # macup, older copies, settings, history, reports, the installer's PATH line, leftover temp files
+  local target bp f d rc l dir others tmps ans tap left="" n=0
+  local -a progs=() dirs=() rcs=() lines=()
+  target=$(resolve_self); bp=$(brew_prefix "$target")
+  # ./macup in a source checkout is the build output, not an install
+  [ -f "$(dirname "$target")/build.sh" ] && [ -d "$(dirname "$target")/src" ] && target=""
+  for f in "$target" "$HOME/.local/bin/macup" "$HOME/.npm-global/bin/macup" /usr/local/bin/macup /opt/homebrew/bin/macup; do
+    [ -n "$f" ] && [ -f "$f" ] && [ -z "$(brew_prefix "$f")" ] && grep -q '^MACUP_VERSION=' "$f" 2>/dev/null || continue
+    case " ${progs[*]} " in *" $f "*) continue ;; esac
+    progs+=("$f")
+  done
+  for d in "$CONF_DIR" "$STATE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
+  for rc in "$HOME/.zshrc" "$HOME/.bash_profile"; do
+    l=$(awk 'p && /^export PATH="/ {print; exit} {p = ($0 == "# macup")}' "$rc" 2>/dev/null); [ -n "$l" ] || continue
+    dir=$(printf '%s' "$l" | sed 's/^export PATH="//; s/:\$PATH"$//'); dir=${dir/\$HOME/$HOME}
+    # the line also serves whatever else lives in that folder
+    others=$(for f in "$dir"/* "$dir"/.[!.]*; do { [ -e "$f" ] || [ -L "$f" ]; } && [ "${f##*/}" != macup ] && printf '%s\n' "${f##*/}"; done | head -3 | paste -sd, - | sed 's/,/, /g')
+    if [ -z "$others" ]; then rcs+=("$rc"); lines+=("$l")
+    else left="$left$(_f 'Kept: the PATH line in %s, because %s also has %s' "$(tildify "$rc")" "$(tildify "$dir")" "$others")"$'\n'; fi
+  done
+  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' \) \
+    ! -name "$(basename "${LANGFILE:-none}")" 2>/dev/null)
+
+  _ 'macup uninstall removes:'; echo
+  [ -n "$bp" ] && printf '  · brew uninstall macup\n'
+  for f in "${progs[@]}"; do printf '  · %s\n' "$(tildify "$f")"; done
+  for d in "${dirs[@]}"; do printf '  · %s  %s\n' "$(tildify "$d")" "$(hum "$(kb "$d")")"; done
+  for rc in "${rcs[@]}"; do printf '  · %s\n' "$(_f 'the PATH line in %s' "$(tildify "$rc")")"; done
+  [ -n "$tmps" ] && printf '  · %s\n' "$(_f 'temporary files of interrupted runs: %s' "$(cnt "$tmps")")"
+  [ -n "$left" ] && printf '%s' "$left" | while IFS= read -r l; do printf '  %s\n' "$l"; done
+  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ]; then _ 'Nothing to remove.'; echo; return; fi
+  if [ "$YES" != 1 ]; then
+    ans=$(ask "$(_ 'Remove all of this? [y/N] ')")
+    case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return ;; esac
+  fi
+
+  for d in "${dirs[@]}"; do rm -rf "$d"; done
+  for rc in "${rcs[@]}"; do   # the installer wrote a blank line, "# macup" and the export line
+    f=$(mktemp "${TMPDIR:-/tmp}/macup-rc.XXXXXX")
+    awk -v l="${lines[n]}" '{ a[NR] = $0 } END { for (i = 1; i <= NR; i++) {
+        if (a[i] == "# macup" && a[i+1] == l) { if (o > 0 && b[o] == "") o--; i++; continue }
+        b[++o] = a[i] } for (i = 1; i <= o; i++) print b[i] }' "$rc" >"$f" && cat "$f" >"$rc"
+    rm -f "$f"; n=$((n + 1))
+  done
+  [ -n "$tmps" ] && printf '%s\n' "$tmps" | while IFS= read -r f; do rm -f "$f"; done
+  for f in "${progs[@]}"; do rm -f "$f" 2>/dev/null; [ -e "$f" ] && { _f "Couldn't remove %s, remove it yourself: sudo rm %s" "$(tildify "$f")" "$f"; echo; }; done
+  if [ -n "$bp" ]; then
+    "$bp/bin/brew" uninstall macup >/dev/null 2>&1 || { _ "brew uninstall macup failed; run it yourself."; echo; }
+    tap="$(printf '%s' "${MACUP_REPO%%/*}" | tr '[:upper:]' '[:lower:]')/macup"
+    "$bp/bin/brew" tap 2>/dev/null | grep -qx "$tap" && "$bp/bin/brew" untap "$tap" >/dev/null 2>&1
+  fi
+  _ 'Removed.'; echo
 }
 
 mline(){ # key label hint
@@ -507,11 +563,17 @@ The downloaded file looks broken; nothing changed. || Завантажений �
 macup %s is already the latest. || macup %s — це вже остання версія.
 macup updated: %s → %s || macup оновлено: %s → %s
 Couldn't write %s || Не вдалося записати %s
-Remove %s? [y/N]  || Видалити %s? [y/N]
 Removed. || Видалено.
+macup uninstall removes: || macup uninstall видалить:
+the PATH line in %s || рядок PATH у %s
+temporary files of interrupted runs: %s || тимчасові файли перерваних запусків: %s
+Kept: the PATH line in %s, because %s also has %s || Лишаю рядок PATH у %s, бо в %s є ще %s
+Nothing to remove. || Нічого видаляти.
+Remove all of this? [y/N]  || Видалити все це? [y/N] 
+Couldn't remove %s, remove it yourself: sudo rm %s || Не вдалося видалити %s, видали сам: sudo rm %s
+brew uninstall macup failed; run it yourself. || brew uninstall macup не вдалося; запусти його сам.
+macup was installed with Homebrew. Update it with: brew upgrade macup || macup встановлено через Homebrew. Онови його так: brew upgrade macup
 Nothing removed. || Нічого не видалено.
-Also remove config, history and reports? [y/N]  || Видалити також налаштування, історію і звіти? [y/N]
-Removed config, history and reports. || Налаштування, історію і звіти видалено.
 Unknown command: %s || Невідома команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Набери  macup  для меню або  macup help  для всіх команд.
 Interrupted. Log: %s || Перервано. Лог: %s
@@ -672,7 +734,7 @@ Free disk space: %s (%s%%) || Вільно на диску: %s (%s%%)
 Needs attention (%s): || Потребує уваги (%s):
 Needs attention: %s || Потребує уваги: %s
 Needs attention: nothing || Потребує уваги: нічого
-macup %s is available: macup self-update || Вийшов macup %s: macup self-update
+macup %s is available: %s || Вийшов macup %s: %s
 Command log: %s || Лог команд: %s
 Report: %s · %s || Звіт: %s · %s
 Menu: macup · trends: macup history · help: macup help || Меню: macup · тренди: macup history · довідка: macup help
@@ -828,11 +890,17 @@ The downloaded file looks broken; nothing changed. || Скачанный фай�
 macup %s is already the latest. || macup %s — это уже последняя версия.
 macup updated: %s → %s || macup обновлён: %s → %s
 Couldn't write %s || Не удалось записать %s
-Remove %s? [y/N]  || Удалить %s? [y/N]
 Removed. || Удалено.
+macup uninstall removes: || macup uninstall удалит:
+the PATH line in %s || строку PATH в %s
+temporary files of interrupted runs: %s || временные файлы прерванных запусков: %s
+Kept: the PATH line in %s, because %s also has %s || Оставляю строку PATH в %s, потому что в %s есть ещё %s
+Nothing to remove. || Нечего удалять.
+Remove all of this? [y/N]  || Удалить всё это? [y/N] 
+Couldn't remove %s, remove it yourself: sudo rm %s || Не удалось удалить %s, удалите сами: sudo rm %s
+brew uninstall macup failed; run it yourself. || brew uninstall macup не удался; запустите его сами.
+macup was installed with Homebrew. Update it with: brew upgrade macup || macup установлен через Homebrew. Обновите его так: brew upgrade macup
 Nothing removed. || Ничего не удалено.
-Also remove config, history and reports? [y/N]  || Удалить также настройки, историю и отчёты? [y/N]
-Removed config, history and reports. || Настройки, история и отчёты удалены.
 Unknown command: %s || Неизвестная команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Наберите  macup  для меню или  macup help  для всех команд.
 Interrupted. Log: %s || Прервано. Лог: %s
@@ -993,7 +1061,7 @@ Free disk space: %s (%s%%) || Свободно на диске: %s (%s%%)
 Needs attention (%s): || Требует внимания (%s):
 Needs attention: %s || Требует внимания: %s
 Needs attention: nothing || Требует внимания: ничего
-macup %s is available: macup self-update || Вышел macup %s: macup self-update
+macup %s is available: %s || Вышел macup %s: %s
 Command log: %s || Лог команд: %s
 Report: %s · %s || Отчёт: %s · %s
 Menu: macup · trends: macup history · help: macup help || Меню: macup · тренды: macup history · справка: macup help
@@ -1109,7 +1177,7 @@ EOF
 load_lang
 
 # ---------------------------------------------------------------- arguments
-DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; YES=0
 cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
 trap cleanup_lang EXIT
 set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
@@ -1128,6 +1196,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --lang)               set_lang "$2"; shift ;;
   --lang=*)             set_lang "${1#*=}" ;;
   --no-color)           B=; G=; Y=; R=; C=; D=; N=; CL= ;;
+  -y|--yes)             YES=1 ;;
   lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
   last|--last)          CMD=last ;;
   history|--history)    CMD=history ;;
@@ -1169,8 +1238,10 @@ STAMP=$(date +%Y-%m-%d_%H-%M)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; rm -f "$BODY"; cleanup_lang; exit 130' INT
-trap 'rm -f "$BODY"; cleanup_lang' EXIT
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches"; }
+trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
+trap 'cleanup_body; cleanup_lang' EXIT
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"
@@ -2232,7 +2303,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
-  [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: macup self-update' "$NEWER")"
+  [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
   echo
   _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
 } >"$SUM"
@@ -2252,6 +2323,6 @@ printf '  %s\n' "$(_f 'Free disk space: %s (%s%%)' "$(hum "$FREE_AFTER")" "$PCT2
 if [ ${#WARN[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$Y" "$(_f 'Needs attention: %s' "${#WARN[@]}")" "$N"; for w in "${WARN[@]}"; do printf '    %s!%s %s\n' "$Y" "$N" "$w"; done
 else printf '  %s%s%s\n' "$G" "$(_ 'Needs attention: nothing')" "$N"; fi
-[ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: macup self-update' "$NEWER")" "$N"
+[ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")" "$N"
 printf '  %s%s%s\n' "$D" "$(_f 'Report: %s · %s' "$(tildify "$REPORT")" "$TIME")" "$N"
 printf '  %s%s%s\n' "$D" "$(_ 'Menu: macup · trends: macup history · help: macup help')" "$N"

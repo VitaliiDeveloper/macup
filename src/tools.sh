@@ -58,7 +58,7 @@ if task check.commands && have python3; then
   # a script whose interpreter is gone stays on PATH and only fails when run ("env: node: No such file or directory"):
   # an unlinked keg-only node@24, a pipx venv whose Python was removed by brew, a link to a deleted file
   CMDS=$(python3 - "$HOME/.local/bin" "$HOME/.npm-global/bin" /opt/homebrew/bin /usr/local/bin <<'PY' 2>/dev/null
-import glob, os, re, shutil, sys
+import os, shutil, sys
 n, groups = 0, {}
 dirs = {}
 for x in sys.argv[1:]:
@@ -87,11 +87,7 @@ for d in dirs.values():
             name = rest[0]
         elif os.access(args[0], os.X_OK): continue
         else: name = os.path.basename(args[0])
-        if "/pipx/venvs/" in os.path.realpath(p): hint = "pipx reinstall-all"
-        else:
-            kegs = [k for pre in ("/opt/homebrew", "/usr/local") for k in glob.glob(f"{pre}/opt/{name}@*/bin/{name}")]
-            # --overwrite too: a leftover npm in the prefix blocks the link, and brew's own advice for that omits --force
-            hint = "brew link --force --overwrite " + max(kegs, key=lambda k: [int(x) for x in re.findall(r"\d+", k)]).split("/")[-3] if kegs else "-"
+        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else "-"
         groups.setdefault((name, hint), set()).add(e.name)
 print(n)
 for (name, hint), names in sorted(groups.items()):
@@ -103,8 +99,13 @@ PY
   elif [ -z "$(printf '%s\n' "$CMDS" | tail -n +2)" ]; then ok 'Commands: all %s scripts in your bin folders can start' "$(printf '%s\n' "$CMDS" | head -1)"
   else
     while IFS=$'\t' read -r name hint names; do
-      if [ "$name" = - ]; then warn 'Commands that cannot start, the file they link to is gone (%s): %s' "$(tildify "$hint")" "$names"
-      elif [ "$hint" = - ]; then warn 'Commands that cannot start, %s is missing: %s' "$name" "$names"
+      if [ "$name" = - ]; then
+        fix="find $(tildify "$hint") -maxdepth 1 -type l ! -exec test -e {} \\; -print -delete"; [ -w "$hint" ] || fix="sudo $fix"
+        warn 'Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s' "$(tildify "$hint")" "$names" "$fix"
+        continue
+      fi
+      [ "$hint" = - ] && hint=$(link_fix "$name")
+      if [ -z "$hint" ]; then warn 'Commands that cannot start, %s is missing: %s' "$name" "$names"
       else warn 'Commands that cannot start, %s is missing: %s — run: %s' "$name" "$names" "$hint"; fi
     done <<EOF
 $(printf '%s\n' "$CMDS" | tail -n +2)

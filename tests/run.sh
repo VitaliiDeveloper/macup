@@ -150,8 +150,9 @@ rm -f "$H/xcrun.log"; env NODEFAULT=1 HOME="$H" /bin/bash "$M" clean --only clea
 if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" command -v node >/dev/null; then
   H="$W/nonode"; mkdir -p "$H/.local/bin" "$H/.agents" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"; echo '{"skills":{}}' >"$H/.agents/.skill-lock.json"
   for c in npm npx; do printf '#!/bin/bash\necho "%s $*" >>"$HOME/npm.log"\n' "$c" >"$H/.local/bin/$c"; chmod +x "$H/.local/bin/$c"; done
-  env PATH="$W/bin:/usr/bin:/bin" HOME="$H" /bin/bash "$M" check --only update.npm,update.skills --no-color </dev/null >"$W/nonode.out" 2>&1
-  grep -q 'npm globals: skipped, node is not on PATH' "$W/nonode.out" && grep -q 'Agent skills: skipped, node is not on PATH' "$W/nonode.out" \
+  mkdir -p "$H/brew/opt/node@24/bin"; cp /usr/bin/true "$H/brew/opt/node@24/bin/node"
+  env PATH="$W/bin:/usr/bin:/bin" HOME="$H" HOMEBREW_PREFIX="$H/brew" /bin/bash "$M" check --only update.npm,update.skills --no-color </dev/null >"$W/nonode.out" 2>&1
+  grep -q 'npm globals: skipped, node is not on PATH — run: brew link --.* node' "$W/nonode.out" && grep -q 'Agent skills: skipped, node is not on PATH — run: brew link' "$W/nonode.out" \
     && ! grep -q 'up to date' "$W/nonode.out" && [ ! -e "$H/npm.log" ] && pass "no node: npm globals and agent skills skipped with a warning" \
     || { fail "no node"; grep -iE 'npm|skill' "$W/nonode.out"; cat "$H/npm.log" 2>/dev/null; }
 else echo "SKIP no node: node is installed here"; fi
@@ -163,13 +164,24 @@ printf '#!/bin/sh\necho ok\n' >"$B/okscript"; cp /usr/bin/true "$B/okbinary"
 ln -s "$H/gone/python3.12" "$V/python"; printf '#!%s\n' "$V/python" >"$V/tool"; ln -s "$V/tool" "$B/pipxtool"
 for i in 01 02 03 04 05 06 07 08 09 10 11; do ln -s "$H/gone/thing" "$B/gone$i"; done; ln -s "$H/gone/thing" "$B/gonelink"
 mkdir -p "$H/Cellar/x/1/bin"; printf '#!/usr/bin/env macup_no_such_interp\n' >"$H/Cellar/x/1/bin/brewcli"; ln -s "$H/Cellar/x/1/bin/brewcli" "$B/brewcli"; ln -s "$H/Cellar/y/1/bin/gone" "$B/brewgone"   # Homebrew's own files are brew doctor's job
+# interpreters a formula has but brew has not linked: the newest versioned keg, or the unversioned formula
+printf '#!/usr/bin/env macup_keg_interp\n' >"$B/kegcli"; printf '#!/usr/bin/env macup_plain_interp\n' >"$B/plaincli"
+for k in macup_keg_interp@9/bin/macup_keg_interp macup_keg_interp@10/bin/macup_keg_interp macup_plain_interp/bin/macup_plain_interp; do mkdir -p "$H/brew/opt/${k%/*}"; cp /usr/bin/true "$H/brew/opt/$k"; done
 chmod +x "$B"/* "$V/tool" "$H/.npm-global/bin/flagcli" "$H/Cellar/x/1/bin/brewcli"
-env HOME="$H" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/cmds.out" 2>&1
+env HOME="$H" HOMEBREW_PREFIX="$H/brew" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/cmds.out" 2>&1
 grep -q 'cannot start, macup_no_such_interp is missing: flagcli, nodecli$' "$W/cmds.out" \
   && grep -q 'cannot start, python is missing: .*pipxtool.* — run: pipx reinstall-all' "$W/cmds.out" \
-  && grep -q 'cannot start, the file they link to is gone (~/.local/bin): gone01, .*, gone10 +2$' "$W/cmds.out" \
+  && grep -qF 'macup_keg_interp is missing: kegcli — run: brew link --force --overwrite macup_keg_interp@10' "$W/cmds.out" \
+  && grep -qF 'macup_plain_interp is missing: plaincli — run: brew link --overwrite macup_plain_interp' "$W/cmds.out" \
+  && grep -q 'cannot start, the file they link to is gone (~/.local/bin): gone01, .*, gone10 +2 — ' "$W/cmds.out" \
+  && grep -qF 'gone10 +2 — remove dead links there: find ~/.local/bin -maxdepth 1 -type l ! -exec test -e {} \; -print -delete' "$W/cmds.out" \
   && ! grep 'cannot start' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
   && pass "commands that cannot start are listed with a fix; working ones are not" || { fail "commands that cannot start"; cat "$W/cmds.out"; }
+# only the fake home's line: the real /opt/homebrew/bin and /usr/local/bin are scanned too, and their fix may need sudo
+fix=$(sed -n 's|.*(~/\.local/bin): .* — remove dead links there: \(find ~/\.local/bin .*\)$|\1|p' "$W/cmds.out" | head -1)
+[ -n "$fix" ] && (HOME="$H"; eval "$fix") >/dev/null 2>&1 </dev/null
+[ -n "$fix" ] && [ ! -L "$B/gone01" ] && [ ! -L "$B/gonelink" ] && [ -e "$B/okscript" ] && [ -e "$B/okbinary" ] && [ -L "$B/pipxtool" ] && [ -L "$B/brewcli" ] \
+  && pass "the dead-link fix removes only dead links" || { fail "dead-link fix: $fix"; ls -la "$B"; }
 
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"

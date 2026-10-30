@@ -43,7 +43,12 @@ EOF
 fi
 
 # npm and npx are node scripts: with node unlinked (keg-only node@24) they stay on PATH but cannot run
-node_ok(){ have node || { warn '%s: skipped, node is not on PATH' "$1"; return 1; }; }
+node_ok(){
+  have node && return 0
+  local fix; fix=$(link_fix node)
+  if [ -n "$fix" ]; then warn '%s: skipped, node is not on PATH — run: %s' "$1" "$fix"; else warn '%s: skipped, node is not on PATH' "$1"; fi
+  return 1
+}
 
 if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'

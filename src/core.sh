@@ -171,6 +171,15 @@ done_upd(){ UPDATED+=("$(_f "$@")"); }
 run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
 have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
             case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
+link_fix(){ # interpreter → the brew link that puts it back on PATH; nothing when no formula has it
+            local p v=""
+            for p in ${HOMEBREW_PREFIX:-} /opt/homebrew /usr/local; do
+              [ -x "$p/opt/$1/bin/$1" ] && { echo "brew link --overwrite $1"; return; }
+              v="$v$(ls -d "$p/opt/$1"@*/bin/"$1" 2>/dev/null)"$'\n'
+            done
+            # --overwrite too: a leftover npm in the prefix blocks the link, and brew's own advice for that omits --force
+            v=$(printf '%s' "$v" | awk -F/ 'NF{print $(NF-2)}' | sort -t@ -k2 -V | tail -1)
+            [ -n "$v" ] && echo "brew link --force --overwrite $v"; }
 cnt()     { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi; }
 lines()   { [ -n "$1" ] && printf '%s\n' "$1" | while IFS= read -r l; do [ -n "$l" ] && sub "$l"; done; }
 kb()      { if [ -e "$1" ]; then du -sk "$1" 2>/dev/null | awk '{s+=$1} END{print s+0}'; else echo 0; fi; }

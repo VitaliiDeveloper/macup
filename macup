@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.4.0"
+MACUP_VERSION="2.5.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
 set -o pipefail

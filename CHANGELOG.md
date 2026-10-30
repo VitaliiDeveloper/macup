@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.0 — 2026-10-30
+
+- **App and browser caches are found by their folder layout, not a list of names.** Any Chromium, Electron or Firefox-based app is covered (Chrome, Edge, Brave, Comet, Slack, Discord, Notion and others; App Store apps keep theirs in a container macOS does not let macup into): a cache folder next to Chromium's own files in Application Support, the same folders in `~/Library/Caches`, Firefox's `cache2`. Browsers stay aggressive, apps are safe. An app macup has no name for is skipped while any process has a file open in its folders. In Application Support only what is inside a cache folder can be deleted, so Chrome's profile caches are now cleaned while passwords, history and cookies are never touched.
+- **New check: commands that cannot start.** Scripts in `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin` and `/usr/local/bin` whose interpreter is gone (an unlinked keg-only `node@24`, a pipx tool whose Python was removed) or whose link points at a deleted file, with the fix when there is one (`brew link --force --overwrite node@24`, `pipx reinstall-all`).
+- npm globals and agent skills say "skipped, node is not on PATH" when npm/npx are there but node is not. npm globals used to show a false "up to date" and agent skills only "update failed".
+- Downloaded app updates waiting to be installed (Sparkle, ShipIt) are never deleted. Arc's cache used to include its pending update, and the pick list offered VS Code's.
+- Electron caches are also looked for in `Default/` and `Partitions/*`, and in `~/Library/Caches` (Codex keeps most of its cache there). Postman, Slack, Discord, Notion, Obsidian and Signal are named. An app also counts as open while a process uses its folder as `--user-data-dir` (Application Support/Codex belongs to ChatGPT).
+- Unavailable simulators: also Xcode's parallel-test clones (`XCTestDevices`), with their real size in `check`; skipped while Xcode or xcodebuild runs.
+- `--deep` lists the largest folders in Application Support.
+
 ## 2.3.2 — 2026-10-11
 
 - `macup check`: the updates section is now titled "Update status (check only, nothing installed)", not "Available updates", because ✓ lines mean up to date. The line for agent skills, pipx and uv, which a check cannot version-check, says they are not checked in this mode and `macup update` updates them (no count that looked like pending updates).

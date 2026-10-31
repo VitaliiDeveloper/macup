@@ -1,7 +1,5 @@
 # macup
 
-**English** · [Українська](README.uk.md) · [Русский](README.ru.md)
-
 [![CI](https://github.com/VitaliiDeveloper/macup/actions/workflows/ci.yml/badge.svg)](https://github.com/VitaliiDeveloper/macup/actions/workflows/ci.yml)
 
 One command to update, clean and check a developer's Mac.

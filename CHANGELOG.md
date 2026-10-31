@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.1 — 2026-10-31
+
+- **App Store updates say what is going on.** `macup update` lists the apps first (`Xcode (27.1 → 27.2)`), then:
+  - asks for the Mac password on its own line, saying it is for the App Store updates, and only when sudo has none cached. mas used to ask a bare `Password:` stuck to the step line.
+  - updates one app at a time, with a line that shows the step (downloading, installing) and the time, every second. The Xcode install prints nothing for many minutes, so it used to look hung.
+  - reports each app on its own: updated, or not installed with the App Store to open.
+- Without a password (no terminal, or sudo refused) mas does not run and macup says the updates need it.
+- `macup check` lists App Store updates without their ids.
+
 ## 2.6.0 — 2026-10-30
 
 - **Homebrew:** `brew install vitaliideveloper/macup/macup`. `macup self-update` and the "newer macup" notice say `brew upgrade macup` for a Homebrew install, and the installer leaves Homebrew's link alone.

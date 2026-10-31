@@ -4,7 +4,7 @@
 
 One command to update, clean and check a developer's Mac.
 
-<!-- TODO: GIF of `macup check`: the checks, the "What can be cleaned" list, picking items, the summary -->
+![macup check: system, security and update checks, then a numbered list of what can be cleaned](docs/images/check.svg)
 
 ## Why
 
@@ -111,36 +111,15 @@ macup uninstall
 
 ## Usage
 
-Start with `macup check`. It lists what can be cleaned, then lets you pick:
-
-<!-- TODO: the sizes and versions in the two examples below come from the previous README; replace them with output from a real run if they are not -->
-
-```
-▸ What can be cleaned
-    1  safe           3.1 GB  Xcode DerivedData
-    2  safe           1.4 GB  uv cache
-    3  standard       640 MB  Older Node.js versions (nvm): 20.5.0, 18.17.0
-    4  aggressive     2.5 GB  Arc cache
-
-Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:
-```
+Start with `macup check`. It lists what can be cleaned, then lets you pick (the screenshot at the top).
 
 Every run ends with a summary and saves a report to `~/Library/Logs/macup/`:
 
-```
-━━━━━━━━━━━━━━━━ Summary ━━━━━━━━━━━━━━━━
-  Updated: 2
-    · Claude Code 2.1.280 → 2.1.286
-    · Homebrew: formulae: 4, casks: 1
-  Freed: 14.2 GB
-  Free disk space: 212.4 GB (23%)
-  Needs attention: 1
-    ! Time Machine: last backup 2026-09-20 (11 days ago)
-  Report: ~/Library/Logs/macup/macup_2026-10-01_14-05.md · 3m 12s
-  Menu: macup · trends: macup history · help: macup help
-```
+![The end of macup all: cleanup results and the summary with updates, freed space and what needs attention](docs/images/summary.svg)
 
-<!-- TODO: screenshot of the interactive menu (plain `macup`) -->
+Plain `macup` opens a menu:
+
+![The macup menu: check, update and clean, deep check, history, reports, settings, language](docs/images/menu.svg)
 
 ### Commands
 

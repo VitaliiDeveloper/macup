@@ -157,6 +157,22 @@ if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" co
     || { fail "no node"; grep -iE 'npm|skill' "$W/nonode.out"; cat "$H/npm.log" 2>/dev/null; }
 else echo "SKIP no node: node is installed here"; fi
 
+# --- App Store: the list comes first, then one app at a time with its own result; no password means nothing runs
+# mas and sudo are exported functions: macup puts /opt/homebrew/bin first in PATH, so a fake file would lose to the real mas
+H="$W/mas"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+mas(){ case $1 in outdated) printf '        1  Foo          (1.0    -> 1.1)\n123456789  Bar Baz Pro  (2.10.3 -> 3.0)\n' ;; upgrade) echo "mas $*" >>"$HOME/mas.log"; [ "$2" = 1 ] ;; esac; }
+sudo(){ [ -z "$NOSUDO" ]; }
+export -f mas sudo
+env HOME="$H" /bin/bash "$M" update --only update.mas --no-color </dev/null >"$W/mas.out" 2>&1
+grep -q '^      Bar Baz Pro (2.10.3 → 3.0)$' "$W/mas.out" && grep -q '✓ App Store: Foo (1.0 → 1.1)$' "$W/mas.out" \
+  && grep -q '! App Store: updates not installed: Bar Baz Pro (2.10.3 → 3.0) — open the App Store' "$W/mas.out" \
+  && [ "$(cat "$H/mas.log")" = "$(printf 'mas upgrade 1\nmas upgrade 123456789')" ] && pass "App Store: list, then each app with its result" \
+  || { fail "App Store update"; grep 'App Store\|→' "$W/mas.out"; cat "$H/mas.log" 2>/dev/null; }
+rm -f "$H/mas.log"; env NOSUDO=1 HOME="$H" /bin/bash "$M" update --only update.mas --no-color </dev/null >"$W/mas.out" 2>&1
+grep -q 'updates not installed: 2 — they need your Mac password' "$W/mas.out" && [ ! -e "$H/mas.log" ] && pass "App Store: no password, mas never runs" \
+  || { fail "App Store without a password"; grep 'App Store' "$W/mas.out"; }
+unset -f mas sudo
+
 # --- commands that cannot start: missing interpreter, pipx venv whose Python is gone, broken link; working ones stay quiet
 H="$W/cmds"; B="$H/.local/bin"; V="$H/.local/pipx/venvs/tool/bin"; mkdir -p "$B" "$H/.npm-global/bin" "$V" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
 printf '#!/usr/bin/env macup_no_such_interp\n' >"$B/nodecli"; printf '#!/usr/bin/env -S macup_no_such_interp --flag\n' >"$H/.npm-global/bin/flagcli"

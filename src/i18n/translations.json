@@ -487,13 +487,33 @@
     "uk": "App Store: усе актуальне",
     "ru": "App Store: всё актуально"
   },
-  "App Store: apps updated: %s": {
-    "uk": "App Store: оновлено програм: %s",
-    "ru": "App Store: обновлено приложений: %s"
+  "Mac password to install App Store updates:": {
+    "uk": "Пароль від Мака, щоб встановити оновлення App Store:",
+    "ru": "Пароль от Мака, чтобы установить обновления App Store:"
   },
-  "App Store: apps: %s": {
-    "uk": "App Store: програм: %s",
-    "ru": "App Store: приложений: %s"
+  "App Store: updates not installed: %s — they need your Mac password": {
+    "uk": "App Store: не встановилися оновлення: %s — потрібен пароль від Мака",
+    "ru": "App Store: не установились обновления: %s — нужен пароль от Мака"
+  },
+  "Processing": {
+    "uk": "підготовка",
+    "ru": "подготовка"
+  },
+  "Downloading": {
+    "uk": "завантаження",
+    "ru": "загрузка"
+  },
+  "Downloaded": {
+    "uk": "завантажено",
+    "ru": "загружено"
+  },
+  "Updating": {
+    "uk": "встановлення",
+    "ru": "установка"
+  },
+  "Updated": {
+    "uk": "встановлено",
+    "ru": "установлено"
   },
   "App Store: updates not installed: %s — open the App Store": {
     "uk": "App Store: не встановилися оновлення: %s — відкрий App Store",

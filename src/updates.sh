@@ -132,11 +132,24 @@ fi
 if task update.mas; then
   if have mas; then
     step 'App Store'
-    OM=$(mas outdated 2>/dev/null); NM=$(cnt "$OM")
+    # "497799835 Xcode (27.1 → 27.2)": the id for mas, the rest for people
+    OM=$(mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
-      if run mas upgrade; then ok 'App Store: apps updated: %s' "$NM"; done_upd 'App Store: apps: %s' "$NM"; else warn 'App Store: updates not installed: %s — open the App Store' "$NM"; fi
-    else warn 'App Store: updates: %s' "$NM"; lines "$OM"; fi
+      info 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"
+      i=0
+      while read -r id app; do
+        [ -z "$id" ] && continue; i=$((i + 1))
+        # mas runs itself through sudo, which would ask a bare "Password:" in the middle of the step line
+        if ! sudo -n true 2>/dev/null && ! { { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; }; then
+          warn 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break
+        fi
+        if tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
+        else warn 'App Store: updates not installed: %s — open the App Store' "$app"; fi
+      done <<EOF
+$OM
+EOF
+    else warn 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"; fi
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 

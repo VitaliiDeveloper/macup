@@ -170,6 +170,22 @@ mdonly()  { md "    - $*"; }
 step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
 run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
+TICK=""
+tick()    { # label cmd… — run; on a terminal the step line counts the time and shows the command's latest "==> " phase, so a long job does not look hung
+            [ -t 1 ] && [ -n "$CL" ] || { shift; run "$@"; return; }
+            local label=$1 from w rc; shift
+            from=$(($(cat "$RAW" 2>/dev/null | wc -l) + 2))   # past the "$ cmd" line run writes
+            w=$(($(tput cols 2>/dev/null || echo 80) - 30)); [ "$w" -lt 10 ] && w=10
+            label=${label:0:$w}   # a wrapped line would be left behind on every redraw
+            ( t0=$SECONDS
+              while kill -0 $$ 2>/dev/null; do
+                ph=$(tail -n +"$from" "$RAW" | sed -n 's/^==> \([A-Za-z]*\).*/\1/p' | tail -1); s=$((SECONDS - t0))
+                printf '%s  %s… %s%s · %d:%02d%s' "$CL" "$D" "$label" "${ph:+ · $(_ "$ph")}" $((s / 60)) $((s % 60)) "$N"
+                sleep 1
+              done ) & TICK=$!
+            run "$@"; rc=$?
+            kill "$TICK" 2>/dev/null; wait "$TICK" 2>/dev/null; TICK=""
+            return $rc; }
 have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
             case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
 link_fix(){ # interpreter → the brew link that puts it back on PATH; nothing when no formula has it

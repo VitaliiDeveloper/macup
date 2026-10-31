@@ -170,6 +170,22 @@ mdonly()  { md "    - $*"; }
 step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
 run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
+TICK=""
+tick()    { # label cmd… — run; on a terminal the step line counts the time and shows the command's latest "==> " phase, so a long job does not look hung
+            [ -t 1 ] && [ -n "$CL" ] || { shift; run "$@"; return; }
+            local label=$1 from w rc; shift
+            from=$(($(cat "$RAW" 2>/dev/null | wc -l) + 2))   # past the "$ cmd" line run writes
+            w=$(($(tput cols 2>/dev/null || echo 80) - 30)); [ "$w" -lt 10 ] && w=10
+            label=${label:0:$w}   # a wrapped line would be left behind on every redraw
+            ( t0=$SECONDS
+              while kill -0 $$ 2>/dev/null; do
+                ph=$(tail -n +"$from" "$RAW" | sed -n 's/^==> \([A-Za-z]*\).*/\1/p' | tail -1); s=$((SECONDS - t0))
+                printf '%s  %s… %s%s · %d:%02d%s' "$CL" "$D" "$label" "${ph:+ · $(_ "$ph")}" $((s / 60)) $((s % 60)) "$N"
+                sleep 1
+              done ) & TICK=$!
+            run "$@"; rc=$?
+            kill "$TICK" 2>/dev/null; wait "$TICK" 2>/dev/null; TICK=""
+            return $rc; }
 have()    { local p; p=$(command -v "$1" 2>/dev/null) || return 1
             case "$p" in /usr/bin/python3|/usr/bin/pip3|/usr/bin/swift|/usr/bin/xcrun|/usr/bin/xcodebuild|/usr/bin/git) [ "$CLT_OK" = 1 ] ;; esac; }
 link_fix(){ # interpreter → the brew link that puts it back on PATH; nothing when no formula has it
@@ -640,8 +656,13 @@ Homebrew: formulae: %s, casks: %s || Homebrew: формули: %s, програ�
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: застаріли — формули: %s, програми: %s
 Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy-auto-updates
 App Store: up to date || App Store: усе актуальне
-App Store: apps updated: %s || App Store: оновлено програм: %s
-App Store: apps: %s || App Store: програм: %s
+Mac password to install App Store updates: || Пароль від Мака, щоб встановити оновлення App Store:
+App Store: updates not installed: %s — they need your Mac password || App Store: не встановилися оновлення: %s — потрібен пароль від Мака
+Processing || підготовка
+Downloading || завантаження
+Downloaded || завантажено
+Updating || встановлення
+Updated || встановлено
 App Store: updates not installed: %s — open the App Store || App Store: не встановилися оновлення: %s — відкрий App Store
 App Store: updates: %s || App Store: оновлень: %s
 App Store apps aren't checked: brew install mas || App Store не перевіряється: brew install mas
@@ -967,8 +988,13 @@ Homebrew: formulae: %s, casks: %s || Homebrew: формулы: %s, прилож�
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: устарели — формулы: %s, приложения: %s
 Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy-auto-updates
 App Store: up to date || App Store: всё актуально
-App Store: apps updated: %s || App Store: обновлено приложений: %s
-App Store: apps: %s || App Store: приложений: %s
+Mac password to install App Store updates: || Пароль от Мака, чтобы установить обновления App Store:
+App Store: updates not installed: %s — they need your Mac password || App Store: не установились обновления: %s — нужен пароль от Мака
+Processing || подготовка
+Downloading || загрузка
+Downloaded || загружено
+Updating || установка
+Updated || установлено
 App Store: updates not installed: %s — open the App Store || App Store: не установились обновления: %s — откройте App Store
 App Store: updates: %s || App Store: обновлений: %s
 App Store apps aren't checked: brew install mas || App Store не проверяется: brew install mas
@@ -1240,7 +1266,7 @@ RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 # the cleaners keep lists in $BODY.rt and $BODY.caches while they run
 cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches"; }
-trap 'printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
+trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
 trap 'cleanup_body; cleanup_lang' EXIT
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
@@ -1474,11 +1500,24 @@ fi
 if task update.mas; then
   if have mas; then
     step 'App Store'
-    OM=$(mas outdated 2>/dev/null); NM=$(cnt "$OM")
+    # "497799835 Xcode (27.1 → 27.2)": the id for mas, the rest for people
+    OM=$(mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
-      if run mas upgrade; then ok 'App Store: apps updated: %s' "$NM"; done_upd 'App Store: apps: %s' "$NM"; else warn 'App Store: updates not installed: %s — open the App Store' "$NM"; fi
-    else warn 'App Store: updates: %s' "$NM"; lines "$OM"; fi
+      info 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"
+      i=0
+      while read -r id app; do
+        [ -z "$id" ] && continue; i=$((i + 1))
+        # mas runs itself through sudo, which would ask a bare "Password:" in the middle of the step line
+        if ! sudo -n true 2>/dev/null && ! { { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; }; then
+          warn 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break
+        fi
+        if tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
+        else warn 'App Store: updates not installed: %s — open the App Store' "$app"; fi
+      done <<EOF
+$OM
+EOF
+    else warn 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"; fi
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 

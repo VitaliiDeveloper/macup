@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="551" height="470" viewBox="0 0 551 470" role="img" aria-label="macup all">
+<title>macup all</title>
+<rect width="551" height="470" rx="10" fill="#17181c"/>
+<rect x="0.5" y="0.5" width="550" height="469" rx="10" fill="none" stroke="#33353c"/>
+<path d="M10.5 0.5h530a10 10 0 0 1 10 10v23h-550v-23a10 10 0 0 1 10-10z" fill="#26272d"/>
+<circle cx="22" cy="17" r="6" fill="#ff5f57"/><circle cx="42" cy="17" r="6" fill="#febc2e"/><circle cx="62" cy="17" r="6" fill="#28c840"/>
+<text x="275.5" y="21.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#9a9ea8">macup all</text>
+<g font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="13" xml:space="preserve">
+<text x="22.0" y="64" fill="#5cc8dc" font-weight="bold">▸</text>
+<text x="37.6" y="64" fill="#5cc8dc" font-weight="bold" textLength="54.6" lengthAdjust="spacing">Cleanup</text>
+<text x="37.6" y="84" fill="#5fd38d">✓</text>
+<text x="53.2" y="84" fill="#d6d8de" textLength="241.8" lengthAdjust="spacing">Xcode DerivedData: freed 3.1 GB</text>
+<text x="37.6" y="104" fill="#5fd38d">✓</text>
+<text x="53.2" y="104" fill="#d6d8de" textLength="171.6" lengthAdjust="spacing">uv cache: freed 1.4 GB</text>
+<text x="37.6" y="124" fill="#5fd38d">✓</text>
+<text x="53.2" y="124" fill="#d6d8de" textLength="304.2" lengthAdjust="spacing">Visual Studio Code caches: freed 920 MB</text>
+<text x="37.6" y="144" fill="#5fd38d">✓</text>
+<text x="53.2" y="144" fill="#d6d8de" textLength="296.4" lengthAdjust="spacing">Old logs &amp; crash reports: freed 210 MB</text>
+<text x="37.6" y="164" fill="#7d818c">·</text>
+<text x="53.2" y="164" fill="#d6d8de" textLength="163.8" lengthAdjust="spacing">Cursor caches: 480 MB</text>
+<text x="224.8" y="164" fill="#d6d8de">—</text>
+<text x="240.4" y="164" fill="#d6d8de" textLength="226.2" lengthAdjust="spacing">skipped while the app is open</text>
+<text x="22.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="29.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="37.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="45.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="53.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="61.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="68.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="76.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="84.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="92.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="100.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="107.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="115.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="123.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="131.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="139.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="154.6" y="204" fill="#f2f3f5" font-weight="bold" textLength="54.6" lengthAdjust="spacing">Summary</text>
+<text x="217.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="224.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="232.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="240.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="248.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="256.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="263.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="271.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="279.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="287.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="295.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="302.8" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="310.6" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="318.4" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="326.2" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="334.0" y="204" fill="#f2f3f5" font-weight="bold">━</text>
+<text x="37.6" y="224" fill="#5fd38d" textLength="78.0" lengthAdjust="spacing">Updated: 3</text>
+<text x="53.2" y="244" fill="#d6d8de">·</text>
+<text x="68.8" y="244" fill="#d6d8de" textLength="148.2" lengthAdjust="spacing">Claude Code 2.1.280</text>
+<text x="224.8" y="244" fill="#d6d8de">→</text>
+<text x="240.4" y="244" fill="#d6d8de" textLength="54.6" lengthAdjust="spacing">2.1.286</text>
+<text x="53.2" y="264" fill="#d6d8de">·</text>
+<text x="68.8" y="264" fill="#d6d8de" textLength="241.8" lengthAdjust="spacing">Homebrew: formulae: 4, casks: 1</text>
+<text x="53.2" y="284" fill="#d6d8de">·</text>
+<text x="68.8" y="284" fill="#d6d8de" textLength="171.6" lengthAdjust="spacing">App Store: Xcode (27.1</text>
+<text x="248.2" y="284" fill="#d6d8de">→</text>
+<text x="263.8" y="284" fill="#d6d8de" textLength="39.0" lengthAdjust="spacing">27.2)</text>
+<text x="37.6" y="304" fill="#5fd38d" textLength="101.4" lengthAdjust="spacing">Freed: 5.6 GB</text>
+<text x="37.6" y="324" fill="#e8c468" textLength="460.2" lengthAdjust="spacing">Skipped because the app is open (1), quit it and run again:</text>
+<text x="53.2" y="344" fill="#d6d8de">·</text>
+<text x="68.8" y="344" fill="#d6d8de" textLength="171.6" lengthAdjust="spacing">Cursor caches (480 MB)</text>
+<text x="37.6" y="364" fill="#d6d8de" textLength="241.8" lengthAdjust="spacing">Free disk space: 192.7 GB (39%)</text>
+<text x="37.6" y="384" fill="#e8c468" textLength="140.4" lengthAdjust="spacing">Needs attention: 1</text>
+<text x="53.2" y="404" fill="#e8c468">!</text>
+<text x="68.8" y="404" fill="#d6d8de" textLength="390.0" lengthAdjust="spacing">Time Machine: last backup 2026-10-20 (11 days ago)</text>
+<text x="37.6" y="424" fill="#7d818c" textLength="421.2" lengthAdjust="spacing">Report: ~/Library/Logs/macup/macup_2026-10-31_14-05.md</text>
+<text x="466.6" y="424" fill="#7d818c">·</text>
+<text x="482.2" y="424" fill="#7d818c" textLength="46.8" lengthAdjust="spacing">3m 12s</text>
+<text x="37.6" y="444" fill="#7d818c" textLength="85.8" lengthAdjust="spacing">Menu: macup</text>
+<text x="131.2" y="444" fill="#7d818c">·</text>
+<text x="146.8" y="444" fill="#7d818c" textLength="163.8" lengthAdjust="spacing">trends: macup history</text>
+<text x="318.4" y="444" fill="#7d818c">·</text>
+<text x="334.0" y="444" fill="#7d818c" textLength="124.8" lengthAdjust="spacing">help: macup help</text>
+</g></svg>

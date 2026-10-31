@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="762" height="730" viewBox="0 0 762 730" role="img" aria-label="macup check">
+<title>macup check</title>
+<rect width="762" height="730" rx="10" fill="#17181c"/>
+<rect x="0.5" y="0.5" width="761" height="729" rx="10" fill="none" stroke="#33353c"/>
+<path d="M10.5 0.5h741a10 10 0 0 1 10 10v23h-761v-23a10 10 0 0 1 10-10z" fill="#26272d"/>
+<circle cx="22" cy="17" r="6" fill="#ff5f57"/><circle cx="42" cy="17" r="6" fill="#febc2e"/><circle cx="62" cy="17" r="6" fill="#28c840"/>
+<text x="381.0" y="21.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#9a9ea8">macup check</text>
+<g font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" font-size="13" xml:space="preserve">
+<text x="22.0" y="64" fill="#c792ea" font-weight="bold">❯</text>
+<text x="37.6" y="64" fill="#ffffff" font-weight="bold" textLength="85.8" lengthAdjust="spacing">macup check</text>
+<text x="22.0" y="84" fill="#f2f3f5" font-weight="bold" textLength="85.8" lengthAdjust="spacing">macup 2.6.1</text>
+<text x="115.6" y="84" fill="#d6d8de">·</text>
+<text x="131.2" y="84" fill="#d6d8de" textLength="39.0" lengthAdjust="spacing">check</text>
+<text x="178.0" y="84" fill="#d6d8de">·</text>
+<text x="193.6" y="84" fill="#d6d8de" textLength="390.0" lengthAdjust="spacing">nothing is installed or deleted unless you pick it</text>
+<text x="22.0" y="124" fill="#5cc8dc" font-weight="bold">▸</text>
+<text x="37.6" y="124" fill="#5cc8dc" font-weight="bold" textLength="46.8" lengthAdjust="spacing">System</text>
+<text x="37.6" y="144" fill="#5fd38d">✓</text>
+<text x="53.2" y="144" fill="#d6d8de" textLength="148.2" lengthAdjust="spacing">macOS 27.2 (26B123)</text>
+<text x="209.2" y="144" fill="#d6d8de">·</text>
+<text x="224.8" y="144" fill="#d6d8de" textLength="54.6" lengthAdjust="spacing">Mac15,7</text>
+<text x="287.2" y="144" fill="#d6d8de">·</text>
+<text x="302.8" y="144" fill="#d6d8de" textLength="70.2" lengthAdjust="spacing">up 3 days</text>
+<text x="37.6" y="164" fill="#5fd38d">✓</text>
+<text x="53.2" y="164" fill="#d6d8de" textLength="288.6" lengthAdjust="spacing">Disk: 187.1 GB free of 494.4 GB (37%)</text>
+<text x="37.6" y="184" fill="#5fd38d">✓</text>
+<text x="53.2" y="184" fill="#d6d8de" textLength="226.2" lengthAdjust="spacing">Disk health (SMART): Verified</text>
+<text x="37.6" y="204" fill="#5fd38d">✓</text>
+<text x="53.2" y="204" fill="#d6d8de" textLength="280.8" lengthAdjust="spacing">Memory: 36 GB, 48% free, swap 1.2 GB</text>
+<text x="37.6" y="224" fill="#5fd38d">✓</text>
+<text x="53.2" y="224" fill="#d6d8de" textLength="421.2" lengthAdjust="spacing">Battery: 86% charged, 212 cycles, 94% capacity, Normal</text>
+<text x="22.0" y="264" fill="#5cc8dc" font-weight="bold">▸</text>
+<text x="37.6" y="264" fill="#5cc8dc" font-weight="bold" textLength="62.4" lengthAdjust="spacing">Security</text>
+<text x="37.6" y="284" fill="#5fd38d">✓</text>
+<text x="53.2" y="284" fill="#d6d8de" textLength="101.4" lengthAdjust="spacing">FileVault: on</text>
+<text x="37.6" y="304" fill="#5fd38d">✓</text>
+<text x="53.2" y="304" fill="#d6d8de" textLength="93.6" lengthAdjust="spacing">Firewall: on</text>
+<text x="37.6" y="324" fill="#5fd38d">✓</text>
+<text x="53.2" y="324" fill="#d6d8de" textLength="241.8" lengthAdjust="spacing">System Integrity Protection: on</text>
+<text x="37.6" y="344" fill="#e8c468">!</text>
+<text x="53.2" y="344" fill="#d6d8de" textLength="390.0" lengthAdjust="spacing">Time Machine: last backup 2026-10-20 (11 days ago)</text>
+<text x="22.0" y="384" fill="#5cc8dc" font-weight="bold">▸</text>
+<text x="37.6" y="384" fill="#5cc8dc" font-weight="bold" textLength="351.0" lengthAdjust="spacing">Update status (check only, nothing installed)</text>
+<text x="37.6" y="404" fill="#5fd38d">✓</text>
+<text x="53.2" y="404" fill="#d6d8de" textLength="148.2" lengthAdjust="spacing">Claude Code 2.1.286</text>
+<text x="37.6" y="424" fill="#e8c468">!</text>
+<text x="53.2" y="424" fill="#d6d8de" textLength="140.4" lengthAdjust="spacing">Homebrew: outdated</text>
+<text x="201.4" y="424" fill="#d6d8de">—</text>
+<text x="217.0" y="424" fill="#d6d8de" textLength="163.8" lengthAdjust="spacing">formulae: 4, casks: 1</text>
+<text x="68.8" y="444" fill="#7d818c" textLength="171.6" lengthAdjust="spacing">node (26.1.0) &lt; 26.2.0</text>
+<text x="68.8" y="464" fill="#7d818c" textLength="304.2" lengthAdjust="spacing">visual-studio-code (1.106.0) != 1.106.2</text>
+<text x="37.6" y="484" fill="#5fd38d">✓</text>
+<text x="53.2" y="484" fill="#d6d8de" textLength="179.4" lengthAdjust="spacing">npm globals: up to date</text>
+<text x="37.6" y="504" fill="#5fd38d">✓</text>
+<text x="53.2" y="504" fill="#d6d8de" textLength="163.8" lengthAdjust="spacing">App Store: up to date</text>
+<text x="22.0" y="544" fill="#5cc8dc" font-weight="bold">▸</text>
+<text x="37.6" y="544" fill="#5cc8dc" font-weight="bold" textLength="148.2" lengthAdjust="spacing">What can be cleaned</text>
+<text x="53.2" y="564" fill="#d6d8de">1</text>
+<text x="76.6" y="564" fill="#5fd38d" textLength="31.2" lengthAdjust="spacing">safe</text>
+<text x="193.6" y="564" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">3.1 GB</text>
+<text x="256.0" y="564" fill="#d6d8de" textLength="132.6" lengthAdjust="spacing">Xcode DerivedData</text>
+<text x="53.2" y="584" fill="#d6d8de">2</text>
+<text x="76.6" y="584" fill="#5fd38d" textLength="31.2" lengthAdjust="spacing">safe</text>
+<text x="193.6" y="584" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">1.4 GB</text>
+<text x="256.0" y="584" fill="#d6d8de" textLength="62.4" lengthAdjust="spacing">uv cache</text>
+<text x="53.2" y="604" fill="#d6d8de">3</text>
+<text x="76.6" y="604" fill="#5fd38d" textLength="31.2" lengthAdjust="spacing">safe</text>
+<text x="193.6" y="604" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">920 MB</text>
+<text x="256.0" y="604" fill="#d6d8de" textLength="195.0" lengthAdjust="spacing">Visual Studio Code caches</text>
+<text x="53.2" y="624" fill="#d6d8de">4</text>
+<text x="76.6" y="624" fill="#e8c468" textLength="62.4" lengthAdjust="spacing">standard</text>
+<text x="193.6" y="624" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">2.2 GB</text>
+<text x="256.0" y="624" fill="#d6d8de" textLength="101.4" lengthAdjust="spacing">Gradle caches</text>
+<text x="53.2" y="644" fill="#d6d8de">5</text>
+<text x="76.6" y="644" fill="#e8c468" textLength="62.4" lengthAdjust="spacing">standard</text>
+<text x="193.6" y="644" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">640 MB</text>
+<text x="256.0" y="644" fill="#d6d8de" textLength="351.0" lengthAdjust="spacing">Older Node.js versions (nvm): 20.5.0, 18.17.0</text>
+<text x="53.2" y="664" fill="#d6d8de">6</text>
+<text x="76.6" y="664" fill="#f0707a" textLength="78.0" lengthAdjust="spacing">aggressive</text>
+<text x="193.6" y="664" fill="#d6d8de" textLength="46.8" lengthAdjust="spacing">2.5 GB</text>
+<text x="256.0" y="664" fill="#d6d8de" textLength="70.2" lengthAdjust="spacing">Arc cache</text>
+<text x="22.0" y="704" fill="#d6d8de" textLength="686.4" lengthAdjust="spacing">Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:</text>
+<text x="716.2" y="704" fill="#ffffff" font-weight="bold" textLength="23.4" lengthAdjust="spacing">1-5</text>
+</g></svg>

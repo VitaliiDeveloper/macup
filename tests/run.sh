@@ -237,6 +237,30 @@ echo build >"$H/Library/Developer/Xcode/Archives/a.xcarchive/Info.plist"
 env HOME="$H" /bin/bash "$M" update --only check.sizes --no-color </dev/null >"$W/sizes.out" 2>&1
 grep -q 'Xcode Archives: ' "$W/sizes.out" && pass "update shows Xcode Archives size" || { fail "update: sizes"; cat "$W/sizes.out"; }
 
+# --- grok: a check reads `grok update --check --json`; an install that brew or npm owns is left alone
+mkdir -p "$W/gbin"; printf '#!/bin/bash\nprintf "%%s" "$FAKE_GROK"\n' >"$W/gbin/grok"; chmod +x "$W/gbin/grok"
+grok_check(){ env HOME="$H" PATH="$W/gbin:$PATH" FAKE_GROK="$1" /bin/bash "$M" check --only update.grok --no-color </dev/null 2>&1; }
+grok_check '{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"internal","error":null}' | grep -q 'Grok CLI: 1.0.70 → 1.0.77 available' && pass "grok: newer version shown" || fail "grok: newer version"
+grok_check '{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"brew","error":null}' | grep -q 'Grok' && fail "grok: brew install is not ours" || pass "grok: brew install left to brew"
+grok_check '{"currentVersion":"1.0.70","latestVersion":null,"installer":"internal","error":"offline"}' | grep -q 'Grok CLI: could not check' && pass "grok: failed check said" || fail "grok: failed check"
+
+# --- apps outside Homebrew: compared with the cached cask catalog (the download fails here, so the cache is used)
+printf '#!/bin/bash\nexit 1\n' >"$W/gbin/curl"; chmod +x "$W/gbin/curl"
+H="$W/apps"; mkdir -p "$H/.config/macup" "$H/Library/Caches/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+apps_check(){ env HOME="$H" PATH="$W/gbin:$PATH" /bin/bash "$M" check --only update.apps --no-color </dev/null 2>&1; }
+apps_check | grep -q 'Apps outside Homebrew and the App Store: could not check' && pass "apps: no catalog is said" || fail "apps: no catalog"
+for a in MacupOld:1.0 MacupNew:2.0 MacupMas:1.0 MacupTwin:1.0; do
+  mkdir -p "$H/Applications/${a%:*}.app/Contents"
+  printf '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>%s</string></dict></plist>' "${a#*:}" >"$H/Applications/${a%:*}.app/Contents/Info.plist"
+done
+mkdir -p "$H/Applications/MacupMas.app/Contents/_MASReceipt"
+cask(){ printf '{"token":"%s","version":"%s","artifacts":[{"app":["%s.app"]}]}' "$@"; }
+printf '[%s,%s,%s,%s,%s,%s]' "$(cask macup-old 2.0,abc MacupOld)" "$(cask macup-old@beta 3.0 MacupOld)" "$(cask macup-new 2.0 MacupNew)" \
+  "$(cask macup-mas 2.0 MacupMas)" "$(cask macup-twin 2.0 MacupTwin)" "$(cask macup-twin-desktop 7.0 MacupTwin)" >"$H/Library/Caches/macup/cask.json"
+o=$(apps_check)
+echo "$o" | grep -q 'Apps with a newer version: 1 ' && echo "$o" | grep -q 'MacupOld 1.0 → 2.0$' && ! echo "$o" | grep -qE 'MacupNew|MacupMas|MacupTwin' \
+  && pass "apps: only the app behind its catalog version is listed" || { fail "apps: list"; echo "$o" | head; }
+
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?

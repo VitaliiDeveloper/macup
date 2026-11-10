@@ -153,6 +153,49 @@ EOF
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 
+# apps installed from a download update themselves; macup only says which are behind the Homebrew catalog
+if task update.apps && have curl && have python3; then
+  step 'Apps outside Homebrew and the App Store'
+  CJ="$CACHE_DIR/cask.json"; mkdir -p "${CJ%/*}"
+  # -z: downloads the catalog (about 20 MB) only when it changed; a failed download keeps the last copy
+  if [ -s "$CJ" ]; then ZF=(-z "$CJ"); else ZF=(); fi
+  curl -fsSL --compressed --max-time 60 "${ZF[@]}" -o "$CJ.new" https://formulae.brew.sh/api/cask.json 2>/dev/null && [ -s "$CJ.new" ] && mv "$CJ.new" "$CJ"; rm -f "$CJ.new"
+  if ! OA=$([ -s "$CJ" ] && python3 - "$CJ" "$HOME/Applications" <<'PY' 2>/dev/null
+import json, os, plistlib, re, subprocess, sys
+def key(v): return [int(x) for x in re.findall(r"\d+", v)]
+try: brewed = set(subprocess.run(["brew", "list", "--cask"], capture_output=True, text=True).stdout.split())
+except OSError: brewed = set()
+casks = {}
+for c in json.load(open(sys.argv[1])):
+    if "@" in c["token"]: continue   # beta and other channels of the same app
+    for art in c.get("artifacts", []):
+        for a in (art.get("app") or [])[:1]:
+            if isinstance(a, str): casks.setdefault(a, []).append((c["token"], str(c.get("version", "")).split(",")[0]))
+# brew upgrade covers casks brew installed; two casks with one app name and different versions are different apps (Telegram)
+latest = {a: v[0][1] for a, v in casks.items() if not brewed & {t for t, _ in v} and len({n for _, n in v}) == 1}
+checked, behind = 0, []
+for d in ("/Applications", sys.argv[2]):
+    if not os.path.isdir(d): continue
+    for a in sorted(os.listdir(d)):
+        p = os.path.join(d, a)
+        if a not in latest or os.path.isdir(p + "/Contents/_MASReceipt"): continue
+        try: i = plistlib.load(open(p + "/Contents/Info.plist", "rb"))
+        except Exception: continue
+        have = str(i.get("CFBundleShortVersionString") or i.get("CFBundleVersion") or "").split(" ")[0]
+        new = latest[a]
+        if not have or new == "latest": continue
+        checked += 1
+        if key(new) > key(have): behind.append("%s %s → %s" % (a[:-4], have, new))
+print(checked); print("\n".join(behind))
+PY
+); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
+  else
+    AN=$(printf '%s\n' "$OA" | head -1); OA=$(printf '%s\n' "$OA" | tail -n +2)
+    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s — open or restart them to update' "$(cnt "$OA")"; lines "$OA"
+    elif [ "$AN" -gt 0 ]; then ok 'Apps outside Homebrew and the App Store: up to date (%s checked)' "$AN"; fi
+  fi
+fi
+
 LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
@@ -165,6 +208,29 @@ have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --a
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
 have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+
+if task update.grok && have grok; then
+  GJ=$(grok update --check --json 2>/dev/null)
+  gj(){ printf '%s' "$GJ" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
+  v1=$(gj currentVersion); latest=$(gj latestVersion)
+  if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
+  elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
+    if UPD; then
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || warn '%s: update failed (see log)' 'Grok CLI'; fi
+      upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
+    elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
+    else ok '%s %s' 'Grok CLI' "$v1"; fi
+  fi
+fi
+
+# agy updates itself in ~/.local/bin and has no read-only check
+if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
+  if UPD; then
+    v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
+    run agy update || warn '%s: update failed (see log)' 'Antigravity CLI'
+    upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
+  else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
+fi
 [ -n "$LATER" ] && info 'Not checked in this mode, updated by macup update: %s' "$LATER"
 
 if task check.macos_updates; then

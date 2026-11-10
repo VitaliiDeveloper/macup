@@ -14,7 +14,8 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 
 ## Features
 
-- **Updates in one go:** Homebrew, App Store apps (with [`mas`](https://github.com/mas-cli/mas)), Claude Code and its plugins, global npm packages, agent skills in `~/.agents`, pipx, uv tools, rustup, Oh My Zsh, GitHub CLI extensions.
+- **Updates in one go:** Homebrew, App Store apps (with [`mas`](https://github.com/mas-cli/mas)), Claude Code and its plugins, global npm packages, agent skills in `~/.agents`, pipx, uv tools, rustup, Oh My Zsh, GitHub CLI extensions, Grok CLI, Antigravity CLI.
+- **Apps that update themselves are listed when they fall behind.** Apps installed from a download (Cursor, VS Code, Postman, …) are compared with the Homebrew catalog; macup installs nothing for them.
 - **macOS updates are reported, never installed.**
 - **Cleanup in three levels:** `safe` (rebuilds itself, the default), `standard` (downloaded again), `aggressive` (browser caches; apps may sign you out).
 - **Check first, pick later:** `macup check` changes nothing. It lists what can be cleaned, with sizes, and lets you pick.

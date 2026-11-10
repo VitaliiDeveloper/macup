@@ -17,6 +17,7 @@ case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { e
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/macup"
 CONF="$CONF_DIR/config"
 STATE_DIR="$HOME/Library/Application Support/macup"
+CACHE_DIR="$HOME/Library/Caches/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
 DEV="$HOME/Library/Developer"
@@ -54,6 +55,9 @@ update.uv|on|uv-installed tools
 update.rustup|on|Rust toolchains
 update.omz|on|Oh My Zsh
 update.gh_ext|on|GitHub CLI extensions
+update.grok|on|Grok CLI (grok update)
+update.agy|on|Antigravity CLI (agy update)
+update.apps|on|Apps outside Homebrew and the App Store that update themselves (only reported)
 clean.derived_data|on|Xcode DerivedData (skipped while Xcode is open)
 clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
 clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
@@ -82,7 +86,7 @@ clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
 clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
-clean.ai_tools|on|Codex temporary files and unfinished downloads; chat history is never touched
+clean.ai_tools|on|Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched
 clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
 clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
@@ -458,7 +462,7 @@ uninstall(){ # macup, older copies, settings, history, reports, the installer's 
     case " ${progs[*]} " in *" $f "*) continue ;; esac
     progs+=("$f")
   done
-  for d in "$CONF_DIR" "$STATE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
+  for d in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
   for rc in "$HOME/.zshrc" "$HOME/.bash_profile"; do
     l=$(awk 'p && /^export PATH="/ {print; exit} {p = ($0 == "# macup")}' "$rc" 2>/dev/null); [ -n "$l" ] || continue
     dir=$(printf '%s' "$l" | sed 's/^export PATH="//; s/:\$PATH"$//'); dir=${dir/\$HOME/$HOME}
@@ -821,7 +825,6 @@ Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other f
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кеш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)
-Codex temporary files and unfinished downloads; chat history is never touched || Тимчасові файли й недокачані завантаження Codex; історія чатів не чіпається
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
 Docker build cache and dangling images (never containers or volumes) || Кеш збірки Docker і непотрібні образи (не контейнери й не томи)
 Docker build cache and dangling images (standard); never containers or volumes || Кеш збірки Docker і непотрібні образи (стандартна); не контейнери й не томи
@@ -863,6 +866,16 @@ never || ніколи
 Erase simulator %s (%s): its apps and data are removed || Стерти симулятор %s (%s): його програми й дані зникнуть
 Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симулятори без використання %s+ днів (%s): %s — додати знову: Xcode → Devices and Simulators
 %s: failed (see log) || %s: не вдалося (див. лог)
+Grok CLI (grok update) || Grok CLI (grok update)
+Antigravity CLI (agy update) || Antigravity CLI (agy update)
+Apps outside Homebrew and the App Store that update themselves (only reported) || Програми поза Homebrew і App Store, що оновлюються самі (лише звіт)
+Apps outside Homebrew and the App Store || Програми поза Homebrew і App Store
+Apps with a newer version: %s — open or restart them to update || Програми з новішою версією: %s — відкрийте або перезапустіть їх, щоб оновити
+Apps outside Homebrew and the App Store: up to date (%s checked) || Програми поза Homebrew і App Store: актуальні (перевірено: %s)
+%s: could not check for updates || %s: не вдалося перевірити оновлення
+%s: %s → %s available || %s: доступна %s → %s
+Old Antigravity CLI versions left by its updates || Старі версії Antigravity CLI, що лишилися після оновлень
+Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1153,7 +1166,6 @@ Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other f
 Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache || Кэш Camera Raw: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)
-Codex temporary files and unfinished downloads; chat history is never touched || Временные файлы и недокачанные загрузки Codex; история чатов не трогается
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
 Docker build cache and dangling images (never containers or volumes) || Кэш сборки Docker и ненужные образы (не контейнеры и не тома)
 Docker build cache and dangling images (standard); never containers or volumes || Кэш сборки Docker и ненужные образы (стандартная); не контейнеры и не тома
@@ -1195,6 +1207,16 @@ never || никогда
 Erase simulator %s (%s): its apps and data are removed || Стереть симулятор %s (%s): его приложения и данные удалятся
 Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симуляторы без использования %s+ дней (%s): %s — добавить снова: Xcode → Devices and Simulators
 %s: failed (see log) || %s: не удалось (см. лог)
+Grok CLI (grok update) || Grok CLI (grok update)
+Antigravity CLI (agy update) || Antigravity CLI (agy update)
+Apps outside Homebrew and the App Store that update themselves (only reported) || Приложения вне Homebrew и App Store, которые обновляются сами (только отчёт)
+Apps outside Homebrew and the App Store || Приложения вне Homebrew и App Store
+Apps with a newer version: %s — open or restart them to update || Приложения с более новой версией: %s — откройте или перезапустите их, чтобы обновить
+Apps outside Homebrew and the App Store: up to date (%s checked) || Приложения вне Homebrew и App Store: актуальны (проверено: %s)
+%s: could not check for updates || %s: не удалось проверить обновления
+%s: %s → %s available || %s: доступна %s → %s
+Old Antigravity CLI versions left by its updates || Старые версии Antigravity CLI, оставшиеся после обновлений
+Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается
 EOF
   ;;
   esac
@@ -1521,6 +1543,49 @@ EOF
   else info "App Store apps aren't checked: brew install mas"; fi
 fi
 
+# apps installed from a download update themselves; macup only says which are behind the Homebrew catalog
+if task update.apps && have curl && have python3; then
+  step 'Apps outside Homebrew and the App Store'
+  CJ="$CACHE_DIR/cask.json"; mkdir -p "${CJ%/*}"
+  # -z: downloads the catalog (about 20 MB) only when it changed; a failed download keeps the last copy
+  if [ -s "$CJ" ]; then ZF=(-z "$CJ"); else ZF=(); fi
+  curl -fsSL --compressed --max-time 60 "${ZF[@]}" -o "$CJ.new" https://formulae.brew.sh/api/cask.json 2>/dev/null && [ -s "$CJ.new" ] && mv "$CJ.new" "$CJ"; rm -f "$CJ.new"
+  if ! OA=$([ -s "$CJ" ] && python3 - "$CJ" "$HOME/Applications" <<'PY' 2>/dev/null
+import json, os, plistlib, re, subprocess, sys
+def key(v): return [int(x) for x in re.findall(r"\d+", v)]
+try: brewed = set(subprocess.run(["brew", "list", "--cask"], capture_output=True, text=True).stdout.split())
+except OSError: brewed = set()
+casks = {}
+for c in json.load(open(sys.argv[1])):
+    if "@" in c["token"]: continue   # beta and other channels of the same app
+    for art in c.get("artifacts", []):
+        for a in (art.get("app") or [])[:1]:
+            if isinstance(a, str): casks.setdefault(a, []).append((c["token"], str(c.get("version", "")).split(",")[0]))
+# brew upgrade covers casks brew installed; two casks with one app name and different versions are different apps (Telegram)
+latest = {a: v[0][1] for a, v in casks.items() if not brewed & {t for t, _ in v} and len({n for _, n in v}) == 1}
+checked, behind = 0, []
+for d in ("/Applications", sys.argv[2]):
+    if not os.path.isdir(d): continue
+    for a in sorted(os.listdir(d)):
+        p = os.path.join(d, a)
+        if a not in latest or os.path.isdir(p + "/Contents/_MASReceipt"): continue
+        try: i = plistlib.load(open(p + "/Contents/Info.plist", "rb"))
+        except Exception: continue
+        have = str(i.get("CFBundleShortVersionString") or i.get("CFBundleVersion") or "").split(" ")[0]
+        new = latest[a]
+        if not have or new == "latest": continue
+        checked += 1
+        if key(new) > key(have): behind.append("%s %s → %s" % (a[:-4], have, new))
+print(checked); print("\n".join(behind))
+PY
+); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
+  else
+    AN=$(printf '%s\n' "$OA" | head -1); OA=$(printf '%s\n' "$OA" | tail -n +2)
+    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s — open or restart them to update' "$(cnt "$OA")"; lines "$OA"
+    elif [ "$AN" -gt 0 ]; then ok 'Apps outside Homebrew and the App Store: up to date (%s checked)' "$AN"; fi
+  fi
+fi
+
 LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
@@ -1533,6 +1598,29 @@ have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --a
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
 have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+
+if task update.grok && have grok; then
+  GJ=$(grok update --check --json 2>/dev/null)
+  gj(){ printf '%s' "$GJ" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
+  v1=$(gj currentVersion); latest=$(gj latestVersion)
+  if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
+  elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
+    if UPD; then
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || warn '%s: update failed (see log)' 'Grok CLI'; fi
+      upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
+    elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
+    else ok '%s %s' 'Grok CLI' "$v1"; fi
+  fi
+fi
+
+# agy updates itself in ~/.local/bin and has no read-only check
+if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
+  if UPD; then
+    v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
+    run agy update || warn '%s: update failed (see log)' 'Antigravity CLI'
+    upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
+  else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
+fi
 [ -n "$LATER" ] && info 'Not checked in this mode, updated by macup update: %s' "$LATER"
 
 if task check.macos_updates; then
@@ -2062,6 +2150,9 @@ L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtim
 [ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
 [ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+# agy update keeps the replaced binary next to the new one
+L=$(find "$HOME/.local/bin" -maxdepth 1 -type f -name 'agy.*.old' 2>/dev/null)
+[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
 
 # --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
 dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one per line

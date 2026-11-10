@@ -35,6 +35,7 @@ for v in 3.2.1 3.2.4; do blob "$H/.rbenv/versions/$v" 1024; done
 for v in 3.11.1 3.11.9; do blob "$H/.pyenv/versions/$v" 1024; done; blob "$H/.pyenv/versions/3.11.1/envs/myenv" 64   # has a virtualenv: stays
 blob "$L/Caches/ms-playwright/chromium-1100"; blob "$L/Caches/ms-playwright/chromium-1234"; blob "$L/Caches/ms-playwright/ffmpeg-1011" 64
 blob "$H/.codex/.tmp/git-abc"; old "$H/.codex/.tmp/git-abc"; blob "$H/.codex/.tmp/git-new" 64
+mkdir -p "$H/.local/bin"; dd if=/dev/zero of="$H/.local/bin/agy.1790781307826422000.old" bs=1024 count=6144 2>/dev/null; echo keep >"$H/.local/bin/agy.notes"
 blob "$H/.cache/codex-runtimes/codex-primary-runtime" 1024; blob "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"; old "$H/.cache/codex-runtimes/codex-runtime-install-XYZ"
 for a in Code Cursor Claude discord; do blob "$L/Application Support/$a/Cache/c"; blob "$L/Application Support/$a/Code Cache/js" 64; done
 P="$L/Application Support/Codex/Default/Partitions/browser"; blob "$P/Code Cache/js"; mkdir -p "$P/Local Storage"; echo site >"$P/Local Storage/leveldb"   # site data next to a partition cache: stays

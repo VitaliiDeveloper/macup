@@ -1147,10 +1147,6 @@
     "uk": "Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)",
     "ru": "История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)"
   },
-  "Codex temporary files and unfinished downloads; chat history is never touched": {
-    "uk": "Тимчасові файли й недокачані завантаження Codex; історія чатів не чіпається",
-    "ru": "Временные файлы и недокачанные загрузки Codex; история чатов не трогается"
-  },
   "DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache": {
     "uk": "Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache",
     "ru": "Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache"
@@ -1314,5 +1310,45 @@
   "%s: failed (see log)": {
     "uk": "%s: не вдалося (див. лог)",
     "ru": "%s: не удалось (см. лог)"
+  },
+  "Grok CLI (grok update)": {
+    "uk": "Grok CLI (grok update)",
+    "ru": "Grok CLI (grok update)"
+  },
+  "Antigravity CLI (agy update)": {
+    "uk": "Antigravity CLI (agy update)",
+    "ru": "Antigravity CLI (agy update)"
+  },
+  "Apps outside Homebrew and the App Store that update themselves (only reported)": {
+    "uk": "Програми поза Homebrew і App Store, що оновлюються самі (лише звіт)",
+    "ru": "Приложения вне Homebrew и App Store, которые обновляются сами (только отчёт)"
+  },
+  "Apps outside Homebrew and the App Store": {
+    "uk": "Програми поза Homebrew і App Store",
+    "ru": "Приложения вне Homebrew и App Store"
+  },
+  "Apps with a newer version: %s — open or restart them to update": {
+    "uk": "Програми з новішою версією: %s — відкрийте або перезапустіть їх, щоб оновити",
+    "ru": "Приложения с более новой версией: %s — откройте или перезапустите их, чтобы обновить"
+  },
+  "Apps outside Homebrew and the App Store: up to date (%s checked)": {
+    "uk": "Програми поза Homebrew і App Store: актуальні (перевірено: %s)",
+    "ru": "Приложения вне Homebrew и App Store: актуальны (проверено: %s)"
+  },
+  "%s: could not check for updates": {
+    "uk": "%s: не вдалося перевірити оновлення",
+    "ru": "%s: не удалось проверить обновления"
+  },
+  "%s: %s → %s available": {
+    "uk": "%s: доступна %s → %s",
+    "ru": "%s: доступна %s → %s"
+  },
+  "Old Antigravity CLI versions left by its updates": {
+    "uk": "Старі версії Antigravity CLI, що лишилися після оновлень",
+    "ru": "Старые версии Antigravity CLI, оставшиеся после обновлений"
+  },
+  "Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched": {
+    "uk": "Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається",
+    "ru": "Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается"
   }
 }

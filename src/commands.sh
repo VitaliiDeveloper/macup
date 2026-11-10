@@ -130,7 +130,7 @@ uninstall(){ # macup, older copies, settings, history, reports, the installer's 
     case " ${progs[*]} " in *" $f "*) continue ;; esac
     progs+=("$f")
   done
-  for d in "$CONF_DIR" "$STATE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
+  for d in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR" "$LOGDIR"; do [ -n "$HOME" ] && [ -d "$d" ] && dirs+=("$d"); done
   for rc in "$HOME/.zshrc" "$HOME/.bash_profile"; do
     l=$(awk 'p && /^export PATH="/ {print; exit} {p = ($0 == "# macup")}' "$rc" 2>/dev/null); [ -n "$l" ] || continue
     dir=$(printf '%s' "$l" | sed 's/^export PATH="//; s/:\$PATH"$//'); dir=${dir/\$HOME/$HOME}

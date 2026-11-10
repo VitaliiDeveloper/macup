@@ -17,6 +17,7 @@ case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { e
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/macup"
 CONF="$CONF_DIR/config"
 STATE_DIR="$HOME/Library/Application Support/macup"
+CACHE_DIR="$HOME/Library/Caches/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
 DEV="$HOME/Library/Developer"
@@ -54,6 +55,9 @@ update.uv|on|uv-installed tools
 update.rustup|on|Rust toolchains
 update.omz|on|Oh My Zsh
 update.gh_ext|on|GitHub CLI extensions
+update.grok|on|Grok CLI (grok update)
+update.agy|on|Antigravity CLI (agy update)
+update.apps|on|Apps outside Homebrew and the App Store that update themselves (only reported)
 clean.derived_data|on|Xcode DerivedData (skipped while Xcode is open)
 clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
 clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
@@ -82,7 +86,7 @@ clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
 clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
-clean.ai_tools|on|Codex temporary files and unfinished downloads; chat history is never touched
+clean.ai_tools|on|Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched
 clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
 clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)

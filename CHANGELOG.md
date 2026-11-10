@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.7.0 — 2026-11-10
+
+- **Grok CLI and Antigravity CLI are updated** (`grok update`, `agy update`). `macup check` shows when a newer Grok is out; Antigravity has no read-only check, so a check lists it as updated by `macup update`. A Grok installed by brew or npm is left to that step.
+- **Apps that update themselves are listed when they fall behind.** Apps in `/Applications` and `~/Applications` that Homebrew and the App Store did not install (Cursor, VS Code, Postman, OBS, …) are compared with the Homebrew catalog by their `.app` name, and the ones behind are listed with both versions: open or restart them to update. macup installs nothing for them. Task id: `update.apps`.
+  - The catalog (formulae.brew.sh, about 20 MB) is kept in `~/Library/Caches/macup` and downloaded again only when it changed. `macup uninstall` removes it.
+  - Beta casks are ignored; an app name that two casks share with different versions (Telegram) is skipped.
+- **Old Antigravity CLI versions** (`~/.local/bin/agy.*.old`, about 190 MB each) are cleaned at the safe level.
+
 ## 2.6.1 — 2026-10-31
 
 - **App Store updates say what is going on.** `macup update` lists the apps first (`Xcode (27.1 → 27.2)`), then:

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.1 — 2026-11-10
+
+- **App Store updates ask for the Mac password once.** sudo forgets it after 5 minutes, and one install (Xcode, Final Cut Pro) takes longer, so macup asked again before the next app. It now keeps sudo's password fresh in the background until the App Store updates end, and stops when macup exits or is interrupted.
+
 ## 2.7.0 — 2026-11-10
 
 - **Grok CLI and Antigravity CLI are updated** (`grok update`, `agy update`). `macup check` shows when a newer Grok is out; Antigravity has no read-only check, so a check lists it as updated by `macup update`. A Grok installed by brew or npm is left to that step.

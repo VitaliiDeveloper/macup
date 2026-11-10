@@ -63,7 +63,8 @@ BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 # the cleaners keep lists in $BODY.rt and $BODY.caches while they run
 cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches"; }
 trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
-trap 'cleanup_body; cleanup_lang' EXIT
+stop_sudo_keep(){ [ -n "${SUDO_KEEP:-}" ] && kill "$SUDO_KEEP" 2>/dev/null; SUDO_KEEP=""; }   # the loop that keeps sudo's password fresh during App Store updates
+trap 'cleanup_body; cleanup_lang; stop_sudo_keep' EXIT
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"

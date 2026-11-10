@@ -144,11 +144,14 @@ if task update.mas; then
         if ! sudo -n true 2>/dev/null && ! { { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; }; then
           warn 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break
         fi
+        # sudo forgets the password after 5 minutes and one install (Xcode) takes longer, so it would ask again for the next app
+        [ -z "${SUDO_KEEP:-}" ] && { while kill -0 $$ 2>/dev/null; do sleep 50; sudo -n -v || break; done </dev/null >/dev/null 2>&1 & SUDO_KEEP=$!; }
         if tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
         else warn 'App Store: updates not installed: %s — open the App Store' "$app"; fi
       done <<EOF
 $OM
 EOF
+      stop_sudo_keep
     else warn 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"; fi
   else info "App Store apps aren't checked: brew install mas"; fi
 fi

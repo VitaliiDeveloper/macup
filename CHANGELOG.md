@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.2 — 2026-11-11
+
+- **The summary names the apps that fell behind.** It showed only "Apps with a newer version: 14", and the list was in the section above. The names are now in the warning itself; the section still lists both versions.
+- **Dead links say whose leftovers they are.** "Dead links in /usr/local/bin, leftovers of removed Python.framework, node_modules/quicktype: …", and that they are safe to remove with the printed command.
+- **Time Machine can be turned off on its own:** `skip = check.time_machine`. The "no backup destination" warning says so. `--only check.security` still includes it.
+
 ## 2.7.1 — 2026-11-10
 
 - **App Store updates ask for the Mac password once.** sudo forgets it after 5 minutes, and one install (Xcode, Final Cut Pro) takes longer, so macup asked again before the next app. It now keeps sudo's password fresh in the background until the App Store updates end, and stops when macup exits or is interrupted.

@@ -77,15 +77,16 @@ if task check.security; then
   AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
   CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
   if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
-  TMD=$(tmutil destinationinfo 2>/dev/null)
-  if echo "$TMD" | grep -q 'Name'; then
+  # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
+  if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
+  elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then
     LB=$(tmutil latestbackup 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
     if [ -n "$LB" ]; then
       AGE=$(( ( $(date +%s) - $(date -j -f %Y-%m-%d "$LB" +%s 2>/dev/null || date +%s) ) / 86400 ))
       if [ "$AGE" -gt 7 ]; then warn 'Time Machine: last backup %s (%s days ago)' "$LB" "$AGE"; else ok 'Time Machine: last backup %s' "$LB"; fi
     else info 'Time Machine: configured (last backup date needs Full Disk Access for Terminal)'; fi
   else
-    warn 'Time Machine: no backup destination configured'
+    warn 'Time Machine: no backup destination configured — not using backups? hide this: skip = check.time_machine in %s' "$(tildify "$CONF")"
   fi
 fi
 

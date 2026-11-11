@@ -194,7 +194,8 @@ PY
 ); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
   else
     AN=$(printf '%s\n' "$OA" | head -1); OA=$(printf '%s\n' "$OA" | tail -n +2)
-    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s — open or restart them to update' "$(cnt "$OA")"; lines "$OA"
+    # the names go into the warning itself: the summary shows warnings without their detail lines
+    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s (%s) — open or restart them to update' "$(cnt "$OA")" "$(printf '%s\n' "$OA" | sed -E 's/ [^ ]+ → [^ ]+$//' | paste -sd, - | sed 's/,/, /g')"; lines "$OA"
     elif [ "$AN" -gt 0 ]; then ok 'Apps outside Homebrew and the App Store: up to date (%s checked)' "$AN"; fi
   fi
 fi

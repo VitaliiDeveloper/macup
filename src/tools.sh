@@ -58,9 +58,10 @@ if task check.commands && have python3; then
   # a script whose interpreter is gone stays on PATH and only fails when run ("env: node: No such file or directory"):
   # an unlinked keg-only node@24, a pipx venv whose Python was removed by brew, a link to a deleted file
   CMDS=$(python3 - "$HOME/.local/bin" "$HOME/.npm-global/bin" /opt/homebrew/bin /usr/local/bin <<'PY' 2>/dev/null
-import os, shutil, sys
-n, groups = 0, {}
+import os, re, shutil, sys
+n, groups, gone = 0, {}, {}
 dirs = {}
+home = os.path.normpath(os.path.expanduser("~"))
 for x in sys.argv[1:]:
     if os.path.isdir(x): dirs.setdefault(os.path.realpath(x), x)
 for d in dirs.values():
@@ -71,7 +72,13 @@ for d in dirs.values():
         # files Homebrew installed are brew doctor's job (libevent ships an `env python` script nobody runs)
         if "/Cellar/" in os.path.realpath(p): continue
         if not os.path.exists(p):
-            if os.path.islink(p): groups.setdefault(("-", d), set()).add(e.name)
+            if os.path.islink(p):
+                groups.setdefault(("-", d), set()).add(e.name)
+                # what was removed, so people know whose leftovers these are: Python.framework, Foo.app, node_modules/quicktype
+                t = os.path.normpath(os.path.join(d, os.readlink(p)))
+                m = re.search(r"[^/]+\.(?:framework|app)|node_modules/(?:@[^/]+/)?[^/]+", t)
+                t = m.group(0) if m else os.path.dirname(t)
+                gone.setdefault(d, set()).add("~" + t[len(home):] if t.startswith(home + "/") else t)
             continue
         if not os.path.isfile(p) or not os.access(p, os.X_OK): continue
         try:
@@ -92,16 +99,16 @@ for d in dirs.values():
 print(n)
 for (name, hint), names in sorted(groups.items()):
     names = sorted(names)
-    print(name, hint, ", ".join(names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""), sep="\t")
+    print(name, hint, ", ".join(names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""), ", ".join(sorted(gone.get(hint, ()))), sep="\t")
 PY
 )
   if [ -z "$CMDS" ]; then :   # the scan itself failed: no false "all can start"
   elif [ -z "$(printf '%s\n' "$CMDS" | tail -n +2)" ]; then ok 'Commands: all %s scripts in your bin folders can start' "$(printf '%s\n' "$CMDS" | head -1)"
   else
-    while IFS=$'\t' read -r name hint names; do
+    while IFS=$'\t' read -r name hint names from; do
       if [ "$name" = - ]; then
         fix="find $(tildify "$hint") -maxdepth 1 -type l ! -exec test -e {} \\; -print -delete"; [ -w "$hint" ] || fix="sudo $fix"
-        warn 'Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s' "$(tildify "$hint")" "$names" "$fix"
+        warn 'Dead links in %s, leftovers of removed %s: %s — safe to remove, run in Terminal: %s' "$(tildify "$hint")" "$from" "$names" "$fix"
         continue
       fi
       [ "$hint" = - ] && hint=$(link_fix "$name")

@@ -178,7 +178,7 @@ H="$W/cmds"; B="$H/.local/bin"; V="$H/.local/pipx/venvs/tool/bin"; mkdir -p "$B"
 printf '#!/usr/bin/env macup_no_such_interp\n' >"$B/nodecli"; printf '#!/usr/bin/env -S macup_no_such_interp --flag\n' >"$H/.npm-global/bin/flagcli"
 printf '#!/bin/sh\necho ok\n' >"$B/okscript"; cp /usr/bin/true "$B/okbinary"
 ln -s "$H/gone/python3.12" "$V/python"; printf '#!%s\n' "$V/python" >"$V/tool"; ln -s "$V/tool" "$B/pipxtool"
-for i in 01 02 03 04 05 06 07 08 09 10 11; do ln -s "$H/gone/thing" "$B/gone$i"; done; ln -s "$H/gone/thing" "$B/gonelink"
+for i in 01 02 03 04 05 06 07 08 09 10 11; do ln -s "$H/gone/thing" "$B/gone$i"; done; ln -s "$H/gone/thing" "$B/gonelink"; ln -s "$H/gone/Old.app/Contents/MacOS/old" "$B/oldapp"
 mkdir -p "$H/Cellar/x/1/bin"; printf '#!/usr/bin/env macup_no_such_interp\n' >"$H/Cellar/x/1/bin/brewcli"; ln -s "$H/Cellar/x/1/bin/brewcli" "$B/brewcli"; ln -s "$H/Cellar/y/1/bin/gone" "$B/brewgone"   # Homebrew's own files are brew doctor's job
 # interpreters a formula has but brew has not linked: the newest versioned keg, or the unversioned formula
 printf '#!/usr/bin/env macup_keg_interp\n' >"$B/kegcli"; printf '#!/usr/bin/env macup_plain_interp\n' >"$B/plaincli"
@@ -192,15 +192,22 @@ grep -q 'cannot start, macup_no_such_interp is missing: flagcli, nodecli$' "$W/c
   && grep -qF 'macup_keg_interp is missing: kegcli — run: brew link --force --overwrite macup_keg_interp@10' "$W/cmds.out" \
   && grep -qF 'macup_plain_interp is missing: plaincli — run: brew link --overwrite macup_plain_interp' "$W/cmds.out" \
   && grep -q 'cannot start, sh is missing: deadsh$' "$W/cmds.out" \
-  && grep -q 'cannot start, the file they link to is gone (~/.local/bin): gone01, .*, gone10 +2 — ' "$W/cmds.out" \
-  && grep -qF 'gone10 +2 — remove dead links there: find ~/.local/bin -maxdepth 1 -type l ! -exec test -e {} \; -print -delete' "$W/cmds.out" \
-  && ! grep 'cannot start' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
+  && grep -qF 'Dead links in ~/.local/bin, leftovers of removed Old.app, ~/gone: gone01, gone02,' "$W/cmds.out" \
+  && grep -qF 'gone10 +3 — safe to remove, run in Terminal: find ~/.local/bin -maxdepth 1 -type l ! -exec test -e {} \; -print -delete' "$W/cmds.out" \
+  && ! grep -E 'cannot start|Dead links' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
   && pass "commands that cannot start are listed with a fix; working ones are not" || { fail "commands that cannot start"; cat "$W/cmds.out"; }
 # only the fake home's line: the real /opt/homebrew/bin and /usr/local/bin are scanned too, and their fix may need sudo
-fix=$(sed -n 's|.*(~/\.local/bin): .* — remove dead links there: \(find ~/\.local/bin .*\)$|\1|p' "$W/cmds.out" | head -1)
+fix=$(sed -n 's|.*Dead links in ~/\.local/bin, .* run in Terminal: \(find ~/\.local/bin .*\)$|\1|p' "$W/cmds.out" | head -1)
 [ -n "$fix" ] && (HOME="$H"; eval "$fix") >/dev/null 2>&1 </dev/null
-[ -n "$fix" ] && [ ! -L "$B/gone01" ] && [ ! -L "$B/gonelink" ] && [ -e "$B/okscript" ] && [ -e "$B/okbinary" ] && [ -L "$B/pipxtool" ] && [ -L "$B/brewcli" ] \
+[ -n "$fix" ] && [ ! -L "$B/gone01" ] && [ ! -L "$B/gonelink" ] && [ ! -L "$B/oldapp" ] && [ -e "$B/okscript" ] && [ -e "$B/okbinary" ] && [ -L "$B/pipxtool" ] && [ -L "$B/brewcli" ] \
   && pass "the dead-link fix removes only dead links" || { fail "dead-link fix: $fix"; ls -la "$B"; }
+
+# --- Time Machine can be skipped on its own, and --only check.security still includes it
+H="$W/tm"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+tm(){ env HOME="$H" /bin/bash "$M" check --no-color "$@" </dev/null 2>&1; }
+tm --only check.security | grep -q 'Time Machine:' && ! tm --only check.security --skip check.time_machine | grep -q 'Time Machine:' \
+  && tm --only check.security --skip check.time_machine | grep -q 'FileVault' \
+  && pass "check.time_machine hides only Time Machine" || fail "check.time_machine"
 
 # --- uninstall removes every file macup made, keeps a PATH line other programs need, and leaves a Homebrew install to brew
 # it also looks for older copies in /usr/local/bin and /opt/homebrew/bin: never run it where a real one is there
@@ -258,7 +265,7 @@ cask(){ printf '{"token":"%s","version":"%s","artifacts":[{"app":["%s.app"]}]}' 
 printf '[%s,%s,%s,%s,%s,%s]' "$(cask macup-old 2.0,abc MacupOld)" "$(cask macup-old@beta 3.0 MacupOld)" "$(cask macup-new 2.0 MacupNew)" \
   "$(cask macup-mas 2.0 MacupMas)" "$(cask macup-twin 2.0 MacupTwin)" "$(cask macup-twin-desktop 7.0 MacupTwin)" >"$H/Library/Caches/macup/cask.json"
 o=$(apps_check)
-echo "$o" | grep -q 'Apps with a newer version: 1 ' && echo "$o" | grep -q 'MacupOld 1.0 → 2.0$' && ! echo "$o" | grep -qE 'MacupNew|MacupMas|MacupTwin' \
+echo "$o" | grep -q 'Apps with a newer version: 1 (MacupOld) ' && echo "$o" | grep -q 'MacupOld 1.0 → 2.0$' && ! echo "$o" | grep -qE 'MacupNew|MacupMas|MacupTwin' \
   && pass "apps: only the app behind its catalog version is listed" || { fail "apps: list"; echo "$o" | head; }
 
 # --- installer

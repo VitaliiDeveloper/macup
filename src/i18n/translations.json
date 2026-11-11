@@ -367,9 +367,9 @@
     "uk": "Time Machine: налаштовано (дата бекапу потребує повного доступу до диска для Terminal)",
     "ru": "Time Machine: настроена (для даты бэкапа нужен полный доступ к диску для Terminal)"
   },
-  "Time Machine: no backup destination configured": {
-    "uk": "Time Machine: диск для бекапів не налаштований",
-    "ru": "Time Machine: диск для бэкапов не настроен"
+  "Time Machine: no backup destination configured — not using backups? hide this: skip = check.time_machine in %s": {
+    "uk": "Time Machine: диск для бекапів не налаштований — не робиш бекапів? сховати це: skip = check.time_machine у %s",
+    "ru": "Time Machine: диск для бэкапов не настроен — не делаете бэкапов? скрыть это: skip = check.time_machine в %s"
   },
   "Updates": {
     "uk": "Оновлення",
@@ -923,9 +923,13 @@
     "uk": "Заряд, цикли, максимальна ємність, стан",
     "ru": "Заряд, циклы, максимальная ёмкость, состояние"
   },
-  "FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine": {
-    "uk": "FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine",
-    "ru": "FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine"
+  "FileVault, Firewall, SIP, Gatekeeper, automatic updates": {
+    "uk": "FileVault, брандмауер, SIP, Gatekeeper, автооновлення",
+    "ru": "FileVault, брандмауэр, SIP, Gatekeeper, автообновления"
+  },
+  "Time Machine: last backup date (part of check.security)": {
+    "uk": "Time Machine: дата останнього бекапу (частина check.security)",
+    "ru": "Time Machine: дата последнего бэкапа (часть check.security)"
   },
   "Third-party launch agents/daemons, orphaned ones pointing at deleted apps": {
     "uk": "Сторонні служби автозапуску, зокрема від видалених програм",
@@ -963,9 +967,9 @@
     "uk": "Команди: усі скрипти в папках bin запускаються (%s)",
     "ru": "Команды: все скрипты в папках bin запускаются (%s)"
   },
-  "Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s": {
-    "uk": "Команди не запускаються, файл, на який вони посилаються, видалено (%s): %s — прибери биті посилання там: %s",
-    "ru": "Команды не запускаются, файл, на который они ссылаются, удалён (%s): %s — удалите битые ссылки там: %s"
+  "Dead links in %s, leftovers of removed %s: %s — safe to remove, run in Terminal: %s": {
+    "uk": "Биті посилання в %s, залишки видаленого %s: %s — їх можна сміливо прибрати, команда для Терміналу: %s",
+    "ru": "Битые ссылки в %s, остатки удалённого %s: %s — их можно смело удалить, команда для Терминала: %s"
   },
   "Commands that cannot start, %s is missing: %s": {
     "uk": "Команди не запускаються, немає %s: %s",
@@ -1327,9 +1331,9 @@
     "uk": "Програми поза Homebrew і App Store",
     "ru": "Приложения вне Homebrew и App Store"
   },
-  "Apps with a newer version: %s — open or restart them to update": {
-    "uk": "Програми з новішою версією: %s — відкрийте або перезапустіть їх, щоб оновити",
-    "ru": "Приложения с более новой версией: %s — откройте или перезапустите их, чтобы обновить"
+  "Apps with a newer version: %s (%s) — open or restart them to update": {
+    "uk": "Програми з новішою версією: %s (%s) — відкрийте або перезапустіть їх, щоб оновити",
+    "ru": "Приложения с более новой версией: %s (%s) — откройте или перезапустите их, чтобы обновить"
   },
   "Apps outside Homebrew and the App Store: up to date (%s checked)": {
     "uk": "Програми поза Homebrew і App Store: актуальні (перевірено: %s)",

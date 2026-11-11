@@ -32,7 +32,8 @@ check.disk|on|Free space, disk health (SMART), local Time Machine snapshots
 check.memory|on|Memory pressure and swap usage
 check.cpu|on|Load average, top CPU and memory processes, thermal throttling
 check.battery|on|Charge, cycle count, maximum capacity, condition
-check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine
+check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates
+check.time_machine|on|Time Machine: last backup date (part of check.security)
 check.startup|on|Third-party launch agents/daemons, orphaned ones pointing at deleted apps
 check.mcp|on|Claude Code MCP servers that fail to connect
 check.brew_doctor|on|brew doctor warnings

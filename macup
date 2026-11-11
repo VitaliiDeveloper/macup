@@ -32,7 +32,8 @@ check.disk|on|Free space, disk health (SMART), local Time Machine snapshots
 check.memory|on|Memory pressure and swap usage
 check.cpu|on|Load average, top CPU and memory processes, thermal throttling
 check.battery|on|Charge, cycle count, maximum capacity, condition
-check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine
+check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates
+check.time_machine|on|Time Machine: last backup date (part of check.security)
 check.startup|on|Third-party launch agents/daemons, orphaned ones pointing at deleted apps
 check.mcp|on|Claude Code MCP servers that fail to connect
 check.brew_doctor|on|brew doctor warnings
@@ -630,7 +631,7 @@ Automatic security updates: on || Автоматичні оновлення бе
 Time Machine: last backup %s (%s days ago) || Time Machine: останній бекап %s (%s днів тому)
 Time Machine: last backup %s || Time Machine: останній бекап %s
 Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: налаштовано (дата бекапу потребує повного доступу до диска для Terminal)
-Time Machine: no backup destination configured || Time Machine: диск для бекапів не налаштований
+Time Machine: no backup destination configured — not using backups? hide this: skip = check.time_machine in %s || Time Machine: диск для бекапів не налаштований — не робиш бекапів? сховати це: skip = check.time_machine у %s
 Updates || Оновлення
 Skipped because the app is open (%s), quit it and run again: || Пропущено, бо застосунок відкритий (%s), закрий його й запусти знову:
 Update status (check only, nothing installed) || Стан оновлень (лише перевірка, нічого не встановлено)
@@ -769,7 +770,8 @@ Free space, disk health (SMART), local Time Machine snapshots || Вільне м
 Memory pressure and swap usage || Навантаження на пам'ять і swap
 Load average, top CPU and memory processes, thermal throttling || Навантаження CPU, найважчі процеси, перегрів
 Charge, cycle count, maximum capacity, condition || Заряд, цикли, максимальна ємність, стан
-FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine || FileVault, брандмауер, SIP, Gatekeeper, автооновлення, Time Machine
+FileVault, Firewall, SIP, Gatekeeper, automatic updates || FileVault, брандмауер, SIP, Gatekeeper, автооновлення
+Time Machine: last backup date (part of check.security) || Time Machine: дата останнього бекапу (частина check.security)
 Third-party launch agents/daemons, orphaned ones pointing at deleted apps || Сторонні служби автозапуску, зокрема від видалених програм
 Claude Code MCP servers that fail to connect || MCP-сервери Claude Code, що не підключаються
 brew doctor warnings || Попередження brew doctor
@@ -779,7 +781,7 @@ Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex || Версії
 Commands that cannot start: a missing interpreter (node, python) or a broken link || Команди, які не запускаються: немає інтерпретатора (node, python) або посилання зламане
 Checking commands || Перевірка команд
 Commands: all %s scripts in your bin folders can start || Команди: усі скрипти в папках bin запускаються (%s)
-Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s || Команди не запускаються, файл, на який вони посилаються, видалено (%s): %s — прибери биті посилання там: %s
+Dead links in %s, leftovers of removed %s: %s — safe to remove, run in Terminal: %s || Биті посилання в %s, залишки видаленого %s: %s — їх можна сміливо прибрати, команда для Терміналу: %s
 Commands that cannot start, %s is missing: %s || Команди не запускаються, немає %s: %s
 Commands that cannot start, %s is missing: %s — run: %s || Команди не запускаються, немає %s: %s — запусти: %s
 Docker disk usage (if Docker is running) || Місце, зайняте Docker (якщо він запущений)
@@ -870,7 +872,7 @@ Grok CLI (grok update) || Grok CLI (grok update)
 Antigravity CLI (agy update) || Antigravity CLI (agy update)
 Apps outside Homebrew and the App Store that update themselves (only reported) || Програми поза Homebrew і App Store, що оновлюються самі (лише звіт)
 Apps outside Homebrew and the App Store || Програми поза Homebrew і App Store
-Apps with a newer version: %s — open or restart them to update || Програми з новішою версією: %s — відкрийте або перезапустіть їх, щоб оновити
+Apps with a newer version: %s (%s) — open or restart them to update || Програми з новішою версією: %s (%s) — відкрийте або перезапустіть їх, щоб оновити
 Apps outside Homebrew and the App Store: up to date (%s checked) || Програми поза Homebrew і App Store: актуальні (перевірено: %s)
 %s: could not check for updates || %s: не вдалося перевірити оновлення
 %s: %s → %s available || %s: доступна %s → %s
@@ -971,7 +973,7 @@ Automatic security updates: on || Автоматические обновлен�
 Time Machine: last backup %s (%s days ago) || Time Machine: последний бэкап %s (%s дней назад)
 Time Machine: last backup %s || Time Machine: последний бэкап %s
 Time Machine: configured (last backup date needs Full Disk Access for Terminal) || Time Machine: настроена (для даты бэкапа нужен полный доступ к диску для Terminal)
-Time Machine: no backup destination configured || Time Machine: диск для бэкапов не настроен
+Time Machine: no backup destination configured — not using backups? hide this: skip = check.time_machine in %s || Time Machine: диск для бэкапов не настроен — не делаете бэкапов? скрыть это: skip = check.time_machine в %s
 Updates || Обновления
 Skipped because the app is open (%s), quit it and run again: || Пропущено, потому что приложение открыто (%s), закрой его и запусти снова:
 Update status (check only, nothing installed) || Состояние обновлений (только проверка, ничего не установлено)
@@ -1110,7 +1112,8 @@ Free space, disk health (SMART), local Time Machine snapshots || Свободн�
 Memory pressure and swap usage || Нагрузка на память и swap
 Load average, top CPU and memory processes, thermal throttling || Нагрузка CPU, самые тяжёлые процессы, перегрев
 Charge, cycle count, maximum capacity, condition || Заряд, циклы, максимальная ёмкость, состояние
-FileVault, Firewall, SIP, Gatekeeper, automatic updates, Time Machine || FileVault, брандмауэр, SIP, Gatekeeper, автообновления, Time Machine
+FileVault, Firewall, SIP, Gatekeeper, automatic updates || FileVault, брандмауэр, SIP, Gatekeeper, автообновления
+Time Machine: last backup date (part of check.security) || Time Machine: дата последнего бэкапа (часть check.security)
 Third-party launch agents/daemons, orphaned ones pointing at deleted apps || Сторонние службы автозапуска, в т. ч. от удалённых приложений
 Claude Code MCP servers that fail to connect || MCP-серверы Claude Code, которые не подключаются
 brew doctor warnings || Предупреждения brew doctor
@@ -1120,7 +1123,7 @@ Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex || Версии
 Commands that cannot start: a missing interpreter (node, python) or a broken link || Команды, которые не запускаются: нет интерпретатора (node, python) или ссылка битая
 Checking commands || Проверка команд
 Commands: all %s scripts in your bin folders can start || Команды: все скрипты в папках bin запускаются (%s)
-Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s || Команды не запускаются, файл, на который они ссылаются, удалён (%s): %s — удалите битые ссылки там: %s
+Dead links in %s, leftovers of removed %s: %s — safe to remove, run in Terminal: %s || Битые ссылки в %s, остатки удалённого %s: %s — их можно смело удалить, команда для Терминала: %s
 Commands that cannot start, %s is missing: %s || Команды не запускаются, нет %s: %s
 Commands that cannot start, %s is missing: %s — run: %s || Команды не запускаются, нет %s: %s — запустите: %s
 Docker disk usage (if Docker is running) || Место, занятое Docker (если он запущен)
@@ -1211,7 +1214,7 @@ Grok CLI (grok update) || Grok CLI (grok update)
 Antigravity CLI (agy update) || Antigravity CLI (agy update)
 Apps outside Homebrew and the App Store that update themselves (only reported) || Приложения вне Homebrew и App Store, которые обновляются сами (только отчёт)
 Apps outside Homebrew and the App Store || Приложения вне Homebrew и App Store
-Apps with a newer version: %s — open or restart them to update || Приложения с более новой версией: %s — откройте или перезапустите их, чтобы обновить
+Apps with a newer version: %s (%s) — open or restart them to update || Приложения с более новой версией: %s (%s) — откройте или перезапустите их, чтобы обновить
 Apps outside Homebrew and the App Store: up to date (%s checked) || Приложения вне Homebrew и App Store: актуальны (проверено: %s)
 %s: could not check for updates || %s: не удалось проверить обновления
 %s: %s → %s available || %s: доступна %s → %s
@@ -1377,15 +1380,16 @@ if task check.security; then
   AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
   CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
   if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
-  TMD=$(tmutil destinationinfo 2>/dev/null)
-  if echo "$TMD" | grep -q 'Name'; then
+  # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
+  if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
+  elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then
     LB=$(tmutil latestbackup 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
     if [ -n "$LB" ]; then
       AGE=$(( ( $(date +%s) - $(date -j -f %Y-%m-%d "$LB" +%s 2>/dev/null || date +%s) ) / 86400 ))
       if [ "$AGE" -gt 7 ]; then warn 'Time Machine: last backup %s (%s days ago)' "$LB" "$AGE"; else ok 'Time Machine: last backup %s' "$LB"; fi
     else info 'Time Machine: configured (last backup date needs Full Disk Access for Terminal)'; fi
   else
-    warn 'Time Machine: no backup destination configured'
+    warn 'Time Machine: no backup destination configured — not using backups? hide this: skip = check.time_machine in %s' "$(tildify "$CONF")"
   fi
 fi
 
@@ -1585,7 +1589,8 @@ PY
 ); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
   else
     AN=$(printf '%s\n' "$OA" | head -1); OA=$(printf '%s\n' "$OA" | tail -n +2)
-    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s — open or restart them to update' "$(cnt "$OA")"; lines "$OA"
+    # the names go into the warning itself: the summary shows warnings without their detail lines
+    if [ -n "$OA" ]; then warn 'Apps with a newer version: %s (%s) — open or restart them to update' "$(cnt "$OA")" "$(printf '%s\n' "$OA" | sed -E 's/ [^ ]+ → [^ ]+$//' | paste -sd, - | sed 's/,/, /g')"; lines "$OA"
     elif [ "$AN" -gt 0 ]; then ok 'Apps outside Homebrew and the App Store: up to date (%s checked)' "$AN"; fi
   fi
 fi
@@ -1697,9 +1702,10 @@ if task check.commands && have python3; then
   # a script whose interpreter is gone stays on PATH and only fails when run ("env: node: No such file or directory"):
   # an unlinked keg-only node@24, a pipx venv whose Python was removed by brew, a link to a deleted file
   CMDS=$(python3 - "$HOME/.local/bin" "$HOME/.npm-global/bin" /opt/homebrew/bin /usr/local/bin <<'PY' 2>/dev/null
-import os, shutil, sys
-n, groups = 0, {}
+import os, re, shutil, sys
+n, groups, gone = 0, {}, {}
 dirs = {}
+home = os.path.normpath(os.path.expanduser("~"))
 for x in sys.argv[1:]:
     if os.path.isdir(x): dirs.setdefault(os.path.realpath(x), x)
 for d in dirs.values():
@@ -1710,7 +1716,13 @@ for d in dirs.values():
         # files Homebrew installed are brew doctor's job (libevent ships an `env python` script nobody runs)
         if "/Cellar/" in os.path.realpath(p): continue
         if not os.path.exists(p):
-            if os.path.islink(p): groups.setdefault(("-", d), set()).add(e.name)
+            if os.path.islink(p):
+                groups.setdefault(("-", d), set()).add(e.name)
+                # what was removed, so people know whose leftovers these are: Python.framework, Foo.app, node_modules/quicktype
+                t = os.path.normpath(os.path.join(d, os.readlink(p)))
+                m = re.search(r"[^/]+\.(?:framework|app)|node_modules/(?:@[^/]+/)?[^/]+", t)
+                t = m.group(0) if m else os.path.dirname(t)
+                gone.setdefault(d, set()).add("~" + t[len(home):] if t.startswith(home + "/") else t)
             continue
         if not os.path.isfile(p) or not os.access(p, os.X_OK): continue
         try:
@@ -1731,16 +1743,16 @@ for d in dirs.values():
 print(n)
 for (name, hint), names in sorted(groups.items()):
     names = sorted(names)
-    print(name, hint, ", ".join(names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""), sep="\t")
+    print(name, hint, ", ".join(names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""), ", ".join(sorted(gone.get(hint, ()))), sep="\t")
 PY
 )
   if [ -z "$CMDS" ]; then :   # the scan itself failed: no false "all can start"
   elif [ -z "$(printf '%s\n' "$CMDS" | tail -n +2)" ]; then ok 'Commands: all %s scripts in your bin folders can start' "$(printf '%s\n' "$CMDS" | head -1)"
   else
-    while IFS=$'\t' read -r name hint names; do
+    while IFS=$'\t' read -r name hint names from; do
       if [ "$name" = - ]; then
         fix="find $(tildify "$hint") -maxdepth 1 -type l ! -exec test -e {} \\; -print -delete"; [ -w "$hint" ] || fix="sudo $fix"
-        warn 'Commands that cannot start, the file they link to is gone (%s): %s — remove dead links there: %s' "$(tildify "$hint")" "$names" "$fix"
+        warn 'Dead links in %s, leftovers of removed %s: %s — safe to remove, run in Terminal: %s' "$(tildify "$hint")" "$from" "$names" "$fix"
         continue
       fi
       [ "$hint" = - ] && hint=$(link_fix "$name")

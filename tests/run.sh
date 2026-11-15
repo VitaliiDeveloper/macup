@@ -355,7 +355,7 @@ H="$W/sch"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n
 SP="$H/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; sch(){ env HOME="$H" /bin/bash "$H/.local/bin/macup" schedule "$@" --no-color </dev/null 2>&1; }
 sch | grep -q 'No schedule' && [ ! -e "$SP" ] && pass "schedule: none by default" || fail "schedule: default"
 sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<string>$H/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
-  && grep -q "^bootstrap gui/.* $SP" "$H/launchctl.log" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$H/launchctl.log"; }
+  && grep -q "^bootstrap gui/.* $SP" "$H/launchctl.log" && grep -q "<key>PATH</key><string>.*$W/bin" "$SP" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$H/launchctl.log"; }
 { ! command -v plutil >/dev/null || plutil -lint "$SP" >/dev/null; } && pass "schedule: the plist is valid" || fail "schedule: plist"
 sch daily | grep -q 'every day at 10:00' && ! grep -q Weekday "$SP" && pass "schedule daily" || fail "schedule daily"
 sch off | grep -q 'Schedule removed' && [ ! -e "$SP" ] && grep -q "^bootout gui/.*/com.vitaliideveloper.macup" "$H/launchctl.log" && pass "schedule off removes it" || fail "schedule off"

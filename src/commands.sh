@@ -161,6 +161,7 @@ schedule(){ # [daily | weekly | off]
         self=$(resolve_self); case "$self" in /*) ;; *) self="$PWD/${self#./}" ;; esac
         [ -f "$self" ] || { _f "Couldn't write %s" "$(tildify "$SCHED_PLIST")"; echo; return 1; }
         [ "$1" = weekly ] && day='<key>Weekday</key><integer>1</integer>'
+        # launchd starts programs with a bare PATH: the scheduled check gets today's, so it finds the same tools (nvm's node, ~/.cargo/bin)
         xesc(){ printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
         mkdir -p "${SCHED_PLIST%/*}" "$LOGDIR"
         [ -f "$SCHED_PLIST" ] && sched_off
@@ -174,6 +175,8 @@ schedule(){ # [daily | weekly | off]
   <array><string>/bin/bash</string><string>$(xesc "$self")</string><string>check</string><string>--quiet</string><string>--notify</string></array>
   <key>StartCalendarInterval</key>
   <dict>$day<key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$(xesc "$PATH")</string></dict>
   <key>StandardOutPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
   <key>StandardErrorPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
   <key>ProcessType</key><string>Background</string>

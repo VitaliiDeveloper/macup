@@ -392,10 +392,14 @@ su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$H/.local/bin/macup" "$
 
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
-env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?
+# no test may hang the suite: after the limit it says what was running and stops the command
+lim(){ local s=$1 p w rc; shift; "$@" & p=$!
+  ( sleep "$s"; echo "TIMEOUT after ${s}s: $*"; ps -axo pid,ppid,etime,command | grep -v 'ps -axo' | tail -25; kill $p 2>/dev/null ) & w=$!
+  wait $p; rc=$?; kill $w 2>/dev/null; wait $w 2>/dev/null; return $rc; }
+lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash -x ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?
 [ $rc = 0 ] && [ ! -e "$I/.npm-global/bin/macup" ] && [ -e "$I/.npm-global/bin/other" ] && [ -x "$W/bin/macup" ] && grep -q '^project_dirs = ~/Code, ~/Work' "$I/.config/macup/config" \
-  && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; cat "$W/in"; }
-env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
+  && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; tail -40 "$W/in"; }
+lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
 grep -q '^project_dirs = ~/Code, ~/Work' "$I/.config/macup/config" && grep -q '^language = uk' "$I/.config/macup/config" && [ "$(grep -c '# macup' "$I/.zshrc")" = 1 ] \
   && pass "reinstall keeps settings" || fail "reinstall"
 /bin/bash ./install.sh --bogus >/dev/null 2>&1; [ $? = 2 ] && pass "installer rejects unknown options" || fail "installer options"

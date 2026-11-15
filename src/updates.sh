@@ -213,12 +213,13 @@ have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
 have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --all
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
-have gh && [ -n "$(tl 30 gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+have gh && task update.gh_ext && [ -n "$(tl 30 gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
 home_bin(){ [[ "$(command -v "$1" 2>/dev/null)" == "$HOME"/* ]]; }   # its own installer put it there; a Homebrew copy is updated by brew
 have pnpm && have node && simple_update update.pnpm 'pnpm globals' pnpm update -g
 home_bin bun  && simple_update update.bun  'Bun'  bun upgrade
 home_bin deno && simple_update update.deno 'Deno' deno upgrade
-have cargo && cargo install-update --version >/dev/null 2>&1 && simple_update update.cargo 'cargo programs' cargo install-update -a
+# cargo-update adds `cargo install-update`. Looked up as a file: starting cargo just to ask would make rustup set up a toolchain
+have cargo && have cargo-install-update && simple_update update.cargo 'cargo programs' cargo install-update -a
 have mise && simple_update update.mise 'mise tools'   mise upgrade
 have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
 have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions

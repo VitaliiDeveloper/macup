@@ -390,15 +390,23 @@ su | grep -q 'does not match its published checksum' && grep -q '^MACUP_VERSION=
 rm -rf "$R/v9.9.9"; old
 su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$H/.local/bin/macup" "$R/main/macup" && pass "self-update falls back to main before a version is tagged" || { fail "self-update fallback"; su; }
 
+# --- creating the config file runs nothing: its template used to run `macup clean` and `macup all` (backticks in a heredoc)
+H="$W/cf"; mkdir -p "$H" "$W/mbin"; printf '#!/bin/bash\necho "$*" >>"$HOME/ran.log"\n' >"$W/mbin/macup"; chmod +x "$W/mbin/macup"
+env HOME="$H" PATH="$W/mbin:$PATH" /bin/bash "$M" config </dev/null >/dev/null 2>&1
+[ ! -e "$H/ran.log" ] && grep -qF '# What `macup clean` / `macup all` may remove' "$H/.config/macup/config" && [ "$(wc -l <"$H/.config/macup/config")" -lt 45 ] \
+  && pass "creating the config file runs no command" || { fail "creating the config ran: $(cat "$H/ran.log" 2>/dev/null | tr '\n' ' ')"; }
+rm -rf "$H"; env HOME="$H" PATH="$W/mbin:$PATH" /bin/bash "$M" lang uk </dev/null >/dev/null 2>&1
+[ ! -e "$H/ran.log" ] && grep -q '^language = uk' "$H/.config/macup/config" && pass "macup lang on a fresh home runs no command" || fail "macup lang ran: $(cat "$H/ran.log" 2>/dev/null | tr '\n' ' ')"
+
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"
 # no test may hang the suite: after the limit it says what was running and stops the command
 lim(){ local s=$1 p w rc; shift; "$@" & p=$!
   ( sleep "$s"; echo "TIMEOUT after ${s}s: $*"; ps -axo pid,ppid,etime,command | grep -v 'ps -axo' | tail -25; kill $p 2>/dev/null ) & w=$!
   wait $p; rc=$?; kill $w 2>/dev/null; wait $w 2>/dev/null; return $rc; }
-lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash -x ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?
+lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$W/in" 2>&1; rc=$?
 [ $rc = 0 ] && [ ! -e "$I/.npm-global/bin/macup" ] && [ -e "$I/.npm-global/bin/other" ] && [ -x "$W/bin/macup" ] && grep -q '^project_dirs = ~/Code, ~/Work' "$I/.config/macup/config" \
-  && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; tail -40 "$W/in"; }
+  && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; cat "$W/in"; }
 lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
 grep -q '^project_dirs = ~/Code, ~/Work' "$I/.config/macup/config" && grep -q '^language = uk' "$I/.config/macup/config" && [ "$(grep -c '# macup' "$I/.zshrc")" = 1 ] \
   && pass "reinstall keeps settings" || fail "reinstall"

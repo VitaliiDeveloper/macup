@@ -4,6 +4,7 @@
 
 Fixes:
 
+- **Creating the config file no longer runs `macup clean` and `macup all`.** The config template had those two commands in backticks, and bash ran them: the first `macup config`, `macup lang` or install on a Mac where `macup` was already on `PATH` (a Homebrew install, a reinstall) cleaned the safe level and updated everything without being asked, and pasted the output into the config. If your config has a long "# What macup …" block, delete that block.
 - **Stale `node_modules` are really deleted.** `clean.stale_node_modules` said "cleaned" and deleted nothing: the last check before a delete allowed only `~/Library` and dot-folders. It now also allows a `node_modules` folder inside `project_dirs`, and a cleanup whose paths are all refused is reported as failed.
 - **Pinned Node versions stay in more cases.** A pin without the patch (`.nvmrc` with `20.5`) keeps the newest installed `20.5.x`; pins in `package.json` (`volta`, `engines`) count too.
 - **Poetry's virtualenvs are never offered as a cache.** "Other big folders in `~/Library/Caches`" listed `pypoetry`, where Poetry keeps them. A folder with a virtualenv inside is skipped; Poetry's real cache has its own safe cleaner.

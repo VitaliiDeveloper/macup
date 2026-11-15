@@ -14,6 +14,7 @@ EOF
 
 write_default_conf(){
   mkdir -p "$CONF_DIR"
+  # the heredoc expands \$MSG_LANG, so a backtick in it must be escaped: unescaped, bash runs what is between them
   cat >"$CONF" <<EOF
 # macup config. Lines starting with # are comments.
 # See every task id with:  macup tasks
@@ -27,7 +28,7 @@ skip =
 # Opt-in tasks to turn on, e.g.: clean.stale_node_modules, clean.trash
 enable =
 
-# What `macup clean` / `macup all` may remove: safe, standard, aggressive
+# What \`macup clean\` / \`macup all\` may remove: safe, standard, aggressive
 #   safe        rebuilds itself (DerivedData, package caches, logs)
 #   standard    downloaded again on next use (Gradle, Maven, old Node/Ruby/Python patches)
 #   aggressive  browser caches; apps may be slower for a while or sign you out

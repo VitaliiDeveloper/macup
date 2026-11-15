@@ -288,18 +288,18 @@ FAKE_RUNNING='/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -sch
 
 # --- exit status, --quiet, --json, a step that hangs, two runs at once
 H="$W/rc"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
-printf '#!/bin/bash\nexit 1\n' >"$H/.local/bin/pipx"; chmod +x "$H/.local/bin/pipx"
-env HOME="$H" /bin/bash "$M" update --only update.pipx --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
-[ $rc = 3 ] && grep -q '✗ pipx tools: update failed' "$W/rc.out" && pass "a failed update step: exit status 3" || { fail "exit status of a failed step (rc=$rc)"; cat "$W/rc.out"; }
-printf '#!/bin/bash\nexit 0\n' >"$H/.local/bin/pipx"
-env HOME="$H" /bin/bash "$M" update --only update.pipx --no-color --quiet </dev/null >"$W/rc.out" 2>&1; rc=$?
-[ $rc = 0 ] && grep -q 'Summary' "$W/rc.out" && grep -q 'pipx' "$H"/Library/Logs/macup/*.md && ! grep -q '▸' "$W/rc.out" && pass "--quiet: only the summary, exit status 0" || { fail "--quiet (rc=$rc)"; cat "$W/rc.out"; }
+# a fake Antigravity CLI: no CI machine has a real one in /opt/homebrew/bin, which macup puts first in PATH
+agy(){ printf '#!/bin/bash\ncase "$1" in --version) echo 1.0 ;; update) %s ;; esac\n' "$1" >"$H/.local/bin/agy"; chmod +x "$H/.local/bin/agy"; }
+agy 'exit 1'; env HOME="$H" /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 3 ] && grep -q '✗ Antigravity CLI: update failed' "$W/rc.out" && pass "a failed update step: exit status 3" || { fail "exit status of a failed step (rc=$rc)"; cat "$W/rc.out"; }
+agy 'exit 0'; env HOME="$H" /bin/bash "$M" update --only update.agy --no-color --quiet </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 0 ] && grep -q 'Summary' "$W/rc.out" && grep -q 'Antigravity CLI' "$H"/Library/Logs/macup/*.md && ! grep -q '▸' "$W/rc.out" && pass "--quiet: only the summary, exit status 0" || { fail "--quiet (rc=$rc)"; cat "$W/rc.out"; }
 env HOME="$H" /bin/bash "$M" check --only check.sizes --json </dev/null 2>/dev/null >"$W/rc.json"
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["mode"]=="check" and d["failed_steps"]==0 and isinstance(d["needs_attention"],list) and d["report"].endswith(".md")' "$W/rc.json" 2>/dev/null \
   && pass "--json: one valid JSON object" || { fail "--json"; cat "$W/rc.json"; }
-printf '#!/bin/bash\nsleep 60\n' >"$H/.local/bin/pipx"; t0=$SECONDS
-env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.pipx --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
-[ $rc = 3 ] && [ $((SECONDS - t0)) -lt 40 ] && grep -q 'pipx: stopped after' "$W/rc.out" && pass "a step that hangs is stopped" || { fail "hanging step (rc=$rc, $((SECONDS - t0))s)"; cat "$W/rc.out"; }
+agy 'sleep 60'; t0=$SECONDS
+env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 3 ] && [ $((SECONDS - t0)) -lt 40 ] && grep -q 'agy: stopped after' "$W/rc.out" && pass "a step that hangs is stopped" || { fail "hanging step (rc=$rc, $((SECONDS - t0))s)"; cat "$W/rc.out"; }
 LK="$H/Library/Application Support/macup/lock"; mkdir -p "$LK"; echo $$ >"$LK/pid"
 env HOME="$H" /bin/bash "$M" check --only check.sizes --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
 [ $rc = 1 ] && grep -q 'already running' "$W/rc.out" && [ -d "$LK" ] && pass "a second run at the same time refuses to start" || { fail "lock (rc=$rc)"; cat "$W/rc.out"; }

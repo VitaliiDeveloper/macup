@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.8.0 — unreleased
+## 2.8.0 — 2026-11-15
 
 Fixes:
 

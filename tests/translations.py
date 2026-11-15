@@ -23,7 +23,7 @@ for table in ('CACHE_DIRS', 'TOOL_CACHES'):
     for l in re.search(table + r"='(.*?)'", src, re.S).group(1).split('\n'): used.add(l.split('|')[2])
 for m in re.finditer(r"mline \w+ '([^']*)'\s+'([^']*)'", code): used.update(m.groups())
 for l in re.search(r"TASKS='(.*?)'", src, re.S).group(1).split('\n'): used.add(l.split('|')[2])
-names = {'%s: %s → %s', 'App Store', 'Claude Code', 'English · Українська · Русский', 'Oh My Zsh', 'brew doctor', 'brew update', 'npm %s', '%s', '%s: %s', '%s %s'}
+names = {'%s: %s → %s', 'Bun', 'Deno', 'App Store', 'Claude Code', 'English · Українська · Русский', 'Oh My Zsh', 'brew doctor', 'brew update', 'npm %s', '%s', '%s: %s', '%s %s'}
 missing = sorted(u for u in used if u and u not in names and not u.startswith('$') and any(u not in t for t in tables.values()))
 for u in missing: bad.append(f'missing translation: {u!r}')
 print('\n'.join(bad) or f'translations ok ({len(tables["uk"])} strings)')

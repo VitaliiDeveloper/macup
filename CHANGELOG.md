@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.8.0 — unreleased
+
+Fixes:
+
+- **Stale `node_modules` are really deleted.** `clean.stale_node_modules` said "cleaned" and deleted nothing: the last check before a delete allowed only `~/Library` and dot-folders. It now also allows a `node_modules` folder inside `project_dirs`, and a cleanup whose paths are all refused is reported as failed.
+- **Pinned Node versions stay in more cases.** A pin without the patch (`.nvmrc` with `20.5`) keeps the newest installed `20.5.x`; pins in `package.json` (`volta`, `engines`) count too.
+- **Poetry's virtualenvs are never offered as a cache.** "Other big folders in `~/Library/Caches`" listed `pypoetry`, where Poetry keeps them. A folder with a virtualenv inside is skipped; Poetry's real cache has its own safe cleaner.
+- **`macup update --deep` works.** It printed `project_roots: command not found` instead of the build artifacts.
+- **Xcode's caches are left alone while `xcodebuild` runs**, not only while Xcode is open.
+- **sudo forgets the password after the App Store updates.** The updaters that run next (pipx, Oh My Zsh, gh extensions, …) could use it without asking for up to 5 minutes.
+- **The Trash that cannot be read is said so.** Without Full Disk Access for the terminal it showed nothing.
+
+New:
+
+- **Exit status.** `3` when an update or cleanup step failed; it was always `0`. Failed steps show ✗.
+- **`--quiet`** prints only the summary, **`--json`** prints it as one JSON object.
+- **A command that hangs is stopped** after `step_timeout_minutes` (60; App Store installs get four times as long). The checks that ask other programs (`softwareupdate`, `brew doctor`, `claude mcp list`, `docker info`, …) have their own shorter limits.
+- **One run at a time.** A second macup started meanwhile refuses to start. Report names carry seconds.
+- **`self-update` and the installer install the tagged release and check its SHA-256** (`macup.sha256`, written by `build.sh`). They used to take whatever was on `main`, unchecked. Before a version is tagged they fall back to `main`, still checked.
+- **Optional schedule:** `macup schedule weekly` or `daily` adds a LaunchAgent that runs `macup check` and shows a notification when something needs attention; `macup schedule off` removes it. Nothing is scheduled unless you ask.
+- **Updates:** global pnpm packages, Bun, Deno (their own installs; Homebrew's are left to Homebrew), `cargo install` programs (needs `cargo-update`), mise tools, asdf plugins, VS Code and Cursor extensions. Ruby gems are opt-in: `enable = update.gem`.
+- **Cleaners:** Bun, Deno and Poetry caches (safe); Cargo registry downloads and sources, JetBrains IDE caches (standard, skipped while the IDE is open).
+- **Measured, never deleted:** iPhone and iPad backups, Docker Desktop's disk image.
+- **`--deep`** also lists Rust and Maven `target`, Gradle `build`, `.next` and `.venv`.
+- Tests for all of the above, and for reading `softwareupdate`, `system_profiler` and `memory_pressure` output. CI runs on macOS 15 and 26, Apple silicon and Intel.
+
 ## 2.7.2 — 2026-11-11
 
 - **The summary names the apps that fell behind.** It showed only "Apps with a newer version: 14", and the list was in the section above. The names are now in the warning itself; the section still lists both versions.

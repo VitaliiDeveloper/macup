@@ -13,7 +13,14 @@ if task check.sizes; then
   s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")
   [ "$s" -ge 102400 ] && info 'Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager)' "$(hum "$s")"
   s=$(kb "$HOME/Library/Caches");      [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
-  if ! task clean.trash; then
+  # backups of iPhones and iPads made in Finder; Docker Desktop's disk image only grows (du counts what it really takes)
+  s=$(kb "$HOME/Library/Application Support/MobileSync/Backup")
+  [ "$s" -ge 102400 ] && info 'iPhone and iPad backups: %s (Finder → your device → Manage Backups)' "$(hum "$s")"
+  s=$(kbl "$(ls -d "$HOME/Library/Containers/com.docker.docker/Data/vms"/*/data/Docker.raw 2>/dev/null)")
+  [ "$s" -ge 102400 ] && info 'Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)' "$(hum "$s")"
+  if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then
+    task clean.trash || info 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
+  elif ! task clean.trash; then
     s=$(kb "$HOME/.Trash")
     if [ "$s" -gt 2097152 ]; then warn 'Trash: %s — empty it' "$(hum "$s")"; elif [ "$s" -gt 0 ]; then info 'Trash: %s' "$(hum "$s")"; fi
   fi
@@ -83,14 +90,17 @@ if [ "$DEEP" = 1 ]; then
   ART=""
   while IFS= read -r root; do
     [ -z "$root" ] && continue
-    ART="$ART$(find "$root" -maxdepth 6 -type d \( -name node_modules -o -name Pods -o -name .build -o -name .dart_tool -o -name DerivedData \) -prune -print 2>/dev/null)"$'\n'
+    # target and build are common names: only next to the build file that makes them (Cargo, Maven, Gradle)
+    ART="$ART$(find "$root" -maxdepth 6 -type d \( -name node_modules -o -name Pods -o -name .build -o -name .dart_tool -o -name DerivedData -o -name .next -o -name .venv \
+      -o \( -name target -exec test -e {}/../Cargo.toml -o -e {}/../pom.xml \; \) \
+      -o \( -name build -exec test -e {}/../build.gradle -o -e {}/../build.gradle.kts \; \) \) -prune -print 2>/dev/null)"$'\n'
   done <<EOF
 $(project_roots)
 EOF
   if [ -n "$(printf '%s' "$ART" | grep .)" ]; then
     TOP=$(printf '%s' "$ART" | grep . | while IFS= read -r a; do echo "$(kb "$a") $a"; done | sort -rn)
     TS=$(printf '%s\n' "$TOP" | awk '{s+=$1} END{print s+0}')
-    info 'Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest:' "$(hum "$TS")"
+    info 'Project build artifacts (node_modules, Pods, .build, .dart_tool, .next, .venv, Rust and Maven target, Gradle build): %s total; largest:' "$(hum "$TS")"
     printf '%s\n' "$TOP" | head -8 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
     task clean.stale_node_modules || info "Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days" "$STALE_DAYS"
   elif [ -z "$(project_roots)" ]; then

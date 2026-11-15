@@ -9,7 +9,7 @@
 set -o pipefail
 
 REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
-RAW="https://raw.githubusercontent.com/$REPO/main"
+RAW="https://raw.githubusercontent.com/$REPO"   # + /<branch or tag>/<file>
 BIN_DIR="${MACUP_PREFIX:-$HOME/.local/bin}"
 L="${MACUP_LANG:-}"; PROJECTS=""; YES=0
 
@@ -65,6 +65,9 @@ t(){ # message id
   uk:dlfail)  echo "Не вдалося завантажити" ;;
   ru:dlfail)  echo "Не удалось скачать" ;;
   *:dlfail)   echo "Download failed" ;;
+  uk:sum)     echo "Завантажений файл не збігається з опублікованою контрольною сумою, нічого не встановлено." ;;
+  ru:sum)     echo "Скачанный файл не совпадает с опубликованной контрольной суммой, ничего не установлено." ;;
+  *:sum)      echo "The download does not match its published checksum; nothing was installed." ;;
   uk:broken)  echo "Скрипт пошкоджений, нічого не встановлено." ;;
   ru:broken)  echo "Скрипт повреждён, ничего не установлено." ;;
   *:broken)   echo "The script is broken; nothing was installed." ;;
@@ -131,12 +134,18 @@ die(){ printf '%s✗%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 # ---------------------------------------------------------------- install
 mkdir -p "$BIN_DIR" || die "mkdir $BIN_DIR"
 BIN_DIR=$(cd "$BIN_DIR" && pwd) || die "$BIN_DIR"; TARGET="$BIN_DIR/macup"
-TMP=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX"); trap 'rm -f "$TMP"' EXIT
+TMP=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX"); trap 'rm -f "$TMP" "$TMP.tag"' EXIT
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "$HERE/macup" ] && [ -f "$HERE/install.sh" ]; then
   say "$(t local): $HERE"; cp "$HERE/macup" "$TMP"
 else
-  say "$(t dl)"; curl -fsSL "$RAW/macup" -o "$TMP" || die "$(t dlfail): $RAW/macup"
+  # main names the latest version; the file comes from that version's tag (main before it is tagged) and must match its SHA-256
+  say "$(t dl)"; curl -fsSL "$RAW/main/macup" -o "$TMP" || die "$(t dlfail): $RAW/main/macup"
+  VER=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$TMP" | head -1); REF="v$VER"
+  WANT=$(curl -fsSL "$RAW/$REF/macup.sha256" 2>/dev/null | awk '{print $1; exit}')
+  if [ -n "$VER" ] && [ -n "$WANT" ] && curl -fsSL "$RAW/$REF/macup" -o "$TMP.tag" 2>/dev/null; then mv "$TMP.tag" "$TMP"
+  else rm -f "$TMP.tag"; WANT=$(curl -fsSL "$RAW/main/macup.sha256" 2>/dev/null | awk '{print $1; exit}'); fi
+  [ -n "$WANT" ] && [ "$(shasum -a 256 "$TMP" 2>/dev/null | awk '{print $1}')" = "$WANT" ] || die "$(t sum)"
 fi
 bash -n "$TMP" || die "$(t broken)"
 install -m 755 "$TMP" "$TARGET" || die "install $TARGET"

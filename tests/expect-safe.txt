@@ -22,3 +22,7 @@
 ./Library/Developer/Xcode/iOS DeviceSupport/16.0 (20A1)/blob
 ./Library/Logs/SomeApp/old.log
 ./Library/Application Support/Codex/Default/Partitions/browser/Code Cache/js/blob
+./.bun/install/cache/x/blob
+./Library/Caches/deno/deps/blob
+./Library/Caches/pypoetry/artifacts/y/blob
+./Library/Caches/pypoetry/cache/x/blob

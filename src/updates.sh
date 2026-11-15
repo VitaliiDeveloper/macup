@@ -8,7 +8,7 @@ if task update.claude && have claude; then
   v2=$(claude --version 2>/dev/null | awk '{print $1}')
   upd "Claude Code" "$v1" "$v2"
   if ! UPD && have npm; then
-    latest=$(npm view @anthropic-ai/claude-code version 2>/dev/null)
+    latest=$(tl 30 npm view @anthropic-ai/claude-code version 2>/dev/null)
     ver_gt "$latest" "$v2" && info "%s: %s is on npm (fine if you're on the stable channel)" "Claude Code" "$latest"
   fi
   PJSON="$HOME/.claude/plugins/installed_plugins.json"
@@ -25,7 +25,7 @@ PY
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
-    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else warn 'Plugin marketplaces: refresh failed (see log)'; fi
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see log)'; fi
     # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
     printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
   fi
@@ -53,7 +53,7 @@ node_ok(){
 if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'
   # skips npm-link'ed packages and anything whose versions don't look like registry versions
-  NO=$(npm outdated -g --json 2>/dev/null | python3 -c '
+  NO=$(tl 180 npm outdated -g --json 2>/dev/null | python3 -c '
 import json, os, sys, re
 try: d = json.load(sys.stdin)
 except Exception: d = {}
@@ -70,7 +70,7 @@ for k, v in d.items():
       [ -z "$p" ] && continue
       if UPD; then
         step 'npm %s' "$p"
-        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else fail '%s: update failed (see log)' "$p"; fi
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see log)' "$p"; fi
       else sub "$p: $c → $l"; fi
     done <<EOF
 $NO
@@ -98,7 +98,7 @@ for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash
 $S2
 EOF
       ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
-    else fail 'Agent skills: update failed (see log)'; fi
+    else err 'Agent skills: update failed (see log)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
     LATER_SKILLS="$(_ 'Agent skills')"
@@ -113,7 +113,7 @@ if task update.brew && have brew; then
   else
     if UPD; then
       step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
+      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -133,7 +133,7 @@ if task update.mas; then
   if have mas; then
     step 'App Store'
     # "497799835 Xcode (27.1 → 27.2)": the id for mas, the rest for people
-    OM=$(mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
+    OM=$(tl 180 mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
       info 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"
@@ -141,13 +141,15 @@ if task update.mas; then
       while read -r id app; do
         [ -z "$id" ] && continue; i=$((i + 1))
         # mas runs itself through sudo, which would ask a bare "Password:" in the middle of the step line
-        if ! sudo -n true 2>/dev/null && ! { { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; }; then
-          warn 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break
+        if ! sudo -n true 2>/dev/null; then
+          if { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; then SUDO_ASKED=1
+          else err 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break; fi
         fi
         # sudo forgets the password after 5 minutes and one install (Xcode) takes longer, so it would ask again for the next app
         [ -z "${SUDO_KEEP:-}" ] && { while kill -0 $$ 2>/dev/null; do sleep 50; sudo -n -v || break; done </dev/null >/dev/null 2>&1 & SUDO_KEEP=$!; }
-        if tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
-        else warn 'App Store: updates not installed: %s — open the App Store' "$app"; fi
+        # an Xcode download alone can take longer than any other step
+        if RUN_SECS=$((STEP_SECS * 4)) tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
+        else err 'App Store: updates not installed: %s — open the App Store' "$app"; fi
       done <<EOF
 $OM
 EOF
@@ -204,23 +206,34 @@ LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
   task "$id" || return 0
-  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else warn '%s: update failed (see log)' "$label"; fi
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see log)' "$label"; fi
   else LATER="$LATER${LATER:+, }$label"; fi
 }
 have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
 have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --all
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
-have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+have gh && [ -n "$(tl 30 gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+home_bin(){ [[ "$(command -v "$1" 2>/dev/null)" == "$HOME"/* ]]; }   # its own installer put it there; a Homebrew copy is updated by brew
+have pnpm && have node && simple_update update.pnpm 'pnpm globals' pnpm update -g
+home_bin bun  && simple_update update.bun  'Bun'  bun upgrade
+home_bin deno && simple_update update.deno 'Deno' deno upgrade
+have cargo && cargo install-update --version >/dev/null 2>&1 && simple_update update.cargo 'cargo programs' cargo install-update -a
+have mise && simple_update update.mise 'mise tools'   mise upgrade
+have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
+have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions
+have cursor && simple_update update.editor_ext 'Cursor extensions'  cursor --update-extensions
+# opt-in: updating every gem takes long; the system Ruby's gems belong to macOS and need sudo
+have gem && [ "$(command -v gem)" != /usr/bin/gem ] && simple_update update.gem 'Ruby gems' gem update
 
 if task update.grok && have grok; then
-  GJ=$(grok update --check --json 2>/dev/null)
+  GJ=$(tl 30 grok update --check --json 2>/dev/null)
   gj(){ printf '%s' "$GJ" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
   v1=$(gj currentVersion); latest=$(gj latestVersion)
   if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
   elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
     if UPD; then
-      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || warn '%s: update failed (see log)' 'Grok CLI'; fi
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see log)' 'Grok CLI'; fi
       upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
     elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
     else ok '%s %s' 'Grok CLI' "$v1"; fi
@@ -231,7 +244,7 @@ fi
 if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
   if UPD; then
     v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
-    run agy update || warn '%s: update failed (see log)' 'Antigravity CLI'
+    run agy update || err '%s: update failed (see log)' 'Antigravity CLI'
     upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
   else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
 fi
@@ -239,11 +252,12 @@ fi
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'
-  SL=$(softwareupdate -l 2>&1)
+  SL=$(tl 240 softwareupdate -l 2>&1); SLRC=$?
   SU=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*\* Label: //p')
   # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
   ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
-  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
+  if [ "$SLRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'softwareupdate' 240
+  elif [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD
 

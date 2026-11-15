@@ -21,7 +21,11 @@ jobs:
           shellcheck -s bash -S warning macup install.sh build.sh tests/*.sh
 
   macos:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26, macos-15-intel, macos-latest]   # two macOS versions, Apple silicon and Intel
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - name: Syntax check with the stock macOS bash 3.2

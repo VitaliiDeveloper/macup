@@ -47,6 +47,9 @@ project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
 # Keep macup reports for this many days
 keep_reports_days = 60
+
+# Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
+step_timeout_minutes = 60
 EOF
 }
 
@@ -104,22 +107,90 @@ brew_prefix(){ # a macup path → the Homebrew prefix that installed it; nothing
 }
 update_cmd(){ if [ -n "$(brew_prefix "$(resolve_self)")" ]; then echo 'brew upgrade macup'; else echo 'macup self-update'; fi; }
 
+sha256(){ if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi 2>/dev/null | awk '{print $1}'; }
+fetch_release(){ # file → the latest released macup, checked against its published SHA-256; prints its version
+  # main names the latest version; the file itself comes from that version's tag, so work in progress on main is never installed.
+  # Before a version is tagged (or for a fork without tags) main is used. 1: download failed, 2: not macup, 3: checksum differs.
+  local out=$1 v ref want
+  curl -fsSL --max-time 30 "$MACUP_RAW/main/macup" -o "$out" 2>/dev/null || return 1
+  v=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$out" | head -1); [ -n "$v" ] || return 2
+  ref="v$v"; want=$(curl -fsSL --max-time 15 "$MACUP_RAW/$ref/macup.sha256" 2>/dev/null | awk '{print $1; exit}')
+  if [ -n "$want" ] && curl -fsSL --max-time 30 "$MACUP_RAW/$ref/macup" -o "$out.tag" 2>/dev/null; then mv "$out.tag" "$out"
+  else rm -f "$out.tag"; ref=main; want=$(curl -fsSL --max-time 15 "$MACUP_RAW/main/macup.sha256" 2>/dev/null | awk '{print $1; exit}'); fi
+  [ -n "$want" ] && [ "$(sha256 "$out")" = "$want" ] || return 3
+  bash -n "$out" 2>/dev/null || return 2
+  echo "$v"
+}
+
 self_update(){
-  local tmp newv target
+  local tmp newv target rc
   case "$MACUP_REPO" in __*) _ 'This copy has no GitHub repo configured.'; echo; exit 1 ;; esac
   # Homebrew owns that file, and the next brew upgrade would put its own version back
   if [ -n "$(brew_prefix "$(resolve_self)")" ]; then _ 'macup was installed with Homebrew. Update it with: brew upgrade macup'; echo; exit 0; fi
   tmp=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-  if ! curl -fsSL --max-time 30 "$MACUP_RAW/macup" -o "$tmp"; then _f 'Download failed: %s' "$MACUP_RAW/macup"; echo; rm -f "$tmp"; exit 1; fi
-  newv=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$tmp" | head -1)
-  if [ -z "$newv" ] || ! bash -n "$tmp" 2>/dev/null; then _ 'The downloaded file looks broken; nothing changed.'; echo; rm -f "$tmp"; exit 1; fi
+  newv=$(fetch_release "$tmp"); rc=$?
+  case $rc in
+    0) ;;
+    1) _f 'Download failed: %s' "$MACUP_RAW/main/macup"; echo; rm -f "$tmp"; exit 1 ;;
+    3) _ 'The downloaded file does not match its published checksum; nothing changed.'; echo; rm -f "$tmp"; exit 1 ;;
+    *) _ 'The downloaded file looks broken; nothing changed.'; echo; rm -f "$tmp"; exit 1 ;;
+  esac
   if ! ver_gt "$newv" "$MACUP_VERSION"; then _f 'macup %s is already the latest.' "$MACUP_VERSION"; echo; rm -f "$tmp"; exit 0; fi
   target=$(resolve_self)
   if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; fi
   echo; rm -f "$tmp"
 }
 
-uninstall(){ # macup, older copies, settings, history, reports, the installer's PATH line, leftover temp files
+# Optional: a LaunchAgent that runs `macup check` on its own and shows a notification. A check installs and deletes
+# nothing, so the schedule never changes the Mac behind your back. Off unless you turn it on.
+sched_off(){ launchctl bootout "gui/$(id -u)/$SCHED_LABEL" 2>/dev/null || launchctl unload "$SCHED_PLIST" 2>/dev/null; rm -f "$SCHED_PLIST"; }
+schedule(){ # [daily | weekly | off]
+  local self day=""
+  case "$1" in
+    "") if [ ! -f "$SCHED_PLIST" ]; then
+          _ 'No schedule: macup runs only when you start it.'; echo
+          _ 'Turn it on: macup schedule weekly (or daily). It runs macup check, which changes nothing, and shows a notification.'; echo
+        else
+          if grep -q '<key>Weekday</key>' "$SCHED_PLIST"; then _ 'Schedule: macup check every Monday at 10:00, with a notification.'
+          else _ 'Schedule: macup check every day at 10:00, with a notification.'; fi; echo
+          _ 'Turn it off: macup schedule off'; echo
+        fi ;;
+    off|remove|stop)
+        if [ -f "$SCHED_PLIST" ]; then sched_off; _ 'Schedule removed.'; else _ 'No schedule: macup runs only when you start it.'; fi; echo ;;
+    daily|weekly)
+        self=$(resolve_self); case "$self" in /*) ;; *) self="$PWD/${self#./}" ;; esac
+        [ -f "$self" ] || { _f "Couldn't write %s" "$(tildify "$SCHED_PLIST")"; echo; return 1; }
+        [ "$1" = weekly ] && day='<key>Weekday</key><integer>1</integer>'
+        xesc(){ printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+        mkdir -p "${SCHED_PLIST%/*}" "$LOGDIR"
+        [ -f "$SCHED_PLIST" ] && sched_off
+        cat >"$SCHED_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$SCHED_LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>$(xesc "$self")</string><string>check</string><string>--quiet</string><string>--notify</string></array>
+  <key>StartCalendarInterval</key>
+  <dict>$day<key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
+  <key>StandardErrorPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
+  <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+EOF
+        if ! launchctl bootstrap "gui/$(id -u)" "$SCHED_PLIST" 2>/dev/null && ! launchctl load -w "$SCHED_PLIST" 2>/dev/null; then
+          rm -f "$SCHED_PLIST"; _ "launchd did not accept the schedule; nothing changed."; echo; return 1
+        fi
+        if [ "$1" = weekly ]; then _ 'Schedule: macup check every Monday at 10:00, with a notification.'
+        else _ 'Schedule: macup check every day at 10:00, with a notification.'; fi; echo
+        _ 'Turn it off: macup schedule off'; echo ;;
+    *) echo "macup schedule daily | weekly | off"; return 2 ;;
+  esac
+}
+
+uninstall(){ # macup, older copies, settings, history, reports, the schedule, the installer's PATH line, leftover temp files
   local target bp f d rc l dir others tmps ans tap left="" n=0
   local -a progs=() dirs=() rcs=() lines=()
   target=$(resolve_self); bp=$(brew_prefix "$target")
@@ -148,13 +219,15 @@ uninstall(){ # macup, older copies, settings, history, reports, the installer's 
   for d in "${dirs[@]}"; do printf '  · %s  %s\n' "$(tildify "$d")" "$(hum "$(kb "$d")")"; done
   for rc in "${rcs[@]}"; do printf '  · %s\n' "$(_f 'the PATH line in %s' "$(tildify "$rc")")"; done
   [ -n "$tmps" ] && printf '  · %s\n' "$(_f 'temporary files of interrupted runs: %s' "$(cnt "$tmps")")"
+  [ -f "$SCHED_PLIST" ] && printf '  · %s\n' "$(_f 'the schedule (%s)' "$(tildify "$SCHED_PLIST")")"
   [ -n "$left" ] && printf '%s' "$left" | while IFS= read -r l; do printf '  %s\n' "$l"; done
-  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ]; then _ 'Nothing to remove.'; echo; return; fi
+  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ] && [ ! -f "$SCHED_PLIST" ]; then _ 'Nothing to remove.'; echo; return; fi
   if [ "$YES" != 1 ]; then
     ans=$(ask "$(_ 'Remove all of this? [y/N] ')")
     case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return ;; esac
   fi
 
+  [ -f "$SCHED_PLIST" ] && sched_off
   for d in "${dirs[@]}"; do rm -rf "$d"; done
   for rc in "${rcs[@]}"; do   # the installer wrote a blank line, "# macup" and the export line
     f=$(mktemp "${TMPDIR:-/tmp}/macup-rc.XXXXXX")

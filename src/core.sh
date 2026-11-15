@@ -8,7 +8,7 @@
 
 MACUP_VERSION="2.7.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
-MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
+MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
 
 case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { export LC_CTYPE=en_US.UTF-8; } 2>/dev/null ;; esac
@@ -21,6 +21,8 @@ CACHE_DIR="$HOME/Library/Caches/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
 DEV="$HOME/Library/Developer"
+SCHED_LABEL="com.vitaliideveloper.macup"
+SCHED_PLIST="$HOME/Library/LaunchAgents/$SCHED_LABEL.plist"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
@@ -56,6 +58,14 @@ update.uv|on|uv-installed tools
 update.rustup|on|Rust toolchains
 update.omz|on|Oh My Zsh
 update.gh_ext|on|GitHub CLI extensions
+update.pnpm|on|Global pnpm packages
+update.bun|on|Bun (bun upgrade; a Homebrew install is left to Homebrew)
+update.deno|on|Deno (deno upgrade; a Homebrew install is left to Homebrew)
+update.cargo|on|Programs installed with cargo install (needs cargo-update)
+update.mise|on|Tools managed by mise
+update.asdf|on|asdf plugins
+update.editor_ext|on|VS Code and Cursor extensions
+update.gem|off|Ruby gems (opt-in; never the system Ruby)
 update.grok|on|Grok CLI (grok update)
 update.agy|on|Antigravity CLI (agy update)
 update.apps|on|Apps outside Homebrew and the App Store that update themselves (only reported)
@@ -76,14 +86,19 @@ clean.npm|on|npm cache garbage (npm cache verify)
 clean.yarn|on|Yarn cache
 clean.pnpm|on|pnpm store: unreferenced packages
 clean.pip|on|pip cache
+clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
 clean.uv|on|uv cache: unused entries
 clean.go|on|Go build cache
+clean.bun|on|Bun install cache
+clean.deno|on|Deno cache
 clean.logs|on|Your app logs and crash reports older than 30 days
 clean.quicklook|on|Quick Look thumbnail cache
 clean.reports|on|macup reports older than keep_reports_days
 clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
 clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
 clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
+clean.cargo|on|Cargo registry downloads and sources (standard)
+clean.jetbrains|on|JetBrains IDE caches (standard, skipped while open)
 clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
@@ -117,6 +132,8 @@ load_conf(){
   KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
   SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
+  STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
+  [ -n "${MACUP_STEP_SECS:-}" ] && STEP_SECS=$(num "$MACUP_STEP_SECS" "$STEP_SECS")   # seconds, for the tests
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
@@ -161,7 +178,7 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
-WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
+WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""; ERRS=0; STEP_SECS=3600
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
 section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
@@ -170,11 +187,33 @@ ok()      { local m; m=$(_f "$@"); flush; printf '%s  %s✓%s %s\n' "$CL" "$G" "
 info()    { local m; m=$(_f "$@"); flush; printf '%s  %s·%s %s\n' "$CL" "$D" "$N" "$m"; md "- $m"; }
 warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N" "$m"; md "- ⚠️ $m"; WARN+=("$m"); }
 fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
+err()     { fail "$@"; ERRS=$((ERRS + 1)); }   # a step that did not do its job: the run ends with exit status 3
 sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
 mdonly()  { md "    - $*"; }
 step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
-run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
+tl()      { # seconds cmd… — the command, stopped after that long (macOS has no `timeout`); 124 when it was stopped
+            # the command stays in the foreground, so Ctrl-C reaches it; shell functions run without a limit
+            local secs=$1 wd rc; shift
+            if [ "$secs" -le 0 ] || [ -z "$BODY" ] || [ "$(type -t "$1")" != file ]; then "$@"; return; fi
+            rm -f "$BODY.to"
+            ( end=$((SECONDS + secs))
+              while [ "$SECONDS" -lt "$end" ]; do kill -0 $$ 2>/dev/null || exit 0; sleep 2; done
+              p=$(cat "$BODY.pid" 2>/dev/null); [ -n "$p" ] || exit 0
+              : >"$BODY.to"; kill -TERM "$p" 2>/dev/null; sleep 5; kill -KILL "$p" 2>/dev/null ) >/dev/null 2>&1 &
+            wd=$!
+            /bin/bash -c 'echo $$ >"$0"; exec "$@"' "$BODY.pid" "$@"; rc=$?
+            kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+            [ -f "$BODY.to" ] && { rm -f "$BODY.to"; return 124; }
+            return $rc; }
+run()     { local rc; echo "\$ $*" >>"$RAW"; tl "${RUN_SECS:-$STEP_SECS}" "$@" >>"$RAW" 2>&1 </dev/null; rc=$?
+            if [ $rc = 124 ]; then
+              echo "macup: stopped after $(( ${RUN_SECS:-$STEP_SECS} / 60 )) minutes: $*" >>"$RAW"
+              warn '%s: stopped after %s minutes without finishing (step_timeout_minutes in %s)' "$1" "$(( ${RUN_SECS:-$STEP_SECS} / 60 ))" "$(tildify "$CONF")"
+            fi
+            return $rc; }
+jstr()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\000-\037'; }   # a string for JSON and AppleScript
+jarr()    { local x first=1; printf '['; for x in "$@"; do [ $first = 1 ] || printf ','; first=0; printf '"%s"' "$(jstr "$x")"; done; printf ']'; }
 TICK=""
 tick()    { # label cmd… — run; on a terminal the step line counts the time and shows the command's latest "==> " phase, so a long job does not look hung
             [ -t 1 ] && [ -n "$CL" ] || { shift; run "$@"; return; }

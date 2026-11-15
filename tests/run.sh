@@ -18,7 +18,9 @@ cat >"$W/bin/lsof" <<'FAKE'
 [ -n "$FAKE_LSOF_FAIL" ] && exit 1
 printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
 FAKE
-chmod +x "$W/bin/pgrep" "$W/bin/lsof"; export PATH="$W/bin:$PATH"
+# launchctl and osascript only record what macup asked for: no test loads a LaunchAgent or shows a notification
+for c in launchctl osascript; do printf '#!/bin/bash\necho "$*" >>"$HOME/%s.log"\n' "$c" >"$W/bin/$c"; done
+chmod +x "$W/bin/pgrep" "$W/bin/lsof" "$W/bin/launchctl" "$W/bin/osascript"; export PATH="$W/bin:$PATH"
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local H=$1; shift; tests/fixture.sh "$H"; (cd "$H" && find . \( -type f -o -type l \) | sort) >"$H.b"
   env HOME="$H" /bin/bash "$M" "$@" </dev/null >"$H.out" 2>&1
@@ -57,7 +59,7 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
   [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/|virtualenvs|v21\.2\.5|v21\.7\.0|v23\.|registry/index|Code/(rs|plain)' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
@@ -165,7 +167,7 @@ sudo(){ [ -z "$NOSUDO" ]; }
 export -f mas sudo
 env HOME="$H" /bin/bash "$M" update --only update.mas --no-color </dev/null >"$W/mas.out" 2>&1
 grep -q '^      Bar Baz Pro (2.10.3 → 3.0)$' "$W/mas.out" && grep -q '✓ App Store: Foo (1.0 → 1.1)$' "$W/mas.out" \
-  && grep -q '! App Store: updates not installed: Bar Baz Pro (2.10.3 → 3.0) — open the App Store' "$W/mas.out" \
+  && grep -q '✗ App Store: updates not installed: Bar Baz Pro (2.10.3 → 3.0) — open the App Store' "$W/mas.out" \
   && [ "$(cat "$H/mas.log")" = "$(printf 'mas upgrade 1\nmas upgrade 123456789')" ] && pass "App Store: list, then each app with its result" \
   || { fail "App Store update"; grep 'App Store\|→' "$W/mas.out"; cat "$H/mas.log" 2>/dev/null; }
 rm -f "$H/mas.log"; env NOSUDO=1 HOME="$H" /bin/bash "$M" update --only update.mas --no-color </dev/null >"$W/mas.out" 2>&1
@@ -218,12 +220,13 @@ else
   echo r >"$H/Library/Logs/macup/macup_x.md"; echo h >"$H/Library/Application Support/macup/history.csv"
   printf 'alias ll=ls\n\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\nexport EDITOR=vim\n' >"$H/.zshrc"
   touch "$T/macup.Ab12Cd" "$T/macup.Ab12Cd.rt" "$T/macup-lang.Zz99Yy" "$T/other.txt"
+  SP="$H/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; mkdir -p "${SP%/*}"; echo '<plist/>' >"$SP"
   env HOME="$H" TMPDIR="$T/" /bin/bash "$H/.local/bin/macup" uninstall --no-color </dev/null >"$W/un0.out" 2>&1
   [ -e "$H/.local/bin/macup" ] && [ -d "$H/.config/macup" ] && grep -q 'Nothing removed' "$W/un0.out" && pass "uninstall without a terminal or --yes removes nothing" || { fail "uninstall: no answer"; cat "$W/un0.out"; }
   env HOME="$H" TMPDIR="$T/" /bin/bash "$H/.local/bin/macup" uninstall --yes --no-color </dev/null >"$W/un.out" 2>&1
-  [ ! -e "$H/.local/bin/macup" ] && [ ! -e "$H/.npm-global/bin/macup" ] && [ ! -e "$H/.config/macup" ] && [ ! -e "$H/Library/Logs/macup" ] \
+  [ ! -e "$H/.local/bin/macup" ] && [ ! -e "$H/.npm-global/bin/macup" ] && [ ! -e "$H/.config/macup" ] && [ ! -e "$H/Library/Logs/macup" ] && [ ! -e "$SP" ] \
     && [ ! -e "$H/Library/Application Support/macup" ] && [ "$(cat "$H/.zshrc")" = "$(printf 'alias ll=ls\nexport EDITOR=vim')" ] \
-    && [ "$(ls "$T")" = other.txt ] && pass "uninstall --yes removes macup, older copies, settings, history, reports, the PATH line, temp files" \
+    && [ "$(ls "$T")" = other.txt ] && pass "uninstall --yes removes macup, older copies, settings, history, reports, the schedule, the PATH line, temp files" \
     || { fail "uninstall --yes"; cat "$W/un.out"; cat "$H/.zshrc"; ls -la "$T"; }
   H="$W/un2"; mkdir -p "$H/.local/bin" "$H/brew/Cellar/macup/9.9.9/bin" "$H/brew/bin"; cp macup "$H/.local/bin/macup"; cp /usr/bin/true "$H/.local/bin/claude"
   printf '\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\n' >"$H/.zshrc"
@@ -267,6 +270,125 @@ printf '[%s,%s,%s,%s,%s,%s]' "$(cask macup-old 2.0,abc MacupOld)" "$(cask macup-
 o=$(apps_check)
 echo "$o" | grep -q 'Apps with a newer version: 1 (MacupOld) ' && echo "$o" | grep -q 'MacupOld 1.0 → 2.0$' && ! echo "$o" | grep -qE 'MacupNew|MacupMas|MacupTwin' \
   && pass "apps: only the app behind its catalog version is listed" || { fail "apps: list"; echo "$o" | head; }
+
+# --- stale node_modules (opt-in): the project untouched for 90 days loses it, the fresh one keeps it; it used to say "cleaned" and delete nothing
+H="$W/nm"; got=$(tests/fixture.sh "$H"; printf 'enable = clean.stale_node_modules\n' >>"$H/.config/macup/config"; (cd "$H" && find . -type f | sort) >"$H.b"
+  env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_node_modules --no-color </dev/null >"$H.out" 2>&1; (cd "$H" && find . -type f | sort) | comm -23 "$H.b" - | grep -v 'macup/')
+[ "$got" = "./Code/old/node_modules/a/blob" ] && grep -q 'Stale node_modules.*freed' "$H.out" && pass "stale node_modules: only the stale project's folder is deleted" || { fail "stale node_modules"; echo "$got"; cat "$H.out"; }
+
+# --- other big caches: a folder with virtualenvs inside (Poetry) is never offered
+H="$W/ac"; tests/fixture.sh "$H"; dd if=/dev/zero of="$H/Library/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/lib/big" bs=1024 count=103424 2>/dev/null
+env HOME="$H" /bin/bash "$M" check --only clean.app_caches --no-color </dev/null >"$W/ac.out" 2>&1
+grep -q 'App cache: BigApp' "$W/ac.out" && ! grep -q pypoetry "$W/ac.out" && pass "big caches: Poetry's virtualenvs are not offered" || { fail "big caches"; grep 'App cache' "$W/ac.out"; }
+
+# --- DerivedData is left alone while an xcodebuild started from a terminal runs
+H="$W/xb"; tests/fixture.sh "$H"
+FAKE_RUNNING='/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -scheme App build' env HOME="$H" /bin/bash "$M" clean --only clean.derived_data --no-color </dev/null >"$W/xb.out" 2>&1
+[ -f "$H/Library/Developer/Xcode/DerivedData/App-abc/blob" ] && grep -q 'DerivedData.*skipped' "$W/xb.out" && pass "DerivedData skipped while xcodebuild runs" || { fail "DerivedData cleaned during xcodebuild"; cat "$W/xb.out"; }
+
+# --- exit status, --quiet, --json, a step that hangs, two runs at once
+H="$W/rc"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\nexit 1\n' >"$H/.local/bin/pipx"; chmod +x "$H/.local/bin/pipx"
+env HOME="$H" /bin/bash "$M" update --only update.pipx --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 3 ] && grep -q '✗ pipx tools: update failed' "$W/rc.out" && pass "a failed update step: exit status 3" || { fail "exit status of a failed step (rc=$rc)"; cat "$W/rc.out"; }
+printf '#!/bin/bash\nexit 0\n' >"$H/.local/bin/pipx"
+env HOME="$H" /bin/bash "$M" update --only update.pipx --no-color --quiet </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 0 ] && grep -q 'Summary' "$W/rc.out" && grep -q 'pipx' "$H"/Library/Logs/macup/*.md && ! grep -q '▸' "$W/rc.out" && pass "--quiet: only the summary, exit status 0" || { fail "--quiet (rc=$rc)"; cat "$W/rc.out"; }
+env HOME="$H" /bin/bash "$M" check --only check.sizes --json </dev/null 2>/dev/null >"$W/rc.json"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["mode"]=="check" and d["failed_steps"]==0 and isinstance(d["needs_attention"],list) and d["report"].endswith(".md")' "$W/rc.json" 2>/dev/null \
+  && pass "--json: one valid JSON object" || { fail "--json"; cat "$W/rc.json"; }
+printf '#!/bin/bash\nsleep 60\n' >"$H/.local/bin/pipx"; t0=$SECONDS
+env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.pipx --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 3 ] && [ $((SECONDS - t0)) -lt 40 ] && grep -q 'pipx: stopped after' "$W/rc.out" && pass "a step that hangs is stopped" || { fail "hanging step (rc=$rc, $((SECONDS - t0))s)"; cat "$W/rc.out"; }
+LK="$H/Library/Application Support/macup/lock"; mkdir -p "$LK"; echo $$ >"$LK/pid"
+env HOME="$H" /bin/bash "$M" check --only check.sizes --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 1 ] && grep -q 'already running' "$W/rc.out" && [ -d "$LK" ] && pass "a second run at the same time refuses to start" || { fail "lock (rc=$rc)"; cat "$W/rc.out"; }
+true & wait $!; echo $! >"$LK/pid"   # a lock left by a run that was killed
+env HOME="$H" /bin/bash "$M" check --only check.sizes --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
+[ $rc = 0 ] && [ ! -e "$LK" ] && pass "a stale lock is taken over and removed" || { fail "stale lock (rc=$rc)"; cat "$W/rc.out"; }
+
+# --- --deep: build folders only next to their build file; it also works with update (project_roots used to be undefined there)
+H="$W/deep"; tests/fixture.sh "$H"
+env HOME="$H" /bin/bash "$M" update --deep --only check.sizes --no-color </dev/null >"$W/deep.out" 2>&1
+grep -q '~/Code/rs/target' "$W/deep.out" && ! grep -q 'Code/plain' "$W/deep.out" && ! grep -qE 'command not found|line [0-9]+:' "$W/deep.out" \
+  && pass "--deep lists Rust target next to Cargo.toml, with update too" || { fail "--deep"; grep -iE 'artifact|Code/|not found' "$W/deep.out"; }
+
+# --- the Trash cannot be read without Full Disk Access: said, not a silent 0 (root reads everything)
+if [ "$(id -u)" != 0 ]; then
+  H="$W/fda"; mkdir -p "$H/.Trash" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"; chmod 000 "$H/.Trash"
+  env HOME="$H" /bin/bash "$M" check --only check.sizes --no-color </dev/null >"$W/fda.out" 2>&1; chmod 700 "$H/.Trash"
+  grep -q 'Trash: cannot be read' "$W/fda.out" && pass "unreadable Trash is said" || { fail "unreadable Trash"; cat "$W/fda.out"; }
+fi
+
+# --- system checks read the output of macOS tools: fakes with real samples, so a format change shows up here
+SB="$W/sbin"; mkdir -p "$SB"; H="$W/sys"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+sys(){ env HOME="$H" PATH="$SB:$PATH" /bin/bash "$M" check --no-color "$@" </dev/null 2>&1; }
+cat >"$SB/softwareupdate" <<'FAKE'
+#!/bin/bash
+[ -n "$NO_UPDATES" ] && { printf 'Software Update Tool\n\nFinding available software\nNo new software available.\n'; exit 0; }
+printf 'Software Update Tool\n\nFinding available software\nSoftware Update found the following new or updated software:\n'
+printf '* Label: Command Line Tools for Xcode-16.0\n\tTitle: Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, \n'
+printf '* Label: macOS Sequoia 15.1-24B83\n\tTitle: macOS Sequoia 15.1, Version: 15.1, Size: 6283533KiB, Recommended: YES, Action: restart, \n'
+FAKE
+cat >"$SB/pmset" <<'FAKE'
+#!/bin/bash
+[ "$*" = "-g batt" ] && printf "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=4653155)\t83%%; discharging; 4:10 remaining present: true\n"
+exit 0
+FAKE
+cat >"$SB/system_profiler" <<'FAKE'
+#!/bin/bash
+printf 'Power:\n\n    Battery Information:\n\n      Health Information:\n          Cycle Count: 612\n          Condition: Normal\n          Maximum Capacity: 76%%\n'
+FAKE
+cat >"$SB/memory_pressure" <<'FAKE'
+#!/bin/bash
+printf 'The system has 17179869184 (1048576 pages with a page size of 16384).\n\nSystem-wide memory free percentage: 9%%\n'
+FAKE
+chmod +x "$SB"/*
+o=$(sys --only check.macos_updates)
+echo "$o" | grep -q 'macOS: updates available' && echo "$o" | grep -q '^ *Command Line Tools for Xcode 16.0$' && echo "$o" | grep -q '^ *macOS Sequoia 15.1$' \
+  && NO_UPDATES=1 sys --only check.macos_updates | grep -q 'macOS: up to date' && pass "macOS updates: titles read from softwareupdate -l" || { fail "softwareupdate parsing"; echo "$o"; }
+sys --only check.battery | grep -q 'Battery: 83% charged, 612 cycles, 76% capacity, Normal — capacity under 80%' && pass "battery: cycles and capacity read from system_profiler" || { fail "battery parsing"; sys --only check.battery; }
+sys --only check.memory | grep -q '! Memory: .* 9% free, .* memory is tight' && pass "memory: free percentage read from memory_pressure" || { fail "memory parsing"; sys --only check.memory; }
+
+# --- the schedule is optional: nothing until asked, a LaunchAgent that only runs a check, off removes it
+H="$W/sch"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"; cp macup "$H/.local/bin/macup"
+SP="$H/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; sch(){ env HOME="$H" /bin/bash "$H/.local/bin/macup" schedule "$@" --no-color </dev/null 2>&1; }
+sch | grep -q 'No schedule' && [ ! -e "$SP" ] && pass "schedule: none by default" || fail "schedule: default"
+sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<string>$H/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
+  && grep -q "^bootstrap gui/.* $SP" "$H/launchctl.log" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$H/launchctl.log"; }
+{ ! command -v plutil >/dev/null || plutil -lint "$SP" >/dev/null; } && pass "schedule: the plist is valid" || fail "schedule: plist"
+sch daily | grep -q 'every day at 10:00' && ! grep -q Weekday "$SP" && pass "schedule daily" || fail "schedule daily"
+sch off | grep -q 'Schedule removed' && [ ! -e "$SP" ] && grep -q "^bootout gui/.*/com.vitaliideveloper.macup" "$H/launchctl.log" && pass "schedule off removes it" || fail "schedule off"
+sch hourly >/dev/null; [ $? = 2 ] && [ ! -e "$SP" ] && pass "schedule: unknown word" || fail "schedule: unknown word"
+# --notify: a notification only when something needs a look
+env HOME="$H" /bin/bash "$M" check --only check.sizes --quiet --notify </dev/null >/dev/null 2>&1
+[ ! -e "$H/osascript.log" ] && pass "--notify: silent when all is well" || { fail "--notify without a reason"; cat "$H/osascript.log"; }
+mkdir -p "$H/Library/Developer/Xcode"; ln -s "$H/gone" "$H/.local/bin/deadlink"
+env HOME="$H" /bin/bash "$M" check --only check.commands --quiet --notify </dev/null >/dev/null 2>&1
+grep -q 'display notification "Needs attention: [0-9]' "$H/osascript.log" 2>/dev/null && pass "--notify: says what needs attention" || { fail "--notify"; cat "$H/osascript.log" 2>/dev/null; }
+
+# --- self-update: the file comes from the version's tag and must match its published SHA-256; a fake curl serves $FAKE_REMOTE
+mkdir -p "$W/cbin"; cat >"$W/cbin/curl" <<'FAKE'
+#!/bin/bash
+out=""; url=""
+while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift ;; --max-time|-z) shift ;; http*) url=$1 ;; esac; shift; done
+f="$FAKE_REMOTE/$(printf '%s' "$url" | sed -E 's|https://raw.githubusercontent.com/[^/]+/[^/]+/||')"
+[ -f "$f" ] || exit 22
+if [ -n "$out" ]; then cp "$f" "$out"; else cat "$f"; fi
+FAKE
+chmod +x "$W/cbin/curl"
+sum(){ if command -v shasum >/dev/null; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
+H="$W/su"; R="$W/remote"; mkdir -p "$H/.local/bin" "$H/.config/macup" "$R/main" "$R/v9.9.9"; printf 'language = en\n' >"$H/.config/macup/config"
+sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' macup >"$R/main/macup"; { cat "$R/main/macup"; echo '# work in progress on main'; } >"$R/main/macup.wip"; mv "$R/main/macup.wip" "$R/main/macup"
+sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' macup >"$R/v9.9.9/macup"
+echo "$(sum "$R/main/macup")  macup" >"$R/main/macup.sha256"; echo "$(sum "$R/v9.9.9/macup")  macup" >"$R/v9.9.9/macup.sha256"
+old(){ sed 's/^MACUP_VERSION=.*/MACUP_VERSION="0.0.1"/' macup >"$H/.local/bin/macup"; }
+su(){ env HOME="$H" PATH="$W/cbin:$PATH" FAKE_REMOTE="$R" /bin/bash "$H/.local/bin/macup" self-update --no-color </dev/null 2>&1; }
+old; su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$H/.local/bin/macup" "$R/v9.9.9/macup" && pass "self-update installs the tagged release, not main" || { fail "self-update from the tag"; su; }
+old; echo "0000  macup" >"$R/v9.9.9/macup.sha256"
+su | grep -q 'does not match its published checksum' && grep -q '^MACUP_VERSION="0.0.1"' "$H/.local/bin/macup" && pass "self-update refuses a file that does not match its checksum" || { fail "self-update checksum"; su; }
+rm -rf "$R/v9.9.9"; old
+su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$H/.local/bin/macup" "$R/main/macup" && pass "self-update falls back to main before a version is tagged" || { fail "self-update fallback"; su; }
 
 # --- installer
 I="$W/i"; mkdir -p "$I/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$I/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$I/.npm-global/bin/other"

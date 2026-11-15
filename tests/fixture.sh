@@ -62,3 +62,14 @@ for v in v22.1.0 v22.9.0; do blob "$H/.nvm/versions/node/$v" 1024; done
 mkdir -p "$H/.nvm/alias/lts"; echo "lts/jod" >"$H/.nvm/alias/default2"; echo "v22.1.0" >"$H/.nvm/alias/lts/jod"
 blob "$H/.m2/repository/com/me/lib/1.0-SNAPSHOT" 64; echo '<metadata/>' >"$H/.m2/repository/com/me/lib/maven-metadata-local.xml"
 blob "$L/Caches/Microsoft Edge/Cache"
+# --- 2.8 cleaners: Bun, Deno, Poetry (its virtualenvs stay), Cargo, JetBrains
+blob "$H/.bun/install/cache/x"; blob "$L/Caches/deno/deps"; blob "$L/Caches/pypoetry/cache/x"; blob "$L/Caches/pypoetry/artifacts/y"
+blob "$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/lib" 64; printf 'version = 3.12.1\n' >"$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/pyvenv.cfg"
+blob "$H/.cargo/registry/cache/index.crates.io"; blob "$H/.cargo/registry/src/index.crates.io"; mkdir -p "$H/.cargo/registry/index"; echo idx >"$H/.cargo/registry/index/keep"
+blob "$L/Caches/JetBrains/IntelliJIdea2025.1/index"
+# a pin without the patch (.nvmrc "21.2") keeps the newest 21.2.x; a pin in package.json (volta, engines) counts too
+for v in v21.2.0 v21.2.5 v21.7.0 v23.1.0 v23.4.0; do blob "$H/.nvm/versions/node/$v" 1024; done
+mkdir -p "$H/Code/partial" "$H/Code/volta"; echo "21.2" >"$H/Code/partial/.nvmrc"
+printf '{"dependencies":{"left-pad":"23.4.0"},"volta":{"node":"23.1.0"}}\n' >"$H/Code/volta/package.json"
+# --deep: target counts only next to Cargo.toml or pom.xml
+blob "$H/Code/rs/target/debug"; echo '[package]' >"$H/Code/rs/Cargo.toml"; blob "$H/Code/plain/target/data" 64

@@ -3,18 +3,20 @@ section "Tools & services"
 if task check.mcp && have claude; then
   step 'Checking MCP servers'
   # from $HOME: the list depends on the current folder (local-scope servers)
-  MCP=$(cd "$HOME" && claude mcp list 2>/dev/null </dev/null | nocolor)
+  MCP=$(cd "$HOME" && tl 120 claude mcp list 2>/dev/null </dev/null | nocolor); MCPRC=$?
   MT=$(printf '%s\n' "$MCP" | grep -cE '✓|✔|✗|✘|⚠|Connected|Failed|[Aa]uth')
   BAD=$(printf '%s\n' "$MCP" | grep -E '✗|✘|⚠|Failed|[Nn]eeds auth')
-  if [ "$MT" -eq 0 ]; then info 'Claude Code MCP servers: none configured'
+  if [ "$MCPRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'claude mcp list' 120
+  elif [ "$MT" -eq 0 ]; then info 'Claude Code MCP servers: none configured'
   elif [ -z "$BAD" ]; then ok 'Claude Code MCP servers: all %s connected' "$MT"
   else warn 'Claude Code MCP servers: %s of %s not working' "$(cnt "$BAD")" "$MT"; lines "$BAD"; fi
 fi
 if task check.brew_doctor && have brew; then
   step 'brew doctor'
-  DOC=$(brew doctor 2>&1); echo "$DOC" >>"$RAW"
+  DOC=$(tl 240 brew doctor 2>&1); DOCRC=$?; echo "$DOC" >>"$RAW"
   ND=$(printf '%s\n' "$DOC" | grep -c '^Warning:')
-  if [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
+  if [ "$DOCRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'brew doctor' 240
+  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
 fi
 if task check.xcode; then
   if XP=$(xcode-select -p 2>/dev/null) && [ -d "$XP" ]; then
@@ -119,7 +121,7 @@ $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
 fi
-if task check.docker && have docker && docker info >/dev/null 2>&1; then
+if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
   DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
   info 'Docker: %s' "${DDF%; }"
 fi

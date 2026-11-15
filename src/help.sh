@@ -18,6 +18,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
   macup self-update  Встановити свіжу версію з GitHub (через Homebrew: brew upgrade macup)
+  macup schedule     Необов'язково: перевірка за розкладом зі сповіщенням (weekly, daily, off)
   macup uninstall    Видалити macup і все, що він створив; --yes без питання
   macup help         Ця довідка
 
@@ -29,7 +30,10 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   --only a,b         Виконати лише ці задачі, напр. --only check.*
   --lang en|uk|ru    Мова для цього запуску
   --no-color         Без кольорів
+  --quiet            Лише підсумок (усе інше — у звіті)
+  --json             Підсумок у JSON, для скриптів
 
+Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
 Без команди (all, update, clean) чи твого вибору після перевірки нічого не змінюється.
 Рівні: safe — відновиться само · standard — перекачається · aggressive — програми можуть вийти з акаунта.
 Звіти: ~/Library/Logs/macup/
@@ -53,6 +57,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
   macup self-update  Установить свежую версию с GitHub (через Homebrew: brew upgrade macup)
+  macup schedule     Необязательно: проверка по расписанию с уведомлением (weekly, daily, off)
   macup uninstall    Удалить macup и всё, что он создал; --yes без вопроса
   macup help         Эта справка
 
@@ -64,7 +69,10 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   --only a,b         Выполнить только эти задачи, напр. --only check.*
   --lang en|uk|ru    Язык для этого запуска
   --no-color         Без цветов
+  --quiet            Только итог (всё остальное — в отчёте)
+  --json             Итог в JSON, для скриптов
 
+Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
 Без команды (all, update, clean) или вашего выбора после проверки ничего не меняется.
 Уровни: safe — восстановится само · standard — скачается заново · aggressive — приложения могут выйти из аккаунта.
 Отчёты: ~/Library/Logs/macup/
@@ -88,6 +96,7 @@ Commands
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
   macup self-update  Install the latest macup from GitHub (with Homebrew: brew upgrade macup)
+  macup schedule     Optional: a scheduled check with a notification (weekly, daily, off)
   macup uninstall    Remove macup and everything it made; --yes skips the question
   macup help         This help
 
@@ -99,7 +108,10 @@ Options (combine with any run command)
   --only a,b         Run only these task ids, e.g. --only check.*
   --lang en|uk|ru    Language for this run
   --no-color         Plain output
+  --quiet            Only the summary (the rest is in the report)
+  --json             The summary as JSON, for scripts
 
+Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
 Nothing changes without a command (all, update, clean) or your pick after a check.
 Levels: safe rebuilds itself · standard downloads again · aggressive may sign apps out.
 Reports: ~/Library/Logs/macup/

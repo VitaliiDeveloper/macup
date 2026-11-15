@@ -2,9 +2,9 @@
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
 
 # Folders whose contents can simply be deleted (the folder itself stays).
-# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f) | only if this tool exists
-CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|/Xcode.app/Contents/MacOS/Xcode|
-clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|/Xcode.app/Contents/MacOS/Xcode|
+# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f; xcode = Xcode or xcodebuild) | only if this tool exists
+CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|xcode|
+clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|xcode|
 clean.sim_caches|1|Simulator caches|~/Library/Developer/CoreSimulator/Caches||
 clean.spm|1|SwiftPM cache|~/Library/Caches/org.swift.swiftpm||
 clean.cocoapods|1|CocoaPods cache|~/Library/Caches/CocoaPods||
@@ -12,6 +12,12 @@ clean.carthage|1|Carthage cache|~/Library/Caches/org.carthage.CarthageKit||
 clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
+clean.bun|1|Bun install cache|~/.bun/install/cache||
+clean.deno|1|Deno cache|~/Library/Caches/deno||
+clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
+clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
+clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
+clean.cargo|2|Cargo registry sources|~/.cargo/registry/src||
 clean.gradle|2|Gradle caches|~/.gradle/caches|GradleDaemon|
 clean.android|2|Android cache|~/.android/cache||'
 
@@ -122,7 +128,7 @@ if task_allowed clean.sim_unavailable && have xcrun; then
   UX=""   # Xcode's parallel-test clones are a device set of their own
   [ -d "$DEV/XCTestDevices" ] && UX=$(xcrun simctl --set "$DEV/XCTestDevices" list devices unavailable 2>/dev/null | unav_dirs "$DEV/XCTestDevices")
   UL=$(printf '%s\n%s\n' "$UD" "$UX" | grep .)
-  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" '/Xcode.app/Contents/MacOS/Xcode|/usr/bin/xcodebuild( |$)' "$UL"
+  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" "$XCODE_BUSY" "$UL"
 fi
 if task_allowed clean.brew && have brew; then
   BC=$(brew --cache 2>/dev/null); cover "$BC"
@@ -139,14 +145,6 @@ fi
 cand clean.quicklook 1 "$(_ 'Quick Look cache')" 0 cmd quicklook
 if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
 
-project_roots(){ # never the home folder itself or anything above it
-  echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
-    d=$(expand "$d"); d=${d%/}
-    case "$d" in ""|"$HOME") continue ;; esac
-    case "$HOME/" in "$d"/*) continue ;; esac
-    [ -d "$d" ] && echo "$d"
-  done
-}
 if task_allowed clean.stale_node_modules; then
   step 'Looking for stale node_modules'
   STALE=""
@@ -167,7 +165,11 @@ $(project_roots)
 EOF2
   [ -n "$STALE" ] && cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
 fi
-task_allowed clean.trash && cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"
+# without Full Disk Access the terminal cannot even list the Trash: say so instead of a silent 0
+if task_allowed clean.trash; then
+  if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then task clean.trash && warn 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
+  else cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"; fi
+fi
 # --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
 # gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
 CL_LVL=2
@@ -175,12 +177,19 @@ clean_old clean.gradle  'Old Gradle wrappers' "$HOME/.gradle/wrapper/dists" 30
 for d in "$HOME/Library/Caches/Google/AndroidStudio"*; do
   [ -d "$d" ] && clean_dir clean.android "$(_f 'Android Studio cache (%s)' "${d##*/}")" "$d" '/Android Studio.app/Contents/'
 done
+# JetBrains IDEs keep one cache folder per product and version; the IDE re-indexes after it is emptied.
+# The app names differ (IntelliJ IDEA, PyCharm, …), so an open IDE is found by its open files (lsof).
+for d in "$HOME/Library/Caches/JetBrains"/*; do
+  [ -d "$d" ] && [ ! -L "$d" ] || continue
+  s=$(kb "$d"); [ "$s" -lt 5120 ] && continue
+  cand clean.jetbrains 2 "$(_f 'JetBrains cache (%s)' "${d##*/}")" "$s" empty "$d" "" "" "$d"
+done
 # `mvn install` puts your own builds (often SNAPSHOTs) here; those exist nowhere else
 if [ -n "$(find "$HOME/.m2/repository" -name maven-metadata-local.xml -print 2>/dev/null | head -1)" ]; then
   CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository"
 else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository"; fi
 CL_LVL=""
-if task_allowed clean.docker && have docker && docker info >/dev/null 2>&1; then
+if task_allowed clean.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
   BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
   cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never containers or volumes)')" "$(tokb "${BCR:-0B}")" cmd docker
 fi
@@ -188,7 +197,7 @@ fi
 # --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
 # every version named in a global setting or in a project's pin file (.nvmrc, .tool-versions, …).
 if task_allowed clean.old_versions; then
-  PINS=" $( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
+  PINSRC=$( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
     # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
     find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
@@ -198,13 +207,24 @@ if task_allowed clean.old_versions; then
       find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \
         -o -name .ruby-version -o -name .python-version -o -name .tool-versions -o -name mise.toml -o -name .mise.toml -o -name pyvenv.cfg \) -print 2>/dev/null
     done | head -2000 | tr '\n' '\0' | xargs -0 cat 2>/dev/null
-  } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
+    # package.json: "volta": {"node": "20.5.0"} and "engines": {"node": "20.5.0"}; never its dependency versions
+    project_roots | while IFS= read -r r; do
+      find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f -name package.json -print 2>/dev/null
+    done | head -2000 | tr '\n' '\0' | xargs -0 grep -hE '"node"[[:space:]]*:' 2>/dev/null
+  } )
+  PINS=" $(printf '%s\n' "$PINSRC" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
+  # a pin without the patch ("20.5" in an .nvmrc) means the newest installed 20.5.x
+  PINS2=" $(printf '%s\n' "$PINSRC" | grep -oE '(^|[^0-9.])[0-9]+\.[0-9]+([^0-9.]|$)' | grep -oE '[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
   old_versions(){ # dir series(1 = major, 2 = major.minor) → older patch versions that nothing pins
     for e in "$1"/*; do [ -d "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
       | awk -v s="$2" '{v=$0; sub(/^v/,"",v); split(v,a,"."); print (s==1 ? a[1] : a[1]"."a[2]), v, $0}' \
       | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | while IFS= read -r n; do
         [ -L "$1/$n" ] && continue
         case "$PINS" in *" ${n#v} "*) continue ;; esac
+        mm=${n#v}; mm=${mm%.*}
+        case "$PINS2" in *" $mm "*)
+          [ "$(for e in "$1"/*; do printf '%s\n' "${e##*/}"; done | sed 's/^v//' | grep -E "^${mm/./\\.}\.[0-9]+$" | sort -V | tail -1)" = "${n#v}" ] && continue ;;
+        esac
         [ -n "$(ls -A "$1/$n/envs" 2>/dev/null)" ] && continue   # pyenv virtualenvs live inside
         echo "$1/$n"
       done
@@ -332,6 +352,8 @@ if task_allowed clean.app_caches; then
     case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
     printf '%s' "$COVERED" | grep -qxF "$e" && continue
     printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    # not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
+    [ -n "$(find "$e" -maxdepth 3 -name pyvenv.cfg -print 2>/dev/null | head -1)" ] && continue
     printf '%s\t%s\n' "$s" "$e"
   done > "$BODY.caches"
   while IFS="$(printf '\t')" read -r s e; do

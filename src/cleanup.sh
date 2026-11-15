@@ -9,7 +9,11 @@ C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
 C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
-  case "$1" in "$HOME"/Library/*|"$HOME"/.*) ;; *) return 1 ;; esac
+  case "$1" in
+    "$HOME"/Library/*|"$HOME"/.*) ;;
+    */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
+    *) return 1 ;;
+  esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
     */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
@@ -18,6 +22,18 @@ safe_path(){
 }
 in_cache_dir(){ local n; while IFS= read -r n; do case "$1/" in *"/$n/"*) return 0 ;; esac; done <<EOF2
 $(printf '%s\n' "$ELECTRON_CACHES" | tr '|' '\n')
+EOF2
+  return 1; }
+project_roots(){ # the folders in project_dirs that exist; never the home folder itself or anything above it
+  echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
+    d=$(expand "$d"); d=${d%/}
+    case "$d" in ""|"$HOME") continue ;; esac
+    case "$HOME/" in "$d"/*) continue ;; esac
+    [ -d "$d" ] && echo "$d"
+  done
+}
+in_projects(){ local r; while IFS= read -r r; do [ -n "$r" ] && case "$1" in "$r"/*) return 0 ;; esac; done <<EOF2
+$(project_roots)
 EOF2
   return 1; }
 kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$((s + $(kb "$p"))); done <<EOF2
@@ -38,6 +54,8 @@ cand_more(){ # label level kb paths open-dirs — adds to the candidate with thi
     C_KB[i]=$((C_KB[i] + $3)); C_PATHS[i]="${C_PATHS[i]}"$'\n'"$4"; C_OPEN[i]="${C_OPEN[i]}${C_OPEN[i]:+$'\n'}$5"; cover "$4"; return 0
   done; return 1
 }
+# Xcode itself, or an xcodebuild started from a terminal or a CI agent: both write to DerivedData while they run
+XCODE_BUSY='/Xcode.app/Contents/MacOS/Xcode|(^|/)xcodebuild( |$)'
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
@@ -50,7 +68,7 @@ EOF2
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
-  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc='/Xcode.app/Contents/MacOS/Xcode'
+  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc=$XCODE_BUSY
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
   cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
@@ -69,7 +87,7 @@ measure_cmd(){ # id label dir key — a tool's own clean command; the dir is mea
 }
 
 # --- running
-KEY_FREED=""
+KEY_FREED=""; REFUSED=0
 run_key(){ local out r=0
   case "$1" in
     sim:*)     case "$1" in *default*) run xcrun simctl delete unavailable || r=1 ;; esac   # sim:[default] [tests]: the sets that have some
@@ -94,7 +112,7 @@ sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1"
 del(){ # one path, re-checked right before deleting; symlinks are never followed or removed
   [ -L "$1" ] && return 0
   [ -e "$1" ] || return 0
-  safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; return 0; }
+  safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
   rm -rf "$1" 2>>"$RAW"
 }
 exec_cand(){ # index
@@ -113,13 +131,15 @@ exec_cand(){ # index
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    rm)    b=$(kbl "${C_PATHS[i]}")
+    rm)    b=$(kbl "${C_PATHS[i]}"); REFUSED=0
            while IFS= read -r p; do [ -n "$p" ] && del "$p"; done <<EOF2
 ${C_PATHS[i]}
 EOF2
-           a=$(kbl "${C_PATHS[i]}") ;;
+           a=$(kbl "${C_PATHS[i]}")
+           # never "cleaned" for something macup would not touch
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see log)' "$lbl"; return 0; fi ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
-           if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
+           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see log)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac

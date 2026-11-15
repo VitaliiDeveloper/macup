@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the single-file `macup` from src/. Edit src/, then run ./build.sh.
-#   ./build.sh --check   fails if macup is out of date (used by tests and CI)
+#   ./build.sh --check   fails if macup or macup.sha256 is out of date (used by tests and CI)
 # Translations live in src/i18n/translations.json ({"English": {"uk": …, "ru": …}}) and are
 # embedded at build time, so macup itself needs no JSON parser.
 set -eo pipefail
@@ -38,9 +38,14 @@ for name in $ORDER; do
 done >"$tmp"
 /bin/bash -n "$tmp"
 
+# self-update and the installer compare the download with this before they install it
+sum256(){ if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
+SUM="$(sum256 "$tmp")  macup"
+
 if [ "${1:-}" = --check ]; then
   cmp -s "$tmp" macup || { echo "macup is out of date: run ./build.sh and commit it" >&2; exit 1; }
+  [ "$(cat macup.sha256 2>/dev/null)" = "$SUM" ] || { echo "macup.sha256 is out of date: run ./build.sh and commit it" >&2; exit 1; }
   echo "macup is up to date"
 else
-  cp "$tmp" macup; chmod 755 macup; echo "built macup ($(wc -l <macup | tr -d ' ') lines)"
+  cp "$tmp" macup; chmod 755 macup; echo "$SUM" >macup.sha256; echo "built macup ($(wc -l <macup | tr -d ' ') lines)"
 fi

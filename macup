@@ -8,7 +8,7 @@
 
 MACUP_VERSION="2.7.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
-MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO/main"
+MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
 
 case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { export LC_CTYPE=en_US.UTF-8; } 2>/dev/null ;; esac
@@ -21,6 +21,8 @@ CACHE_DIR="$HOME/Library/Caches/macup"
 HISTORY="$STATE_DIR/history.csv"
 LOGDIR="$HOME/Library/Logs/macup"
 DEV="$HOME/Library/Developer"
+SCHED_LABEL="com.vitaliideveloper.macup"
+SCHED_PLIST="$HOME/Library/LaunchAgents/$SCHED_LABEL.plist"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
@@ -56,6 +58,14 @@ update.uv|on|uv-installed tools
 update.rustup|on|Rust toolchains
 update.omz|on|Oh My Zsh
 update.gh_ext|on|GitHub CLI extensions
+update.pnpm|on|Global pnpm packages
+update.bun|on|Bun (bun upgrade; a Homebrew install is left to Homebrew)
+update.deno|on|Deno (deno upgrade; a Homebrew install is left to Homebrew)
+update.cargo|on|Programs installed with cargo install (needs cargo-update)
+update.mise|on|Tools managed by mise
+update.asdf|on|asdf plugins
+update.editor_ext|on|VS Code and Cursor extensions
+update.gem|off|Ruby gems (opt-in; never the system Ruby)
 update.grok|on|Grok CLI (grok update)
 update.agy|on|Antigravity CLI (agy update)
 update.apps|on|Apps outside Homebrew and the App Store that update themselves (only reported)
@@ -76,14 +86,19 @@ clean.npm|on|npm cache garbage (npm cache verify)
 clean.yarn|on|Yarn cache
 clean.pnpm|on|pnpm store: unreferenced packages
 clean.pip|on|pip cache
+clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
 clean.uv|on|uv cache: unused entries
 clean.go|on|Go build cache
+clean.bun|on|Bun install cache
+clean.deno|on|Deno cache
 clean.logs|on|Your app logs and crash reports older than 30 days
 clean.quicklook|on|Quick Look thumbnail cache
 clean.reports|on|macup reports older than keep_reports_days
 clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
 clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
 clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
+clean.cargo|on|Cargo registry downloads and sources (standard)
+clean.jetbrains|on|JetBrains IDE caches (standard, skipped while open)
 clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
 clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
@@ -117,6 +132,8 @@ load_conf(){
   KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
   SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
+  STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
+  [ -n "${MACUP_STEP_SECS:-}" ] && STEP_SECS=$(num "$MACUP_STEP_SECS" "$STEP_SECS")   # seconds, for the tests
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
@@ -161,7 +178,7 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; D=$'\033[2m'; N=$'\033[0m'; CL=$'\r\033[K'
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
-WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""
+WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""; ERRS=0; STEP_SECS=3600
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
 section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
@@ -170,11 +187,33 @@ ok()      { local m; m=$(_f "$@"); flush; printf '%s  %s✓%s %s\n' "$CL" "$G" "
 info()    { local m; m=$(_f "$@"); flush; printf '%s  %s·%s %s\n' "$CL" "$D" "$N" "$m"; md "- $m"; }
 warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N" "$m"; md "- ⚠️ $m"; WARN+=("$m"); }
 fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
+err()     { fail "$@"; ERRS=$((ERRS + 1)); }   # a step that did not do its job: the run ends with exit status 3
 sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
 mdonly()  { md "    - $*"; }
 step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
-run()     { echo "\$ $*" >>"$RAW"; "$@" >>"$RAW" 2>&1 </dev/null; }
+tl()      { # seconds cmd… — the command, stopped after that long (macOS has no `timeout`); 124 when it was stopped
+            # the command stays in the foreground, so Ctrl-C reaches it; shell functions run without a limit
+            local secs=$1 wd rc; shift
+            if [ "$secs" -le 0 ] || [ -z "$BODY" ] || [ "$(type -t "$1")" != file ]; then "$@"; return; fi
+            rm -f "$BODY.to"
+            ( end=$((SECONDS + secs))
+              while [ "$SECONDS" -lt "$end" ]; do kill -0 $$ 2>/dev/null || exit 0; sleep 2; done
+              p=$(cat "$BODY.pid" 2>/dev/null); [ -n "$p" ] || exit 0
+              : >"$BODY.to"; kill -TERM "$p" 2>/dev/null; sleep 5; kill -KILL "$p" 2>/dev/null ) >/dev/null 2>&1 &
+            wd=$!
+            /bin/bash -c 'echo $$ >"$0"; exec "$@"' "$BODY.pid" "$@"; rc=$?
+            kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+            [ -f "$BODY.to" ] && { rm -f "$BODY.to"; return 124; }
+            return $rc; }
+run()     { local rc; echo "\$ $*" >>"$RAW"; tl "${RUN_SECS:-$STEP_SECS}" "$@" >>"$RAW" 2>&1 </dev/null; rc=$?
+            if [ $rc = 124 ]; then
+              echo "macup: stopped after $(( ${RUN_SECS:-$STEP_SECS} / 60 )) minutes: $*" >>"$RAW"
+              warn '%s: stopped after %s minutes without finishing (step_timeout_minutes in %s)' "$1" "$(( ${RUN_SECS:-$STEP_SECS} / 60 ))" "$(tildify "$CONF")"
+            fi
+            return $rc; }
+jstr()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\000-\037'; }   # a string for JSON and AppleScript
+jarr()    { local x first=1; printf '['; for x in "$@"; do [ $first = 1 ] || printf ','; first=0; printf '"%s"' "$(jstr "$x")"; done; printf ']'; }
 TICK=""
 tick()    { # label cmd… — run; on a terminal the step line counts the time and shows the command's latest "==> " phase, so a long job does not look hung
             [ -t 1 ] && [ -n "$CL" ] || { shift; run "$@"; return; }
@@ -240,6 +279,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
   macup self-update  Встановити свіжу версію з GitHub (через Homebrew: brew upgrade macup)
+  macup schedule     Необов'язково: перевірка за розкладом зі сповіщенням (weekly, daily, off)
   macup uninstall    Видалити macup і все, що він створив; --yes без питання
   macup help         Ця довідка
 
@@ -251,7 +291,10 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   --only a,b         Виконати лише ці задачі, напр. --only check.*
   --lang en|uk|ru    Мова для цього запуску
   --no-color         Без кольорів
+  --quiet            Лише підсумок (усе інше — у звіті)
+  --json             Підсумок у JSON, для скриптів
 
+Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
 Без команди (all, update, clean) чи твого вибору після перевірки нічого не змінюється.
 Рівні: safe — відновиться само · standard — перекачається · aggressive — програми можуть вийти з акаунта.
 Звіти: ~/Library/Logs/macup/
@@ -275,6 +318,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
   macup self-update  Установить свежую версию с GitHub (через Homebrew: brew upgrade macup)
+  macup schedule     Необязательно: проверка по расписанию с уведомлением (weekly, daily, off)
   macup uninstall    Удалить macup и всё, что он создал; --yes без вопроса
   macup help         Эта справка
 
@@ -286,7 +330,10 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   --only a,b         Выполнить только эти задачи, напр. --only check.*
   --lang en|uk|ru    Язык для этого запуска
   --no-color         Без цветов
+  --quiet            Только итог (всё остальное — в отчёте)
+  --json             Итог в JSON, для скриптов
 
+Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
 Без команды (all, update, clean) или вашего выбора после проверки ничего не меняется.
 Уровни: safe — восстановится само · standard — скачается заново · aggressive — приложения могут выйти из аккаунта.
 Отчёты: ~/Library/Logs/macup/
@@ -310,6 +357,7 @@ Commands
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
   macup self-update  Install the latest macup from GitHub (with Homebrew: brew upgrade macup)
+  macup schedule     Optional: a scheduled check with a notification (weekly, daily, off)
   macup uninstall    Remove macup and everything it made; --yes skips the question
   macup help         This help
 
@@ -321,7 +369,10 @@ Options (combine with any run command)
   --only a,b         Run only these task ids, e.g. --only check.*
   --lang en|uk|ru    Language for this run
   --no-color         Plain output
+  --quiet            Only the summary (the rest is in the report)
+  --json             The summary as JSON, for scripts
 
+Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
 Nothing changes without a command (all, update, clean) or your pick after a check.
 Levels: safe rebuilds itself · standard downloads again · aggressive may sign apps out.
 Reports: ~/Library/Logs/macup/
@@ -380,6 +431,9 @@ project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
 # Keep macup reports for this many days
 keep_reports_days = 60
+
+# Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
+step_timeout_minutes = 60
 EOF
 }
 
@@ -437,22 +491,90 @@ brew_prefix(){ # a macup path → the Homebrew prefix that installed it; nothing
 }
 update_cmd(){ if [ -n "$(brew_prefix "$(resolve_self)")" ]; then echo 'brew upgrade macup'; else echo 'macup self-update'; fi; }
 
+sha256(){ if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi 2>/dev/null | awk '{print $1}'; }
+fetch_release(){ # file → the latest released macup, checked against its published SHA-256; prints its version
+  # main names the latest version; the file itself comes from that version's tag, so work in progress on main is never installed.
+  # Before a version is tagged (or for a fork without tags) main is used. 1: download failed, 2: not macup, 3: checksum differs.
+  local out=$1 v ref want
+  curl -fsSL --max-time 30 "$MACUP_RAW/main/macup" -o "$out" 2>/dev/null || return 1
+  v=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$out" | head -1); [ -n "$v" ] || return 2
+  ref="v$v"; want=$(curl -fsSL --max-time 15 "$MACUP_RAW/$ref/macup.sha256" 2>/dev/null | awk '{print $1; exit}')
+  if [ -n "$want" ] && curl -fsSL --max-time 30 "$MACUP_RAW/$ref/macup" -o "$out.tag" 2>/dev/null; then mv "$out.tag" "$out"
+  else rm -f "$out.tag"; ref=main; want=$(curl -fsSL --max-time 15 "$MACUP_RAW/main/macup.sha256" 2>/dev/null | awk '{print $1; exit}'); fi
+  [ -n "$want" ] && [ "$(sha256 "$out")" = "$want" ] || return 3
+  bash -n "$out" 2>/dev/null || return 2
+  echo "$v"
+}
+
 self_update(){
-  local tmp newv target
+  local tmp newv target rc
   case "$MACUP_REPO" in __*) _ 'This copy has no GitHub repo configured.'; echo; exit 1 ;; esac
   # Homebrew owns that file, and the next brew upgrade would put its own version back
   if [ -n "$(brew_prefix "$(resolve_self)")" ]; then _ 'macup was installed with Homebrew. Update it with: brew upgrade macup'; echo; exit 0; fi
   tmp=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-  if ! curl -fsSL --max-time 30 "$MACUP_RAW/macup" -o "$tmp"; then _f 'Download failed: %s' "$MACUP_RAW/macup"; echo; rm -f "$tmp"; exit 1; fi
-  newv=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$tmp" | head -1)
-  if [ -z "$newv" ] || ! bash -n "$tmp" 2>/dev/null; then _ 'The downloaded file looks broken; nothing changed.'; echo; rm -f "$tmp"; exit 1; fi
+  newv=$(fetch_release "$tmp"); rc=$?
+  case $rc in
+    0) ;;
+    1) _f 'Download failed: %s' "$MACUP_RAW/main/macup"; echo; rm -f "$tmp"; exit 1 ;;
+    3) _ 'The downloaded file does not match its published checksum; nothing changed.'; echo; rm -f "$tmp"; exit 1 ;;
+    *) _ 'The downloaded file looks broken; nothing changed.'; echo; rm -f "$tmp"; exit 1 ;;
+  esac
   if ! ver_gt "$newv" "$MACUP_VERSION"; then _f 'macup %s is already the latest.' "$MACUP_VERSION"; echo; rm -f "$tmp"; exit 0; fi
   target=$(resolve_self)
   if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; fi
   echo; rm -f "$tmp"
 }
 
-uninstall(){ # macup, older copies, settings, history, reports, the installer's PATH line, leftover temp files
+# Optional: a LaunchAgent that runs `macup check` on its own and shows a notification. A check installs and deletes
+# nothing, so the schedule never changes the Mac behind your back. Off unless you turn it on.
+sched_off(){ launchctl bootout "gui/$(id -u)/$SCHED_LABEL" 2>/dev/null || launchctl unload "$SCHED_PLIST" 2>/dev/null; rm -f "$SCHED_PLIST"; }
+schedule(){ # [daily | weekly | off]
+  local self day=""
+  case "$1" in
+    "") if [ ! -f "$SCHED_PLIST" ]; then
+          _ 'No schedule: macup runs only when you start it.'; echo
+          _ 'Turn it on: macup schedule weekly (or daily). It runs macup check, which changes nothing, and shows a notification.'; echo
+        else
+          if grep -q '<key>Weekday</key>' "$SCHED_PLIST"; then _ 'Schedule: macup check every Monday at 10:00, with a notification.'
+          else _ 'Schedule: macup check every day at 10:00, with a notification.'; fi; echo
+          _ 'Turn it off: macup schedule off'; echo
+        fi ;;
+    off|remove|stop)
+        if [ -f "$SCHED_PLIST" ]; then sched_off; _ 'Schedule removed.'; else _ 'No schedule: macup runs only when you start it.'; fi; echo ;;
+    daily|weekly)
+        self=$(resolve_self); case "$self" in /*) ;; *) self="$PWD/${self#./}" ;; esac
+        [ -f "$self" ] || { _f "Couldn't write %s" "$(tildify "$SCHED_PLIST")"; echo; return 1; }
+        [ "$1" = weekly ] && day='<key>Weekday</key><integer>1</integer>'
+        xesc(){ printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+        mkdir -p "${SCHED_PLIST%/*}" "$LOGDIR"
+        [ -f "$SCHED_PLIST" ] && sched_off
+        cat >"$SCHED_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$SCHED_LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>$(xesc "$self")</string><string>check</string><string>--quiet</string><string>--notify</string></array>
+  <key>StartCalendarInterval</key>
+  <dict>$day<key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
+  <key>StandardErrorPath</key><string>$(xesc "$LOGDIR/schedule.log")</string>
+  <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+EOF
+        if ! launchctl bootstrap "gui/$(id -u)" "$SCHED_PLIST" 2>/dev/null && ! launchctl load -w "$SCHED_PLIST" 2>/dev/null; then
+          rm -f "$SCHED_PLIST"; _ "launchd did not accept the schedule; nothing changed."; echo; return 1
+        fi
+        if [ "$1" = weekly ]; then _ 'Schedule: macup check every Monday at 10:00, with a notification.'
+        else _ 'Schedule: macup check every day at 10:00, with a notification.'; fi; echo
+        _ 'Turn it off: macup schedule off'; echo ;;
+    *) echo "macup schedule daily | weekly | off"; return 2 ;;
+  esac
+}
+
+uninstall(){ # macup, older copies, settings, history, reports, the schedule, the installer's PATH line, leftover temp files
   local target bp f d rc l dir others tmps ans tap left="" n=0
   local -a progs=() dirs=() rcs=() lines=()
   target=$(resolve_self); bp=$(brew_prefix "$target")
@@ -481,13 +603,15 @@ uninstall(){ # macup, older copies, settings, history, reports, the installer's 
   for d in "${dirs[@]}"; do printf '  · %s  %s\n' "$(tildify "$d")" "$(hum "$(kb "$d")")"; done
   for rc in "${rcs[@]}"; do printf '  · %s\n' "$(_f 'the PATH line in %s' "$(tildify "$rc")")"; done
   [ -n "$tmps" ] && printf '  · %s\n' "$(_f 'temporary files of interrupted runs: %s' "$(cnt "$tmps")")"
+  [ -f "$SCHED_PLIST" ] && printf '  · %s\n' "$(_f 'the schedule (%s)' "$(tildify "$SCHED_PLIST")")"
   [ -n "$left" ] && printf '%s' "$left" | while IFS= read -r l; do printf '  %s\n' "$l"; done
-  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ]; then _ 'Nothing to remove.'; echo; return; fi
+  if [ -z "$bp" ] && [ ${#progs[@]} -eq 0 ] && [ ${#dirs[@]} -eq 0 ] && [ ${#rcs[@]} -eq 0 ] && [ -z "$tmps" ] && [ ! -f "$SCHED_PLIST" ]; then _ 'Nothing to remove.'; echo; return; fi
   if [ "$YES" != 1 ]; then
     ans=$(ask "$(_ 'Remove all of this? [y/N] ')")
     case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return ;; esac
   fi
 
+  [ -f "$SCHED_PLIST" ] && sched_off
   for d in "${dirs[@]}"; do rm -rf "$d"; done
   for rc in "${rcs[@]}"; do   # the installer wrote a blank line, "# macup" and the export line
     f=$(mktemp "${TMPDIR:-/tmp}/macup-rc.XXXXXX")
@@ -737,7 +861,7 @@ Largest folders in Application Support (mostly app data, not caches): || Най�
 Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старші за 90 днів: %s шт., %s — переглянь і видали непотрібне
 Files over 1 GB in Downloads: || Файли понад 1 GB у Downloads:
 Scanning projects for build artifacts || Шукаю артефакти збірки в проєктах
-Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest: || Артефакти збірки (node_modules, Pods, .build, .dart_tool): разом %s; найбільші:
+Project build artifacts (node_modules, Pods, .build, .dart_tool, .next, .venv, Rust and Maven target, Gradle build): %s total; largest: || Артефакти збірки (node_modules, Pods, .build, .dart_tool, .next, .venv, target у Rust і Maven, build у Gradle): разом %s; найбільші:
 Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days || Порада: увімкни clean.stale_node_modules у налаштуваннях, щоб прибирати node_modules з проєктів, які ти не чіпав %s днів
 No project folders found. Set project_dirs in %s || Папок з проєктами не знайдено. Вкажи project_dirs у %s
 No build artifacts in: %s || Артефактів збірки немає в: %s
@@ -878,6 +1002,47 @@ Apps outside Homebrew and the App Store: up to date (%s checked) || Програ
 %s: %s → %s available || %s: доступна %s → %s
 Old Antigravity CLI versions left by its updates || Старі версії Antigravity CLI, що лишилися після оновлень
 Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається
+Global pnpm packages || Глобальні pnpm-пакети
+Bun (bun upgrade; a Homebrew install is left to Homebrew) || Bun (bun upgrade; встановлений через Homebrew оновлює Homebrew)
+Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrade; встановлений через Homebrew оновлює Homebrew)
+Programs installed with cargo install (needs cargo-update) || Програми, встановлені через cargo install (потрібен cargo-update)
+Tools managed by mise || Інструменти, якими керує mise
+asdf plugins || Плагіни asdf
+VS Code and Cursor extensions || Розширення VS Code і Cursor
+Ruby gems (opt-in; never the system Ruby) || Ruby-геми (вмикається вручну; системний Ruby не чіпається)
+Poetry cache and downloads; its virtualenvs stay || Кеш і завантаження Poetry; його virtualenv лишаються
+Bun install cache || Кеш встановлень Bun
+Deno cache || Кеш Deno
+Cargo registry downloads and sources (standard) || Завантаження й вихідники реєстру Cargo (стандартна)
+JetBrains IDE caches (standard, skipped while open) || Кеші IDE JetBrains (стандартна, пропускаються, коли відкриті)
+Poetry cache || Кеш Poetry
+Poetry downloads || Завантаження Poetry
+Cargo registry downloads || Завантаження реєстру Cargo
+Cargo registry sources || Вихідники реєстру Cargo
+pnpm globals || Глобальні пакети pnpm
+cargo programs || Програми cargo
+mise tools || Інструменти mise
+VS Code extensions || Розширення VS Code
+Cursor extensions || Розширення Cursor
+Ruby gems || Ruby-геми
+%s: stopped after %s minutes without finishing (step_timeout_minutes in %s) || %s: зупинено через %s хв, не завершилось (step_timeout_minutes у %s)
+macup is already running (pid %s). If it is not, remove %s || macup уже працює (pid %s). Якщо ні, видали %s
+%s: nothing removed, the path is outside what macup may delete (see log) || %s: нічого не видалено, шлях поза тим, що macup може видаляти (див. лог)
+Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || Кошик: немає доступу — дай терміналу повний доступ до диска (System Settings → Privacy & Security)
+JetBrains cache (%s) || Кеш JetBrains (%s)
+%s: no answer in %s seconds, skipped || %s: немає відповіді за %s с, пропущено
+The downloaded file does not match its published checksum; nothing changed. || Завантажений файл не збігається з опублікованою контрольною сумою; нічого не змінено.
+No schedule: macup runs only when you start it. || Розкладу немає: macup працює, лише коли ти його запускаєш.
+Turn it on: macup schedule weekly (or daily). It runs macup check, which changes nothing, and shows a notification. || Увімкнути: macup schedule weekly (або daily). Запускає macup check, який нічого не змінює, і показує сповіщення.
+Schedule: macup check every Monday at 10:00, with a notification. || Розклад: macup check щопонеділка о 10:00, зі сповіщенням.
+Schedule: macup check every day at 10:00, with a notification. || Розклад: macup check щодня о 10:00, зі сповіщенням.
+Turn it off: macup schedule off || Вимкнути: macup schedule off
+Schedule removed. || Розклад прибрано.
+launchd did not accept the schedule; nothing changed. || launchd не прийняв розклад; нічого не змінено.
+the schedule (%s) || розклад (%s)
+Details: macup last || Деталі: macup last
+iPhone and iPad backups: %s (Finder → your device → Manage Backups) || Резервні копії iPhone та iPad: %s (Finder → твій пристрій → Manage Backups)
+Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune) || Образ диска Docker: %s (Docker Desktop → Settings → Resources; зменшується після: docker system prune)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1079,7 +1244,7 @@ Largest folders in Application Support (mostly app data, not caches): || Сам�
 Downloads older than 90 days: %s items, %s — review and delete what you don't need || Downloads старше 90 дней: %s шт., %s — просмотрите и удалите ненужное
 Files over 1 GB in Downloads: || Файлы больше 1 GB в Downloads:
 Scanning projects for build artifacts || Ищу артефакты сборки в проектах
-Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest: || Артефакты сборки (node_modules, Pods, .build, .dart_tool): всего %s; самые большие:
+Project build artifacts (node_modules, Pods, .build, .dart_tool, .next, .venv, Rust and Maven target, Gradle build): %s total; largest: || Артефакты сборки (node_modules, Pods, .build, .dart_tool, .next, .venv, target в Rust и Maven, build в Gradle): всего %s; самые большие:
 Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days || Совет: включите clean.stale_node_modules в настройках, чтобы удалять node_modules из проектов, которые вы не трогали %s дней
 No project folders found. Set project_dirs in %s || Папки с проектами не найдены. Укажите project_dirs в %s
 No build artifacts in: %s || Артефактов сборки нет в: %s
@@ -1220,6 +1385,47 @@ Apps outside Homebrew and the App Store: up to date (%s checked) || Прилож
 %s: %s → %s available || %s: доступна %s → %s
 Old Antigravity CLI versions left by its updates || Старые версии Antigravity CLI, оставшиеся после обновлений
 Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается
+Global pnpm packages || Глобальные pnpm-пакеты
+Bun (bun upgrade; a Homebrew install is left to Homebrew) || Bun (bun upgrade; установленный через Homebrew обновляет Homebrew)
+Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrade; установленный через Homebrew обновляет Homebrew)
+Programs installed with cargo install (needs cargo-update) || Программы, установленные через cargo install (нужен cargo-update)
+Tools managed by mise || Инструменты под управлением mise
+asdf plugins || Плагины asdf
+VS Code and Cursor extensions || Расширения VS Code и Cursor
+Ruby gems (opt-in; never the system Ruby) || Ruby-гемы (включается вручную; системный Ruby не трогается)
+Poetry cache and downloads; its virtualenvs stay || Кэш и загрузки Poetry; его virtualenv остаются
+Bun install cache || Кэш установок Bun
+Deno cache || Кэш Deno
+Cargo registry downloads and sources (standard) || Загрузки и исходники реестра Cargo (стандартная)
+JetBrains IDE caches (standard, skipped while open) || Кэши IDE JetBrains (стандартная, пропускаются, когда открыты)
+Poetry cache || Кэш Poetry
+Poetry downloads || Загрузки Poetry
+Cargo registry downloads || Загрузки реестра Cargo
+Cargo registry sources || Исходники реестра Cargo
+pnpm globals || Глобальные пакеты pnpm
+cargo programs || Программы cargo
+mise tools || Инструменты mise
+VS Code extensions || Расширения VS Code
+Cursor extensions || Расширения Cursor
+Ruby gems || Ruby-гемы
+%s: stopped after %s minutes without finishing (step_timeout_minutes in %s) || %s: остановлено через %s мин, не завершилось (step_timeout_minutes в %s)
+macup is already running (pid %s). If it is not, remove %s || macup уже запущен (pid %s). Если нет, удалите %s
+%s: nothing removed, the path is outside what macup may delete (see log) || %s: ничего не удалено, путь вне того, что macup может удалять (см. лог)
+Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || Корзина: нет доступа — дайте терминалу полный доступ к диску (System Settings → Privacy & Security)
+JetBrains cache (%s) || Кэш JetBrains (%s)
+%s: no answer in %s seconds, skipped || %s: нет ответа за %s с, пропущено
+The downloaded file does not match its published checksum; nothing changed. || Скачанный файл не совпадает с опубликованной контрольной суммой; ничего не изменено.
+No schedule: macup runs only when you start it. || Расписания нет: macup работает, только когда вы его запускаете.
+Turn it on: macup schedule weekly (or daily). It runs macup check, which changes nothing, and shows a notification. || Включить: macup schedule weekly (или daily). Запускает macup check, который ничего не меняет, и показывает уведомление.
+Schedule: macup check every Monday at 10:00, with a notification. || Расписание: macup check каждый понедельник в 10:00, с уведомлением.
+Schedule: macup check every day at 10:00, with a notification. || Расписание: macup check каждый день в 10:00, с уведомлением.
+Turn it off: macup schedule off || Выключить: macup schedule off
+Schedule removed. || Расписание убрано.
+launchd did not accept the schedule; nothing changed. || launchd не принял расписание; ничего не изменено.
+the schedule (%s) || расписание (%s)
+Details: macup last || Подробности: macup last
+iPhone and iPad backups: %s (Finder → your device → Manage Backups) || Резервные копии iPhone и iPad: %s (Finder → ваше устройство → Manage Backups)
+Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune) || Образ диска Docker: %s (Docker Desktop → Settings → Resources; уменьшается после: docker system prune)
 EOF
   ;;
   esac
@@ -1228,7 +1434,7 @@ EOF
 load_lang
 
 # ---------------------------------------------------------------- arguments
-DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; YES=0
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; SCHED_ARG=""; YES=0; QUIET=0; JSON=0; NOTIFY=0
 cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
 trap cleanup_lang EXIT
 set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
@@ -1248,6 +1454,10 @@ while [ $# -gt 0 ]; do case "$1" in
   --lang=*)             set_lang "${1#*=}" ;;
   --no-color)           B=; G=; Y=; R=; C=; D=; N=; CL= ;;
   -y|--yes)             YES=1 ;;
+  -q|--quiet)           QUIET=1 ;;
+  --json)               JSON=1; QUIET=1 ;;
+  --notify)             NOTIFY=1 ;;
+  schedule)             CMD=schedule; case "${2:-}" in ""|-*) ;; *) SCHED_ARG=$2; shift ;; esac ;;
   lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
   last|--last)          CMD=last ;;
   history|--history)    CMD=history ;;
@@ -1271,6 +1481,7 @@ case "$CMD" in
   config)      open_conf; exit 0 ;;
   self_update) self_update; exit 0 ;;
   uninstall)   uninstall; exit 0 ;;
+  schedule)    schedule "$SCHED_ARG"; exit $? ;;
   help)        usage; exit 0 ;;
   version)     echo "macup $MACUP_VERSION"; exit 0 ;;
 esac
@@ -1285,15 +1496,34 @@ fi
 
 load_conf
 mkdir -p "$LOGDIR" "$STATE_DIR"
-STAMP=$(date +%Y-%m-%d_%H-%M)
+# one run at a time: two would update the same tools and delete the same folders
+RUNLOCK="$STATE_DIR/lock"; HAVE_LOCK=0
+if ! mkdir "$RUNLOCK" 2>/dev/null; then
+  OTHER=$(cat "$RUNLOCK/pid" 2>/dev/null)
+  if [ -n "$OTHER" ] && kill -0 "$OTHER" 2>/dev/null; then
+    _f 'macup is already running (pid %s). If it is not, remove %s' "$OTHER" "$(tildify "$RUNLOCK")"; echo; exit 1
+  fi
+  rm -rf "$RUNLOCK"; mkdir "$RUNLOCK" 2>/dev/null   # left by a run that was killed
+fi
+echo $$ >"$RUNLOCK/pid" && HAVE_LOCK=1
+unlock(){ [ "$HAVE_LOCK" = 1 ] && rm -rf "$RUNLOCK"; HAVE_LOCK=0; }
+STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches"; }
-trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N"; cleanup_body; cleanup_lang; exit 130' INT
-stop_sudo_keep(){ [ -n "${SUDO_KEEP:-}" ] && kill "$SUDO_KEEP" 2>/dev/null; SUDO_KEEP=""; }   # the loop that keeps sudo's password fresh during App Store updates
-trap 'cleanup_body; cleanup_lang; stop_sudo_keep' EXIT
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to"; }
+trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
+# the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
+# right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
+stop_sudo_keep(){
+  [ -n "${SUDO_KEEP:-}" ] && kill "$SUDO_KEEP" 2>/dev/null; SUDO_KEEP=""
+  [ "${SUDO_ASKED:-}" = 1 ] && sudo -k 2>/dev/null; SUDO_ASKED=""
+}
+trap 'cleanup_body; cleanup_lang; stop_sudo_keep; unlock' EXIT
+[ "$JSON" = 1 ] && { B=; G=; Y=; R=; C=; D=; N=; CL=; }
+# --quiet: only the summary is printed (--json: only the JSON); everything is still in the report
+[ "$QUIET" = 1 ] && exec 3>&1 >/dev/null
 
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"
@@ -1403,7 +1633,7 @@ if task update.claude && have claude; then
   v2=$(claude --version 2>/dev/null | awk '{print $1}')
   upd "Claude Code" "$v1" "$v2"
   if ! UPD && have npm; then
-    latest=$(npm view @anthropic-ai/claude-code version 2>/dev/null)
+    latest=$(tl 30 npm view @anthropic-ai/claude-code version 2>/dev/null)
     ver_gt "$latest" "$v2" && info "%s: %s is on npm (fine if you're on the stable channel)" "Claude Code" "$latest"
   fi
   PJSON="$HOME/.claude/plugins/installed_plugins.json"
@@ -1420,7 +1650,7 @@ PY
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
-    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else warn 'Plugin marketplaces: refresh failed (see log)'; fi
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see log)'; fi
     # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
     printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
   fi
@@ -1448,7 +1678,7 @@ node_ok(){
 if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'
   # skips npm-link'ed packages and anything whose versions don't look like registry versions
-  NO=$(npm outdated -g --json 2>/dev/null | python3 -c '
+  NO=$(tl 180 npm outdated -g --json 2>/dev/null | python3 -c '
 import json, os, sys, re
 try: d = json.load(sys.stdin)
 except Exception: d = {}
@@ -1465,7 +1695,7 @@ for k, v in d.items():
       [ -z "$p" ] && continue
       if UPD; then
         step 'npm %s' "$p"
-        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else fail '%s: update failed (see log)' "$p"; fi
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see log)' "$p"; fi
       else sub "$p: $c → $l"; fi
     done <<EOF
 $NO
@@ -1493,7 +1723,7 @@ for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash
 $S2
 EOF
       ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
-    else fail 'Agent skills: update failed (see log)'; fi
+    else err 'Agent skills: update failed (see log)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
     LATER_SKILLS="$(_ 'Agent skills')"
@@ -1508,7 +1738,7 @@ if task update.brew && have brew; then
   else
     if UPD; then
       step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else warn 'Homebrew: upgraded with errors (see log)'; fi
+      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -1528,7 +1758,7 @@ if task update.mas; then
   if have mas; then
     step 'App Store'
     # "497799835 Xcode (27.1 → 27.2)": the id for mas, the rest for people
-    OM=$(mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
+    OM=$(tl 180 mas outdated 2>/dev/null | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'); NM=$(cnt "$OM")
     if [ "$NM" -eq 0 ]; then ok 'App Store: up to date'
     elif UPD; then
       info 'App Store: updates: %s' "$NM"; lines "$(printf '%s\n' "$OM" | cut -d' ' -f2-)"
@@ -1536,13 +1766,15 @@ if task update.mas; then
       while read -r id app; do
         [ -z "$id" ] && continue; i=$((i + 1))
         # mas runs itself through sudo, which would ask a bare "Password:" in the middle of the step line
-        if ! sudo -n true 2>/dev/null && ! { { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; }; then
-          warn 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break
+        if ! sudo -n true 2>/dev/null; then
+          if { : </dev/tty; } 2>/dev/null && printf '%s' "$CL" && sudo -v -p "  $(_ 'Mac password to install App Store updates:') "; then SUDO_ASKED=1
+          else err 'App Store: updates not installed: %s — they need your Mac password' "$((NM - i + 1))"; break; fi
         fi
         # sudo forgets the password after 5 minutes and one install (Xcode) takes longer, so it would ask again for the next app
         [ -z "${SUDO_KEEP:-}" ] && { while kill -0 $$ 2>/dev/null; do sleep 50; sudo -n -v || break; done </dev/null >/dev/null 2>&1 & SUDO_KEEP=$!; }
-        if tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
-        else warn 'App Store: updates not installed: %s — open the App Store' "$app"; fi
+        # an Xcode download alone can take longer than any other step
+        if RUN_SECS=$((STEP_SECS * 4)) tick "App Store $i/$NM: $app" mas upgrade "$id"; then ok '%s: %s' 'App Store' "$app"; done_upd '%s: %s' 'App Store' "$app"
+        else err 'App Store: updates not installed: %s — open the App Store' "$app"; fi
       done <<EOF
 $OM
 EOF
@@ -1599,23 +1831,34 @@ LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
   task "$id" || return 0
-  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else warn '%s: update failed (see log)' "$label"; fi
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see log)' "$label"; fi
   else LATER="$LATER${LATER:+, }$label"; fi
 }
 have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
 have uv     && simple_update update.uv     'uv tools'        uv tool upgrade --all
 have rustup && simple_update update.rustup 'Rust toolchains' rustup update
 [ -f "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh" ] && have zsh && simple_update update.omz 'Oh My Zsh' env ZSH="${ZSH:-$HOME/.oh-my-zsh}" zsh "${ZSH:-$HOME/.oh-my-zsh}/tools/upgrade.sh"
-have gh && [ -n "$(gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+have gh && [ -n "$(tl 30 gh extension list 2>/dev/null)" ] && simple_update update.gh_ext 'gh extensions' gh extension upgrade --all
+home_bin(){ [[ "$(command -v "$1" 2>/dev/null)" == "$HOME"/* ]]; }   # its own installer put it there; a Homebrew copy is updated by brew
+have pnpm && have node && simple_update update.pnpm 'pnpm globals' pnpm update -g
+home_bin bun  && simple_update update.bun  'Bun'  bun upgrade
+home_bin deno && simple_update update.deno 'Deno' deno upgrade
+have cargo && cargo install-update --version >/dev/null 2>&1 && simple_update update.cargo 'cargo programs' cargo install-update -a
+have mise && simple_update update.mise 'mise tools'   mise upgrade
+have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
+have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions
+have cursor && simple_update update.editor_ext 'Cursor extensions'  cursor --update-extensions
+# opt-in: updating every gem takes long; the system Ruby's gems belong to macOS and need sudo
+have gem && [ "$(command -v gem)" != /usr/bin/gem ] && simple_update update.gem 'Ruby gems' gem update
 
 if task update.grok && have grok; then
-  GJ=$(grok update --check --json 2>/dev/null)
+  GJ=$(tl 30 grok update --check --json 2>/dev/null)
   gj(){ printf '%s' "$GJ" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
   v1=$(gj currentVersion); latest=$(gj latestVersion)
   if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
   elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
     if UPD; then
-      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || warn '%s: update failed (see log)' 'Grok CLI'; fi
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see log)' 'Grok CLI'; fi
       upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
     elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
     else ok '%s %s' 'Grok CLI' "$v1"; fi
@@ -1626,7 +1869,7 @@ fi
 if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
   if UPD; then
     v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
-    run agy update || warn '%s: update failed (see log)' 'Antigravity CLI'
+    run agy update || err '%s: update failed (see log)' 'Antigravity CLI'
     upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
   else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
 fi
@@ -1634,11 +1877,12 @@ fi
 
 if task check.macos_updates; then
   step 'Looking for macOS updates (up to a minute)'
-  SL=$(softwareupdate -l 2>&1)
+  SL=$(tl 240 softwareupdate -l 2>&1); SLRC=$?
   SU=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*\* Label: //p')
   # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
   ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
-  if [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
+  if [ "$SLRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'softwareupdate' 240
+  elif [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD
 
@@ -1647,18 +1891,20 @@ section "Tools & services"
 if task check.mcp && have claude; then
   step 'Checking MCP servers'
   # from $HOME: the list depends on the current folder (local-scope servers)
-  MCP=$(cd "$HOME" && claude mcp list 2>/dev/null </dev/null | nocolor)
+  MCP=$(cd "$HOME" && tl 120 claude mcp list 2>/dev/null </dev/null | nocolor); MCPRC=$?
   MT=$(printf '%s\n' "$MCP" | grep -cE '✓|✔|✗|✘|⚠|Connected|Failed|[Aa]uth')
   BAD=$(printf '%s\n' "$MCP" | grep -E '✗|✘|⚠|Failed|[Nn]eeds auth')
-  if [ "$MT" -eq 0 ]; then info 'Claude Code MCP servers: none configured'
+  if [ "$MCPRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'claude mcp list' 120
+  elif [ "$MT" -eq 0 ]; then info 'Claude Code MCP servers: none configured'
   elif [ -z "$BAD" ]; then ok 'Claude Code MCP servers: all %s connected' "$MT"
   else warn 'Claude Code MCP servers: %s of %s not working' "$(cnt "$BAD")" "$MT"; lines "$BAD"; fi
 fi
 if task check.brew_doctor && have brew; then
   step 'brew doctor'
-  DOC=$(brew doctor 2>&1); echo "$DOC" >>"$RAW"
+  DOC=$(tl 240 brew doctor 2>&1); DOCRC=$?; echo "$DOC" >>"$RAW"
   ND=$(printf '%s\n' "$DOC" | grep -c '^Warning:')
-  if [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
+  if [ "$DOCRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'brew doctor' 240
+  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
 fi
 if task check.xcode; then
   if XP=$(xcode-select -p 2>/dev/null) && [ -d "$XP" ]; then
@@ -1763,7 +2009,7 @@ $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
 fi
-if task check.docker && have docker && docker info >/dev/null 2>&1; then
+if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
   DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
   info 'Docker: %s' "${DDF%; }"
 fi
@@ -1779,7 +2025,11 @@ C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
 C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
-  case "$1" in "$HOME"/Library/*|"$HOME"/.*) ;; *) return 1 ;; esac
+  case "$1" in
+    "$HOME"/Library/*|"$HOME"/.*) ;;
+    */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
+    *) return 1 ;;
+  esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
     */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
@@ -1788,6 +2038,18 @@ safe_path(){
 }
 in_cache_dir(){ local n; while IFS= read -r n; do case "$1/" in *"/$n/"*) return 0 ;; esac; done <<EOF2
 $(printf '%s\n' "$ELECTRON_CACHES" | tr '|' '\n')
+EOF2
+  return 1; }
+project_roots(){ # the folders in project_dirs that exist; never the home folder itself or anything above it
+  echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
+    d=$(expand "$d"); d=${d%/}
+    case "$d" in ""|"$HOME") continue ;; esac
+    case "$HOME/" in "$d"/*) continue ;; esac
+    [ -d "$d" ] && echo "$d"
+  done
+}
+in_projects(){ local r; while IFS= read -r r; do [ -n "$r" ] && case "$1" in "$r"/*) return 0 ;; esac; done <<EOF2
+$(project_roots)
 EOF2
   return 1; }
 kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$((s + $(kb "$p"))); done <<EOF2
@@ -1808,6 +2070,8 @@ cand_more(){ # label level kb paths open-dirs — adds to the candidate with thi
     C_KB[i]=$((C_KB[i] + $3)); C_PATHS[i]="${C_PATHS[i]}"$'\n'"$4"; C_OPEN[i]="${C_OPEN[i]}${C_OPEN[i]:+$'\n'}$5"; cover "$4"; return 0
   done; return 1
 }
+# Xcode itself, or an xcodebuild started from a terminal or a CI agent: both write to DerivedData while they run
+XCODE_BUSY='/Xcode.app/Contents/MacOS/Xcode|(^|/)xcodebuild( |$)'
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
@@ -1820,7 +2084,7 @@ EOF2
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
-  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc='/Xcode.app/Contents/MacOS/Xcode'
+  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc=$XCODE_BUSY
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
   cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
@@ -1839,7 +2103,7 @@ measure_cmd(){ # id label dir key — a tool's own clean command; the dir is mea
 }
 
 # --- running
-KEY_FREED=""
+KEY_FREED=""; REFUSED=0
 run_key(){ local out r=0
   case "$1" in
     sim:*)     case "$1" in *default*) run xcrun simctl delete unavailable || r=1 ;; esac   # sim:[default] [tests]: the sets that have some
@@ -1864,7 +2128,7 @@ sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1"
 del(){ # one path, re-checked right before deleting; symlinks are never followed or removed
   [ -L "$1" ] && return 0
   [ -e "$1" ] || return 0
-  safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; return 0; }
+  safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
   rm -rf "$1" 2>>"$RAW"
 }
 exec_cand(){ # index
@@ -1883,13 +2147,15 @@ exec_cand(){ # index
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    rm)    b=$(kbl "${C_PATHS[i]}")
+    rm)    b=$(kbl "${C_PATHS[i]}"); REFUSED=0
            while IFS= read -r p; do [ -n "$p" ] && del "$p"; done <<EOF2
 ${C_PATHS[i]}
 EOF2
-           a=$(kbl "${C_PATHS[i]}") ;;
+           a=$(kbl "${C_PATHS[i]}")
+           # never "cleaned" for something macup would not touch
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see log)' "$lbl"; return 0; fi ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
-           if ! run_key "${C_PATHS[i]}"; then warn '%s: failed (see log)' "$lbl"; return 0; fi
+           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see log)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
@@ -1931,9 +2197,9 @@ pick(){ # reads a choice, prints the chosen indexes one per line
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
 
 # Folders whose contents can simply be deleted (the folder itself stays).
-# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f) | only if this tool exists
-CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|/Xcode.app/Contents/MacOS/Xcode|
-clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|/Xcode.app/Contents/MacOS/Xcode|
+# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f; xcode = Xcode or xcodebuild) | only if this tool exists
+CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|xcode|
+clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|xcode|
 clean.sim_caches|1|Simulator caches|~/Library/Developer/CoreSimulator/Caches||
 clean.spm|1|SwiftPM cache|~/Library/Caches/org.swift.swiftpm||
 clean.cocoapods|1|CocoaPods cache|~/Library/Caches/CocoaPods||
@@ -1941,6 +2207,12 @@ clean.carthage|1|Carthage cache|~/Library/Caches/org.carthage.CarthageKit||
 clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
+clean.bun|1|Bun install cache|~/.bun/install/cache||
+clean.deno|1|Deno cache|~/Library/Caches/deno||
+clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
+clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
+clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
+clean.cargo|2|Cargo registry sources|~/.cargo/registry/src||
 clean.gradle|2|Gradle caches|~/.gradle/caches|GradleDaemon|
 clean.android|2|Android cache|~/.android/cache||'
 
@@ -2051,7 +2323,7 @@ if task_allowed clean.sim_unavailable && have xcrun; then
   UX=""   # Xcode's parallel-test clones are a device set of their own
   [ -d "$DEV/XCTestDevices" ] && UX=$(xcrun simctl --set "$DEV/XCTestDevices" list devices unavailable 2>/dev/null | unav_dirs "$DEV/XCTestDevices")
   UL=$(printf '%s\n%s\n' "$UD" "$UX" | grep .)
-  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" '/Xcode.app/Contents/MacOS/Xcode|/usr/bin/xcodebuild( |$)' "$UL"
+  [ -n "$UL" ] && cand clean.sim_unavailable 1 "$(_f 'Unavailable simulators (%s)' "$(cnt "$UL")")" "$(kbl "$UL")" cmd "sim:${UD:+default}${UX:+ tests}" "$XCODE_BUSY" "$UL"
 fi
 if task_allowed clean.brew && have brew; then
   BC=$(brew --cache 2>/dev/null); cover "$BC"
@@ -2068,14 +2340,6 @@ fi
 cand clean.quicklook 1 "$(_ 'Quick Look cache')" 0 cmd quicklook
 if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
 
-project_roots(){ # never the home folder itself or anything above it
-  echo "$PROJECT_DIRS" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r d; do
-    d=$(expand "$d"); d=${d%/}
-    case "$d" in ""|"$HOME") continue ;; esac
-    case "$HOME/" in "$d"/*) continue ;; esac
-    [ -d "$d" ] && echo "$d"
-  done
-}
 if task_allowed clean.stale_node_modules; then
   step 'Looking for stale node_modules'
   STALE=""
@@ -2096,7 +2360,11 @@ $(project_roots)
 EOF2
   [ -n "$STALE" ] && cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
 fi
-task_allowed clean.trash && cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"
+# without Full Disk Access the terminal cannot even list the Trash: say so instead of a silent 0
+if task_allowed clean.trash; then
+  if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then task clean.trash && warn 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
+  else cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"; fi
+fi
 # --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
 # gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
 CL_LVL=2
@@ -2104,12 +2372,19 @@ clean_old clean.gradle  'Old Gradle wrappers' "$HOME/.gradle/wrapper/dists" 30
 for d in "$HOME/Library/Caches/Google/AndroidStudio"*; do
   [ -d "$d" ] && clean_dir clean.android "$(_f 'Android Studio cache (%s)' "${d##*/}")" "$d" '/Android Studio.app/Contents/'
 done
+# JetBrains IDEs keep one cache folder per product and version; the IDE re-indexes after it is emptied.
+# The app names differ (IntelliJ IDEA, PyCharm, …), so an open IDE is found by its open files (lsof).
+for d in "$HOME/Library/Caches/JetBrains"/*; do
+  [ -d "$d" ] && [ ! -L "$d" ] || continue
+  s=$(kb "$d"); [ "$s" -lt 5120 ] && continue
+  cand clean.jetbrains 2 "$(_f 'JetBrains cache (%s)' "${d##*/}")" "$s" empty "$d" "" "" "$d"
+done
 # `mvn install` puts your own builds (often SNAPSHOTs) here; those exist nowhere else
 if [ -n "$(find "$HOME/.m2/repository" -name maven-metadata-local.xml -print 2>/dev/null | head -1)" ]; then
   CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository"
 else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository"; fi
 CL_LVL=""
-if task_allowed clean.docker && have docker && docker info >/dev/null 2>&1; then
+if task_allowed clean.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
   BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
   cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never containers or volumes)')" "$(tokb "${BCR:-0B}")" cmd docker
 fi
@@ -2117,7 +2392,7 @@ fi
 # --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
 # every version named in a global setting or in a project's pin file (.nvmrc, .tool-versions, …).
 if task_allowed clean.old_versions; then
-  PINS=" $( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
+  PINSRC=$( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
     # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
     find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
@@ -2127,13 +2402,24 @@ if task_allowed clean.old_versions; then
       find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f \( -name .nvmrc -o -name .node-version \
         -o -name .ruby-version -o -name .python-version -o -name .tool-versions -o -name mise.toml -o -name .mise.toml -o -name pyvenv.cfg \) -print 2>/dev/null
     done | head -2000 | tr '\n' '\0' | xargs -0 cat 2>/dev/null
-  } | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
+    # package.json: "volta": {"node": "20.5.0"} and "engines": {"node": "20.5.0"}; never its dependency versions
+    project_roots | while IFS= read -r r; do
+      find "$r" -maxdepth 4 \( -name node_modules -o -name .git \) -prune -o -type f -name package.json -print 2>/dev/null
+    done | head -2000 | tr '\n' '\0' | xargs -0 grep -hE '"node"[[:space:]]*:' 2>/dev/null
+  } )
+  PINS=" $(printf '%s\n' "$PINSRC" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
+  # a pin without the patch ("20.5" in an .nvmrc) means the newest installed 20.5.x
+  PINS2=" $(printf '%s\n' "$PINSRC" | grep -oE '(^|[^0-9.])[0-9]+\.[0-9]+([^0-9.]|$)' | grep -oE '[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ') "
   old_versions(){ # dir series(1 = major, 2 = major.minor) → older patch versions that nothing pins
     for e in "$1"/*; do [ -d "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
       | awk -v s="$2" '{v=$0; sub(/^v/,"",v); split(v,a,"."); print (s==1 ? a[1] : a[1]"."a[2]), v, $0}' \
       | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | while IFS= read -r n; do
         [ -L "$1/$n" ] && continue
         case "$PINS" in *" ${n#v} "*) continue ;; esac
+        mm=${n#v}; mm=${mm%.*}
+        case "$PINS2" in *" $mm "*)
+          [ "$(for e in "$1"/*; do printf '%s\n' "${e##*/}"; done | sed 's/^v//' | grep -E "^${mm/./\\.}\.[0-9]+$" | sort -V | tail -1)" = "${n#v}" ] && continue ;;
+        esac
         [ -n "$(ls -A "$1/$n/envs" 2>/dev/null)" ] && continue   # pyenv virtualenvs live inside
         echo "$1/$n"
       done
@@ -2261,6 +2547,8 @@ if task_allowed clean.app_caches; then
     case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
     printf '%s' "$COVERED" | grep -qxF "$e" && continue
     printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    # not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
+    [ -n "$(find "$e" -maxdepth 3 -name pyvenv.cfg -print 2>/dev/null | head -1)" ] && continue
     printf '%s\t%s\n' "$s" "$e"
   done > "$BODY.caches"
   while IFS="$(printf '\t')" read -r s e; do
@@ -2298,7 +2586,14 @@ if task check.sizes; then
   s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")
   [ "$s" -ge 102400 ] && info 'Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager)' "$(hum "$s")"
   s=$(kb "$HOME/Library/Caches");      [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
-  if ! task clean.trash; then
+  # backups of iPhones and iPads made in Finder; Docker Desktop's disk image only grows (du counts what it really takes)
+  s=$(kb "$HOME/Library/Application Support/MobileSync/Backup")
+  [ "$s" -ge 102400 ] && info 'iPhone and iPad backups: %s (Finder → your device → Manage Backups)' "$(hum "$s")"
+  s=$(kbl "$(ls -d "$HOME/Library/Containers/com.docker.docker/Data/vms"/*/data/Docker.raw 2>/dev/null)")
+  [ "$s" -ge 102400 ] && info 'Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)' "$(hum "$s")"
+  if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then
+    task clean.trash || info 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
+  elif ! task clean.trash; then
     s=$(kb "$HOME/.Trash")
     if [ "$s" -gt 2097152 ]; then warn 'Trash: %s — empty it' "$(hum "$s")"; elif [ "$s" -gt 0 ]; then info 'Trash: %s' "$(hum "$s")"; fi
   fi
@@ -2368,14 +2663,17 @@ if [ "$DEEP" = 1 ]; then
   ART=""
   while IFS= read -r root; do
     [ -z "$root" ] && continue
-    ART="$ART$(find "$root" -maxdepth 6 -type d \( -name node_modules -o -name Pods -o -name .build -o -name .dart_tool -o -name DerivedData \) -prune -print 2>/dev/null)"$'\n'
+    # target and build are common names: only next to the build file that makes them (Cargo, Maven, Gradle)
+    ART="$ART$(find "$root" -maxdepth 6 -type d \( -name node_modules -o -name Pods -o -name .build -o -name .dart_tool -o -name DerivedData -o -name .next -o -name .venv \
+      -o \( -name target -exec test -e {}/../Cargo.toml -o -e {}/../pom.xml \; \) \
+      -o \( -name build -exec test -e {}/../build.gradle -o -e {}/../build.gradle.kts \; \) \) -prune -print 2>/dev/null)"$'\n'
   done <<EOF
 $(project_roots)
 EOF
   if [ -n "$(printf '%s' "$ART" | grep .)" ]; then
     TOP=$(printf '%s' "$ART" | grep . | while IFS= read -r a; do echo "$(kb "$a") $a"; done | sort -rn)
     TS=$(printf '%s\n' "$TOP" | awk '{s+=$1} END{print s+0}')
-    info 'Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest:' "$(hum "$TS")"
+    info 'Project build artifacts (node_modules, Pods, .build, .dart_tool, .next, .venv, Rust and Maven target, Gradle build): %s total; largest:' "$(hum "$TS")"
     printf '%s\n' "$TOP" | head -8 | while read -r s p; do sub "$(hum "$s")  $(tildify "$p")"; done
     task clean.stale_node_modules || info "Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days" "$STALE_DAYS"
   elif [ -z "$(project_roots)" ]; then
@@ -2421,7 +2719,7 @@ if task check.self_update; then
   case "$MACUP_REPO" in __*) ;; *)
     STAMPF="$STATE_DIR/last_version_check"
     if [ ! -f "$STAMPF" ] || [ -n "$(find "$STAMPF" -mtime +6 2>/dev/null)" ]; then
-      RV=$(curl -fsS --max-time 4 "$MACUP_RAW/macup" 2>/dev/null | sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' | head -1)
+      RV=$(curl -fsS --max-time 4 "$MACUP_RAW/main/macup" 2>/dev/null | sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' | head -1)
       if [ -n "$RV" ]; then echo "$RV" >"$STAMPF"; else touch "$STAMPF"; fi
     fi
     RV=$(cat "$STAMPF" 2>/dev/null)
@@ -2455,6 +2753,13 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 } >"$SUM"
 cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
 
+[ "$QUIET" = 1 ] && exec >&3 3>&-
+if [ "$JSON" = 1 ]; then
+  printf '{"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
+    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
+  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s"}\n' \
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")"
+else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$G" "$(_f 'Updated: %s' "${#UPDATED[@]}")" "$N"; for u in "${UPDATED[@]}"; do printf '    · %s\n' "$u"; done
@@ -2472,3 +2777,15 @@ else printf '  %s%s%s\n' "$G" "$(_ 'Needs attention: nothing')" "$N"; fi
 [ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")" "$N"
 printf '  %s%s%s\n' "$D" "$(_f 'Report: %s · %s' "$(tildify "$REPORT")" "$TIME")" "$N"
 printf '  %s%s%s\n' "$D" "$(_ 'Menu: macup · trends: macup history · help: macup help')" "$N"
+fi
+
+# --notify (the schedule uses it): one notification when something needs a look
+# nothing to say, no notification: a weekly "all good" teaches people to ignore it
+if [ "$NOTIFY" = 1 ] && command -v osascript >/dev/null 2>&1 && { [ ${#WARN[@]} -gt 0 ] || [ "${POT_AUTO:-0}" -ge 1048576 ]; }; then
+  if [ ${#WARN[@]} -gt 0 ]; then NT=$(_f 'Needs attention: %s' "${#WARN[@]}"); else NT=$(_ 'Needs attention: nothing'); fi
+  [ "${POT_AUTO:-0}" -ge 1048576 ] && NT="$NT · $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"
+  osascript -e "display notification \"$(jstr "$NT. $(_ 'Details: macup last')")\" with title \"macup\"" >/dev/null 2>&1
+fi
+# 3: an update or cleanup step failed. Warnings from the health checks are not failures of the run.
+[ "$ERRS" -gt 0 ] && exit 3
+exit 0

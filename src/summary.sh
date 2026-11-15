@@ -34,7 +34,7 @@ if task check.self_update; then
   case "$MACUP_REPO" in __*) ;; *)
     STAMPF="$STATE_DIR/last_version_check"
     if [ ! -f "$STAMPF" ] || [ -n "$(find "$STAMPF" -mtime +6 2>/dev/null)" ]; then
-      RV=$(curl -fsS --max-time 4 "$MACUP_RAW/macup" 2>/dev/null | sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' | head -1)
+      RV=$(curl -fsS --max-time 4 "$MACUP_RAW/main/macup" 2>/dev/null | sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' | head -1)
       if [ -n "$RV" ]; then echo "$RV" >"$STAMPF"; else touch "$STAMPF"; fi
     fi
     RV=$(cat "$STAMPF" 2>/dev/null)
@@ -68,6 +68,13 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 } >"$SUM"
 cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
 
+[ "$QUIET" = 1 ] && exec >&3 3>&-
+if [ "$JSON" = 1 ]; then
+  printf '{"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
+    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
+  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s"}\n' \
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")"
+else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$G" "$(_f 'Updated: %s' "${#UPDATED[@]}")" "$N"; for u in "${UPDATED[@]}"; do printf '    · %s\n' "$u"; done
@@ -85,3 +92,15 @@ else printf '  %s%s%s\n' "$G" "$(_ 'Needs attention: nothing')" "$N"; fi
 [ -n "$NEWER" ] && printf '  %s%s%s\n' "$C" "$(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")" "$N"
 printf '  %s%s%s\n' "$D" "$(_f 'Report: %s · %s' "$(tildify "$REPORT")" "$TIME")" "$N"
 printf '  %s%s%s\n' "$D" "$(_ 'Menu: macup · trends: macup history · help: macup help')" "$N"
+fi
+
+# --notify (the schedule uses it): one notification when something needs a look
+# nothing to say, no notification: a weekly "all good" teaches people to ignore it
+if [ "$NOTIFY" = 1 ] && command -v osascript >/dev/null 2>&1 && { [ ${#WARN[@]} -gt 0 ] || [ "${POT_AUTO:-0}" -ge 1048576 ]; }; then
+  if [ ${#WARN[@]} -gt 0 ]; then NT=$(_f 'Needs attention: %s' "${#WARN[@]}"); else NT=$(_ 'Needs attention: nothing'); fi
+  [ "${POT_AUTO:-0}" -ge 1048576 ] && NT="$NT · $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"
+  osascript -e "display notification \"$(jstr "$NT. $(_ 'Details: macup last')")\" with title \"macup\"" >/dev/null 2>&1
+fi
+# 3: an update or cleanup step failed. Warnings from the health checks are not failures of the run.
+[ "$ERRS" -gt 0 ] && exit 3
+exit 0

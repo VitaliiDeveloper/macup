@@ -791,9 +791,9 @@
     "uk": "Шукаю артефакти збірки в проєктах",
     "ru": "Ищу артефакты сборки в проектах"
   },
-  "Project build artifacts (node_modules, Pods, .build, .dart_tool): %s total; largest:": {
-    "uk": "Артефакти збірки (node_modules, Pods, .build, .dart_tool): разом %s; найбільші:",
-    "ru": "Артефакты сборки (node_modules, Pods, .build, .dart_tool): всего %s; самые большие:"
+  "Project build artifacts (node_modules, Pods, .build, .dart_tool, .next, .venv, Rust and Maven target, Gradle build): %s total; largest:": {
+    "uk": "Артефакти збірки (node_modules, Pods, .build, .dart_tool, .next, .venv, target у Rust і Maven, build у Gradle): разом %s; найбільші:",
+    "ru": "Артефакты сборки (node_modules, Pods, .build, .dart_tool, .next, .venv, target в Rust и Maven, build в Gradle): всего %s; самые большие:"
   },
   "Tip: enable clean.stale_node_modules in the config to remove node_modules from projects you haven't touched in %s days": {
     "uk": "Порада: увімкни clean.stale_node_modules у налаштуваннях, щоб прибирати node_modules з проєктів, які ти не чіпав %s днів",
@@ -1354,5 +1354,169 @@
   "Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched": {
     "uk": "Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається",
     "ru": "Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается"
+  },
+  "Global pnpm packages": {
+    "uk": "Глобальні pnpm-пакети",
+    "ru": "Глобальные pnpm-пакеты"
+  },
+  "Bun (bun upgrade; a Homebrew install is left to Homebrew)": {
+    "uk": "Bun (bun upgrade; встановлений через Homebrew оновлює Homebrew)",
+    "ru": "Bun (bun upgrade; установленный через Homebrew обновляет Homebrew)"
+  },
+  "Deno (deno upgrade; a Homebrew install is left to Homebrew)": {
+    "uk": "Deno (deno upgrade; встановлений через Homebrew оновлює Homebrew)",
+    "ru": "Deno (deno upgrade; установленный через Homebrew обновляет Homebrew)"
+  },
+  "Programs installed with cargo install (needs cargo-update)": {
+    "uk": "Програми, встановлені через cargo install (потрібен cargo-update)",
+    "ru": "Программы, установленные через cargo install (нужен cargo-update)"
+  },
+  "Tools managed by mise": {
+    "uk": "Інструменти, якими керує mise",
+    "ru": "Инструменты под управлением mise"
+  },
+  "asdf plugins": {
+    "uk": "Плагіни asdf",
+    "ru": "Плагины asdf"
+  },
+  "VS Code and Cursor extensions": {
+    "uk": "Розширення VS Code і Cursor",
+    "ru": "Расширения VS Code и Cursor"
+  },
+  "Ruby gems (opt-in; never the system Ruby)": {
+    "uk": "Ruby-геми (вмикається вручну; системний Ruby не чіпається)",
+    "ru": "Ruby-гемы (включается вручную; системный Ruby не трогается)"
+  },
+  "Poetry cache and downloads; its virtualenvs stay": {
+    "uk": "Кеш і завантаження Poetry; його virtualenv лишаються",
+    "ru": "Кэш и загрузки Poetry; его virtualenv остаются"
+  },
+  "Bun install cache": {
+    "uk": "Кеш встановлень Bun",
+    "ru": "Кэш установок Bun"
+  },
+  "Deno cache": {
+    "uk": "Кеш Deno",
+    "ru": "Кэш Deno"
+  },
+  "Cargo registry downloads and sources (standard)": {
+    "uk": "Завантаження й вихідники реєстру Cargo (стандартна)",
+    "ru": "Загрузки и исходники реестра Cargo (стандартная)"
+  },
+  "JetBrains IDE caches (standard, skipped while open)": {
+    "uk": "Кеші IDE JetBrains (стандартна, пропускаються, коли відкриті)",
+    "ru": "Кэши IDE JetBrains (стандартная, пропускаются, когда открыты)"
+  },
+  "Poetry cache": {
+    "uk": "Кеш Poetry",
+    "ru": "Кэш Poetry"
+  },
+  "Poetry downloads": {
+    "uk": "Завантаження Poetry",
+    "ru": "Загрузки Poetry"
+  },
+  "Cargo registry downloads": {
+    "uk": "Завантаження реєстру Cargo",
+    "ru": "Загрузки реестра Cargo"
+  },
+  "Cargo registry sources": {
+    "uk": "Вихідники реєстру Cargo",
+    "ru": "Исходники реестра Cargo"
+  },
+  "pnpm globals": {
+    "uk": "Глобальні пакети pnpm",
+    "ru": "Глобальные пакеты pnpm"
+  },
+  "cargo programs": {
+    "uk": "Програми cargo",
+    "ru": "Программы cargo"
+  },
+  "mise tools": {
+    "uk": "Інструменти mise",
+    "ru": "Инструменты mise"
+  },
+  "VS Code extensions": {
+    "uk": "Розширення VS Code",
+    "ru": "Расширения VS Code"
+  },
+  "Cursor extensions": {
+    "uk": "Розширення Cursor",
+    "ru": "Расширения Cursor"
+  },
+  "Ruby gems": {
+    "uk": "Ruby-геми",
+    "ru": "Ruby-гемы"
+  },
+  "%s: stopped after %s minutes without finishing (step_timeout_minutes in %s)": {
+    "uk": "%s: зупинено через %s хв, не завершилось (step_timeout_minutes у %s)",
+    "ru": "%s: остановлено через %s мин, не завершилось (step_timeout_minutes в %s)"
+  },
+  "macup is already running (pid %s). If it is not, remove %s": {
+    "uk": "macup уже працює (pid %s). Якщо ні, видали %s",
+    "ru": "macup уже запущен (pid %s). Если нет, удалите %s"
+  },
+  "%s: nothing removed, the path is outside what macup may delete (see log)": {
+    "uk": "%s: нічого не видалено, шлях поза тим, що macup може видаляти (див. лог)",
+    "ru": "%s: ничего не удалено, путь вне того, что macup может удалять (см. лог)"
+  },
+  "Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)": {
+    "uk": "Кошик: немає доступу — дай терміналу повний доступ до диска (System Settings → Privacy & Security)",
+    "ru": "Корзина: нет доступа — дайте терминалу полный доступ к диску (System Settings → Privacy & Security)"
+  },
+  "JetBrains cache (%s)": {
+    "uk": "Кеш JetBrains (%s)",
+    "ru": "Кэш JetBrains (%s)"
+  },
+  "%s: no answer in %s seconds, skipped": {
+    "uk": "%s: немає відповіді за %s с, пропущено",
+    "ru": "%s: нет ответа за %s с, пропущено"
+  },
+  "The downloaded file does not match its published checksum; nothing changed.": {
+    "uk": "Завантажений файл не збігається з опублікованою контрольною сумою; нічого не змінено.",
+    "ru": "Скачанный файл не совпадает с опубликованной контрольной суммой; ничего не изменено."
+  },
+  "No schedule: macup runs only when you start it.": {
+    "uk": "Розкладу немає: macup працює, лише коли ти його запускаєш.",
+    "ru": "Расписания нет: macup работает, только когда вы его запускаете."
+  },
+  "Turn it on: macup schedule weekly (or daily). It runs macup check, which changes nothing, and shows a notification.": {
+    "uk": "Увімкнути: macup schedule weekly (або daily). Запускає macup check, який нічого не змінює, і показує сповіщення.",
+    "ru": "Включить: macup schedule weekly (или daily). Запускает macup check, который ничего не меняет, и показывает уведомление."
+  },
+  "Schedule: macup check every Monday at 10:00, with a notification.": {
+    "uk": "Розклад: macup check щопонеділка о 10:00, зі сповіщенням.",
+    "ru": "Расписание: macup check каждый понедельник в 10:00, с уведомлением."
+  },
+  "Schedule: macup check every day at 10:00, with a notification.": {
+    "uk": "Розклад: macup check щодня о 10:00, зі сповіщенням.",
+    "ru": "Расписание: macup check каждый день в 10:00, с уведомлением."
+  },
+  "Turn it off: macup schedule off": {
+    "uk": "Вимкнути: macup schedule off",
+    "ru": "Выключить: macup schedule off"
+  },
+  "Schedule removed.": {
+    "uk": "Розклад прибрано.",
+    "ru": "Расписание убрано."
+  },
+  "launchd did not accept the schedule; nothing changed.": {
+    "uk": "launchd не прийняв розклад; нічого не змінено.",
+    "ru": "launchd не принял расписание; ничего не изменено."
+  },
+  "the schedule (%s)": {
+    "uk": "розклад (%s)",
+    "ru": "расписание (%s)"
+  },
+  "Details: macup last": {
+    "uk": "Деталі: macup last",
+    "ru": "Подробности: macup last"
+  },
+  "iPhone and iPad backups: %s (Finder → your device → Manage Backups)": {
+    "uk": "Резервні копії iPhone та iPad: %s (Finder → твій пристрій → Manage Backups)",
+    "ru": "Резервные копии iPhone и iPad: %s (Finder → ваше устройство → Manage Backups)"
+  },
+  "Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)": {
+    "uk": "Образ диска Docker: %s (Docker Desktop → Settings → Resources; зменшується після: docker system prune)",
+    "ru": "Образ диска Docker: %s (Docker Desktop → Settings → Resources; уменьшается после: docker system prune)"
   }
 }

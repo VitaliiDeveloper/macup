@@ -106,7 +106,9 @@ EOF
 fi
 
 if task update.brew && have brew; then
-  step 'brew update'; run brew update   # refreshes the package list only
+  if UPD; then step 'brew update'; run brew update
+  else export HOMEBREW_NO_AUTO_UPDATE=1   # brew update also updates Homebrew itself and its taps; a check changes nothing
+  fi
   OF=$(brew outdated --formula --verbose 2>/dev/null); NF=$(cnt "$OF")
   OC=$(brew outdated --cask --verbose 2>/dev/null);    NC=$(cnt "$OC")
   if [ $((NF + NC)) -eq 0 ]; then ok 'Homebrew: up to date'
@@ -121,6 +123,13 @@ if task update.brew && have brew; then
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
+  fi
+  if ! UPD; then
+    BT=0; BR=$(brew --repository 2>/dev/null); BA=$(brew --cache 2>/dev/null)
+    for f in "$BR/.git/FETCH_HEAD" "$BA/api/formula.jws.json" "$BA/api/cask.jws.json"; do
+      t=$(stat -f %m "$f" 2>/dev/null); [ -n "$t" ] && [ "$t" -gt "$BT" ] && BT=$t
+    done
+    [ "$BT" -gt 0 ] && [ $(($(date +%s) - BT)) -gt 86400 ] && info 'The Homebrew package list is from %s; macup update refreshes it' "$(date -r "$BT" +%Y-%m-%d)"
   fi
   # in a check the casks brew upgrades anyway are already listed above
   # not --greedy: a version :latest cask is always "outdated" and does not update itself
@@ -274,6 +283,7 @@ if task check.macos_updates; then
   # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
   ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
   if [ "$SLRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'softwareupdate' 240
+  elif [ -z "$SU" ] && { [ "$SLRC" != 0 ] || printf '%s\n' "$SL" | grep -qiE 'error|could not|unable to|not connected|no internet|offline'; }; then info "macOS updates: could not check (no connection to Apple's server?)"
   elif [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD

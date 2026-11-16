@@ -1674,5 +1674,13 @@
   "Not cleaned, no longer there: %s — run macup check again": {
     "uk": "Не почищено, цього вже немає: %s — запусти macup check ще раз",
     "ru": "Не очищено, этого уже нет: %s — запустите macup check ещё раз"
+  },
+  "The Homebrew package list is from %s; macup update refreshes it": {
+    "uk": "Список пакетів Homebrew від %s; macup update оновить його",
+    "ru": "Список пакетов Homebrew от %s; macup update обновит его"
+  },
+  "macOS updates: could not check (no connection to Apple's server?)": {
+    "uk": "Оновлення macOS: не вдалося перевірити (немає зв'язку із сервером Apple?)",
+    "ru": "Обновления macOS: не удалось проверить (нет связи с сервером Apple?)"
   }
 }

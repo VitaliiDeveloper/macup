@@ -326,6 +326,7 @@ SB="$W/sbin"; mkdir -p "$SB"; H="$W/sys"; mkdir -p "$H/.config/macup"; printf 'l
 sys(){ env HOME="$H" PATH="$SB:$PATH" /bin/bash "$M" check --no-color "$@" </dev/null 2>&1; }
 cat >"$SB/softwareupdate" <<'FAKE'
 #!/bin/bash
+[ -n "$SU_FAIL" ] && { printf 'Software Update Tool\n\nFinding available software\nSoftware Update Tool: could not reach the server\n' >&2; exit 1; }
 [ -n "$NO_UPDATES" ] && { printf 'Software Update Tool\n\nFinding available software\nNo new software available.\n'; exit 0; }
 printf 'Software Update Tool\n\nFinding available software\nSoftware Update found the following new or updated software:\n'
 printf '* Label: Command Line Tools for Xcode-16.0\n\tTitle: Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, \n'
@@ -348,6 +349,21 @@ chmod +x "$SB"/*
 o=$(sys --only check.macos_updates)
 echo "$o" | grep -q 'macOS: updates available' && echo "$o" | grep -q '^ *Command Line Tools for Xcode 16.0$' && echo "$o" | grep -q '^ *macOS Sequoia 15.1$' \
   && NO_UPDATES=1 sys --only check.macos_updates | grep -q 'macOS: up to date' && pass "macOS updates: titles read from softwareupdate -l" || { fail "softwareupdate parsing"; echo "$o"; }
+SU_FAIL=1 sys --only check.macos_updates >"$W/sufail.out"
+grep -q 'could not check' "$W/sufail.out" && ! grep -q 'up to date' "$W/sufail.out" && pass "macOS updates: a failed softwareupdate is not reported as up to date" || { fail "softwareupdate failure"; cat "$W/sufail.out"; }
+BB="$W/brewbin"; mkdir -p "$BB"
+cat >"$BB/brew" <<'FAKE'
+#!/bin/bash
+echo "brew $* NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE:-}" >>"$BREWLOG"
+[ "$1" = --repository ] && echo "$BREWREPO"
+[ "$1" = --cache ] && echo "$BREWREPO/cache"
+exit 0
+FAKE
+chmod +x "$BB/brew"; mkdir -p "$W/brewrepo/.git"; : >"$W/brewrepo/.git/FETCH_HEAD"; touch -t 202001010000 "$W/brewrepo/.git/FETCH_HEAD"
+sed 's|^export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:|export PATH="|' "$M" >"$W/macup-nobrew"   # macup puts the real Homebrew first in PATH
+env HOME="$H" PATH="$BB:$SB:$PATH" BREWLOG="$W/brew.log" BREWREPO="$W/brewrepo" /bin/bash "$W/macup-nobrew" check --only update.brew --no-color </dev/null >"$W/brewchk.out" 2>&1
+grep -q 'brew outdated' "$W/brew.log" && ! grep -q '^brew update' "$W/brew.log" && ! grep 'brew outdated' "$W/brew.log" | grep -qv 'NO_AUTO_UPDATE=1$' \
+  && grep -q 'package list is from 2020-01-01' "$W/brewchk.out" && pass "check never runs brew update, calls brew with HOMEBREW_NO_AUTO_UPDATE=1 and says how old the list is" || { fail "check leaves Homebrew alone"; cat "$W/brew.log" "$W/brewchk.out"; }
 sys --only check.battery | grep -q 'Battery: 83% charged, 612 cycles, 76% capacity, Normal — capacity under 80%' && pass "battery: cycles and capacity read from system_profiler" || { fail "battery parsing"; sys --only check.battery; }
 sys --only check.memory | grep -q '! Memory: .* 9% free, .* memory is tight' && pass "memory: free percentage read from memory_pressure" || { fail "memory parsing"; sys --only check.memory; }
 

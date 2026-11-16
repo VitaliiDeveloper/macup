@@ -2619,9 +2619,11 @@ EOF2
 cover "$HOME/.npm"
 # Deno keeps localStorage and the databases of Deno.openKv() in location_data, next to its caches: that folder stays
 DN="$HOME/Library/Caches/deno"
-if task_allowed clean.deno && [ -d "$DN" ] && [ ! -L "$DN" ]; then
-  L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
-  [ "$s" -ge 5120 ] && CL_KEY=deno cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L" "$(busy_pat deno)"
+if [ -d "$DN" ] && [ ! -L "$DN" ]; then
+  if task_allowed clean.deno; then
+    L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
+    [ "$s" -ge 5120 ] && CL_KEY=deno cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L" "$(busy_pat deno)"
+  fi
   cover "$DN/location_data"
 fi
 for ds in "$DEV/Xcode/"*DeviceSupport; do

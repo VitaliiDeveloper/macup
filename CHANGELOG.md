@@ -18,6 +18,8 @@ macup's own files:
 - **Old reports go on every run.** They were removed only by `clean` and `all`, so a Mac that only ran `macup check` (the schedule does) kept every report for ever. Reports are kept for `keep_reports_days`, now 30 by default (a value in your config stays), and never for more than the last 60 runs.
 - **No empty logs.** A run that started no command leaves no `.log` next to its report.
 - **The history keeps its last 500 runs, the schedule's log its last 200 lines,** and temp files that a killed run left behind are removed after a day.
+- **`macup check` no longer changes Homebrew.** It ran `brew update`, which also updates Homebrew itself and its taps. A check now calls `brew` with `HOMEBREW_NO_AUTO_UPDATE=1` and leaves `brew update` to `macup update`. When the package list is more than a day old, the check says from which date it is.
+- **No connection to Apple's server is not "macOS: up to date".** When `softwareupdate -l` fails, a check says it could not check.
 
 New:
 

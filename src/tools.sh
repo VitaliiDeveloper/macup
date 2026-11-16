@@ -127,9 +127,9 @@ EOF
 fi
 if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
   # the Reclaimable column has a space inside ("1.2GB (50%)"), so the columns are asked for by name
-  DDF=$(docker system df --format '{{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' 2>/dev/null | paste -sd';' - | sed 's/;/; /g')
-  info 'Docker: %s' "$DDF"
-  DV=$(docker volume ls -qf dangling=true 2>/dev/null | grep -c .)
+  DDF=$(tl 30 docker system df --format '{{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' 2>/dev/null | paste -sd';' - | sed 's/;/; /g')
+  [ -n "$DDF" ] && info 'Docker: %s' "$DDF"
+  DV=$(tl 30 docker volume ls -qf dangling=true 2>/dev/null | grep -c .)
   [ "${DV:-0}" -gt 0 ] && info 'Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true' "$DV"
 fi
 # a token GitHub no longer accepts fails later, in the middle of a push or a release

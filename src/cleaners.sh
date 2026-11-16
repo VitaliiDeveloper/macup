@@ -242,11 +242,11 @@ else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository" maven; fi
 CL_LVL=""
 # --- Docker. Volumes hold databases and are never touched. Images and stopped containers only when you pick them.
 if have docker && { task_allowed clean.docker || task_allowed clean.docker_images || task_allowed clean.docker_containers; } && tl 20 docker info >/dev/null 2>&1; then
-  DDF=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null)
+  DDF=$(tl 30 docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null)
   ddf(){ tokb10 "$(printf '%s\n' "$DDF" | awk -F'|' -v t="$1" '$1==t{print $2}' | awk '{print $1}')"; }   # "1.2GB (50%)" → KB
   cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never volumes)')" "$(ddf 'Build Cache')" cmd docker
   s=$(ddf Images); [ "${s:-0}" -ge 1024 ] && cand clean.docker_images 2 "$(_ 'Docker images no container uses (docker pulls or builds them again)')" "$s" cmd dockerimg
-  n=$(docker ps -aq -f status=exited -f status=created -f status=dead 2>/dev/null | grep -c .)
+  n=$(tl 30 docker ps -aq -f status=exited -f status=created -f status=dead 2>/dev/null | grep -c .)
   [ "$n" -gt 0 ] && cand clean.docker_containers 3 "$(_f 'Stopped Docker containers (%s): files saved inside them are lost, volumes stay' "$n")" "$(ddf Containers)" cmd dockerct
 fi
 # --- Homebrew packages that came only as dependencies of something already removed

@@ -1765,8 +1765,8 @@ REPORT="$LOGDIR/macup_$STAMP.md"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 # what the commands print; it goes to the bottom of the report, so one run leaves one file
 RAW="$BODY.raw"
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run, background du results and lsof's output in $BODY.du.*; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
-cleanup_body(){ [ -n "$BODY" ] || return 0; local j; for j in $(jobs -p); do kill "$j" 2>/dev/null; done; rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$BODY".du.* "$RAW"; }
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run, background du results and lsof's output in $BODY.du.* (only their own du jobs are stopped: without job control `jobs -p` can name the caller's process group); tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
+cleanup_body(){ [ -n "$BODY" ] || return 0; local j; for j in ${KBP_PID[@]+"${KBP_PID[@]}"}; do kill "$j" 2>/dev/null; done; rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$BODY".du.* "$RAW"; }
 raw_section(){ # ~~~~ and not backticks: brew prints backtick fences of its own
   [ -s "$RAW" ] || return 0
   printf '\n## %s\n\n~~~~\n' "$(_ 'Command output')"; nocolor <"$RAW" | tr -d '\r'; printf '~~~~\n'

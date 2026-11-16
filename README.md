@@ -254,7 +254,7 @@ Development:
 tests/run.sh
 ```
 
-Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`.
 
 ## License
 

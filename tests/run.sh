@@ -520,6 +520,90 @@ rm -f "$H/docker.log"; env HOME="$H" /bin/bash "$M" clean --level aggressive --o
 grep -qx 'image prune -a -f' "$H/docker.log" && grep -qx 'container prune -f' "$H/docker.log" && ! grep -q volume "$H/docker.log" && grep -q 'Docker images no container uses.*freed 1.5 GB' "$W/dk.out" \
   && pass "Docker: images and stopped containers when enabled; volumes never" || { fail "Docker opt-in"; cat "$H/docker.log" "$W/dk.out"; }
 unset -f docker
+# the same, with a docker program in PATH, as it prints it: sizes and answers come from FAKE_DK_* so a run can be empty, failing or stuck
+H="$W/dk2"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+cat >"$H/.local/bin/docker" <<'FAKE'
+#!/bin/bash
+echo "$*" >>"$HOME/docker.log"
+case "$*" in
+  info) [ -n "$FAKE_DK_HANG" ] && sleep 300; [ -n "$FAKE_DK_DOWN" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }; echo "Server Version: 27.0" ;;
+  "system df --format {{.Type}}|{{.Reclaimable}}") printf 'Images|%s\nContainers|%s\nLocal Volumes|3.2GB (100%%)\nBuild Cache|%s\n' "${FAKE_DK_IMG:-1.2GB (50%)}" "${FAKE_DK_CT:-12.3MB (100%)}" "${FAKE_DK_BC:-1.5GB}" ;;
+  "system df --format {{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable") printf 'Images 2.4GB, %s reclaimable\nContainers 12.3MB, %s reclaimable\nLocal Volumes 3.2GB, 3.2GB (100%%) reclaimable\nBuild Cache 1.5GB, %s reclaimable\n' "${FAKE_DK_IMG:-1.2GB (50%)}" "${FAKE_DK_CT:-12.3MB (100%)}" "${FAKE_DK_BC:-1.5GB}" ;;
+  ps\ -aq*) printf '%s' "${FAKE_DK_PS-aaa111$'\n'bbb222$'\n'}" ;;
+  volume\ ls*) printf '%s' "${FAKE_DK_VOLS-vol1$'\n'vol2$'\n'}" ;;
+  "builder prune -f") [ -n "$FAKE_DK_PRUNE_FAIL" ] && { echo "Error response from daemon" >&2; exit 1; }; printf 'Deleted build cache objects:\nabc\n\nTotal reclaimed space: 1.2GB\n' ;;
+  "image prune -f") printf 'Total reclaimed space: 300MB\n' ;;
+  "image prune -a -f") printf 'Deleted Images:\nuntagged: foo:1\n\nTotal reclaimed space: 1.2GB\n' ;;
+  "container prune -f") printf 'Deleted Containers:\naaa111\nbbb222\n\nTotal reclaimed space: 12.3MB\n' ;;
+  *) echo "unexpected: $*" >&2; exit 64 ;;
+esac
+FAKE
+chmod +x "$H/.local/bin/docker"
+dk(){ rm -f "$H/docker.log"; env HOME="$H" /bin/bash "$M" "$@" --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1; }
+dk check
+grep -q 'Docker: Images 2.4GB, 1.2GB (50%) reclaimable; Containers 12.3MB, 12.3MB (100%) reclaimable; Local Volumes 3.2GB, 3.2GB (100%) reclaimable; Build Cache 1.5GB, 1.5GB reclaimable' "$W/dk.out" \
+  && grep -q 'Docker volumes no container uses: 2 ' "$W/dk.out" && ! grep -q prune "$H/docker.log" && pass "Docker (real program): the check shows the usage and the unused volumes, and runs no prune" || { fail "Docker check, docker in PATH"; cat "$W/dk.out" "$H/docker.log"; }
+env HOME="$H" /bin/bash "$M" check --json --only "$DK" </dev/null >"$W/dk.json" 2>/dev/null
+jq "$W/dk.json" 'c={x["task"]:x for x in d["cleanable"]}; assert set(c)=={"clean.docker","clean.docker_images","clean.docker_containers"}; assert 1400000<c["clean.docker"]["kb"]<1500000, c; assert 1100000<c["clean.docker_images"]["kb"]<1200000; assert 10000<c["clean.docker_containers"]["kb"]<14000; assert not c["clean.docker"]["opt_in"] and c["clean.docker_images"]["opt_in"] and c["clean.docker_containers"]["opt_in"] and not any(x["in_clean"] for x in c.values()) and [c[t]["level"] for t in ("clean.docker","clean.docker_images","clean.docker_containers")]==["standard","standard","aggressive"]; assert len({x["key"] for x in c.values()})==3' \
+  && pass "Docker: --json lists the cache, the images and the stopped containers with sizes, keys and opt-in" || { fail "Docker --json"; head -c 900 "$W/dk.json"; }
+kd(){ jq "$W/dk.json" "print([x['key'] for x in d['cleanable'] if x['task']=='$1'][0])"; }
+for t in "clean.docker:builder prune -f|image prune -f:Docker build cache.*freed 1.5 GB" "clean.docker_images:image prune -a -f:Docker images no container uses.*freed 1.2 GB" "clean.docker_containers:container prune -f:Stopped Docker containers.*freed 12 MB"; do
+  IFS=: read -r id cmds re <<<"$t"; k=$(kd "$id")
+  rm -f "$H/docker.log"; env HOME="$H" /bin/bash "$M" clean --pick "$k" --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1; rc=$?
+  [ $rc = 0 ] && [ "$(grep prune "$H/docker.log")" = "$(printf '%s' "$cmds" | tr '|' '\n')" ] && grep -q "$re" "$W/dk.out" && ! grep -q 'volume prune\|system prune\|--volumes' "$H/docker.log" \
+    && pass "Docker: --pick $id runs only: $cmds" || { fail "Docker --pick $id (rc=$rc)"; cat "$H/docker.log" "$W/dk.out"; }
+done
+for m in "clean --level aggressive --enable clean.docker_images,clean.docker_containers" "clean --level aggressive" "all --level aggressive"; do
+  rm -f "$H/docker.log"; env HOME="$H" /bin/bash "$M" $m --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1
+  ! grep -q 'volume prune\|system prune\|--volumes' "$H/docker.log" && grep -q prune "$H/docker.log" && pass "Docker: no volume prune with: $m" || { fail "Docker volumes touched with: $m"; cat "$H/docker.log"; }
+done
+rm -f "$H/docker.log"; env FAKE_DK_IMG='0B (0%)' FAKE_DK_CT='0B (0%)' FAKE_DK_BC='0B' FAKE_DK_PS='' FAKE_DK_VOLS='' HOME="$H" /bin/bash "$M" check --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1
+! grep -q 'Docker images\|Stopped Docker\|Docker volumes' "$W/dk.out" && grep -q 'Docker: Images' "$W/dk.out" && pass "Docker: nothing to reclaim offers no images, containers or volumes line" || { fail "Docker with 0 B"; cat "$W/dk.out"; }
+rm -f "$H/docker.log"; env FAKE_DK_PRUNE_FAIL=1 HOME="$H" /bin/bash "$M" clean --level standard --only clean.docker --no-color </dev/null >"$W/dk.out" 2>&1; rc=$?
+[ $rc = 3 ] && grep -q 'Docker build cache.*failed' "$W/dk.out" && pass "Docker: a failing prune is an error, exit status 3" || { fail "Docker prune failure (rc=$rc)"; cat "$W/dk.out"; }
+rm -f "$H/docker.log"; env FAKE_DK_DOWN=1 HOME="$H" /bin/bash "$M" all --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1; rc=$?
+[ $rc = 0 ] && ! grep -qi 'docker\|✗' "$W/dk.out" && ! grep -q 'system df\|ps -aq\|prune' "$H/docker.log" && pass "Docker: a daemon that is not running gives no Docker lines and no error" || { fail "Docker down (rc=$rc)"; cat "$W/dk.out" "$H/docker.log"; }
+rm -f "$H/docker.log"; s0=$SECONDS; env FAKE_DK_HANG=1 HOME="$H" /bin/bash "$M" check --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1; rc=$?
+[ $rc = 0 ] && [ $((SECONDS - s0)) -lt 60 ] && ! grep -qi 'docker\|✗' "$W/dk.out" && pass "Docker: a daemon that hangs is given up on after 20 seconds, no Docker lines" || { fail "Docker hangs (rc=$rc, $((SECONDS - s0)) s)"; cat "$W/dk.out"; }
+
+# --- tools/bump-formula.sh: a fake curl and a fake git (it answers ls-remote, everything else goes to the real git) keep it off the network; the tap is a throwaway repository
+GIT=$(command -v git); TB="$W/bumpbin"; TAP="$W/tap"; mkdir -p "$TB" "$TAP/Formula"
+printf '#!/bin/bash\nwhile [ $# -gt 0 ]; do case "$1" in -o) o=$2; shift ;; http*) echo "$1" >>"$FAKE_LOG" ;; esac; shift; done\n[ -n "$FAKE_CURL_FAIL" ] && exit 22\nprintf "tarball of %%s" "$FAKE_VERSION" >"$o"\n' >"$TB/curl"
+cat >"$TB/git" <<'FAKE'
+#!/bin/bash
+a=("$@"); [ "$1" = -C ] && a=("${a[@]:2}")
+echo "git ${a[*]}" >>"$FAKE_LOG"
+[ "${a[0]}" = ls-remote ] && { printf '%s\n' "$FAKE_TAGS" | grep -x "${a[3]}" | sed "s|.*|abc123	&|"; exit 0; }
+exec "$REAL_GIT" "$@"
+FAKE
+chmod +x "$TB/curl" "$TB/git"
+git -C "$TAP" init -q; git -C "$TAP" config user.email t@t; git -C "$TAP" config user.name t
+cat >"$TAP/Formula/macup.rb" <<'RB'
+class Macup < Formula
+  desc "Checks, updates and safe cache cleanup for a developer's Mac"
+  url "https://github.com/VitaliiDeveloper/macup/archive/refs/tags/v2.7.2.tar.gz"
+  sha256 "31e8b111ffd0ff13621b062fcd4f30d42b7d7dca4c3dd634164a5db56ac2f471"
+  license "MIT"
+end
+RB
+git -C "$TAP" add -A; git -C "$TAP" commit -q -m init
+bump(){ : >"$W/bump.log"; env REAL_GIT="$GIT" PATH="$TB:$PATH" FAKE_LOG="$W/bump.log" FAKE_VERSION=9.9.9 FAKE_TAGS='refs/tags/v9.9.9' tools/bump-formula.sh "$@" >"$W/bump.out" 2>&1; }
+SUM=$(printf 'tarball of 9.9.9' | shasum -a 256 | awk '{print $1}')
+bump 9.9.8 "$TAP"; rc=$?
+[ $rc = 1 ] && grep -q 'tag v9.9.8 is not on origin' "$W/bump.out" && grep -q 'v2.7.2' "$TAP/Formula/macup.rb" && ! grep -q 'archive' "$W/bump.log" && pass "bump-formula: a tag that is not on origin stops it before any download" || { fail "bump-formula missing tag (rc=$rc)"; cat "$W/bump.out"; }
+bump 9.9 "$TAP"; [ $? = 1 ] && grep -q usage "$W/bump.out" && pass "bump-formula: a version that is not X.Y.Z is refused" || fail "bump-formula bad version"
+: >"$W/bump.log"; env REAL_GIT="$GIT" FAKE_CURL_FAIL=1 PATH="$TB:$PATH" FAKE_LOG="$W/bump.log" FAKE_TAGS='refs/tags/v9.9.9' tools/bump-formula.sh 9.9.9 "$TAP" >"$W/bump.out" 2>&1; rc=$?
+[ $rc = 1 ] && grep -q 'could not download' "$W/bump.out" && grep -q 'v2.7.2' "$TAP/Formula/macup.rb" && pass "bump-formula: a failed download leaves the formula alone" || { fail "bump-formula download failure (rc=$rc)"; cat "$W/bump.out"; }
+bump 9.9.9 "$TAP"; rc=$?
+[ $rc = 0 ] && grep -q "^  url \"https://github.com/VitaliiDeveloper/macup/archive/refs/tags/v9.9.9.tar.gz\"$" "$TAP/Formula/macup.rb" && grep -q "^  sha256 \"$SUM\"$" "$TAP/Formula/macup.rb" \
+  && [ "$(git -C "$TAP" diff --numstat | awk '{print $1+$2}')" = 4 ] && grep -q "^+  sha256 \"$SUM\"" "$W/bump.out" && grep -q 'commit -m "macup 9.9.9"' "$W/bump.out" && grep -q 'push' "$W/bump.out" \
+  && [ "$(git -C "$TAP" rev-list --count HEAD)" = 1 ] && ! grep -q '^git \(push\|commit\)' "$W/bump.log" && grep -q 'archive/refs/tags/v9.9.9.tar.gz' "$W/bump.log" \
+  && pass "bump-formula: url and sha256 are edited, the diff is shown, the commands are printed and nothing is committed" || { fail "bump-formula edit (rc=$rc)"; cat "$W/bump.out" "$W/bump.log"; git -C "$TAP" diff; }
+bump 9.9.9 "$TAP"; [ $? = 0 ] && grep -q 'already points at v9.9.9' "$W/bump.out" && pass "bump-formula: running it twice changes nothing" || fail "bump-formula twice"
+bump --commit 9.9.9 "$TAP"; [ $? = 1 ] && grep -q 'uncommitted changes' "$W/bump.out" && pass "bump-formula: --commit refuses a tap with other changes" || fail "bump-formula --commit on a dirty tap"
+git -C "$TAP" checkout -q -- Formula/macup.rb
+bump --commit 9.9.9 "$TAP"; rc=$?
+[ $rc = 0 ] && [ "$(git -C "$TAP" log -1 --format=%s)" = "macup 9.9.9" ] && [ -z "$(git -C "$TAP" status --porcelain)" ] && ! grep -q '^git push' "$W/bump.log" && pass "bump-formula: --commit makes the commit and never pushes" || { fail "bump-formula --commit (rc=$rc)"; cat "$W/bump.out"; }
 
 # --- a step that hangs is stopped together with what it started
 H="$W/tree"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"

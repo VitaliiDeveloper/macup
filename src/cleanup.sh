@@ -124,7 +124,11 @@ busy_pat(){ # a name from the tables → the pgrep -f pattern of what uses that 
 }
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 # macOS's own watchers (UserEventAgent, Spotlight, fseventsd) keep folders open whether or not their app runs: not "in use"
-lsof_snap(){ lsof -n -P -Fcn -u "$(id -u)" 2>/dev/null | awk '/^p/ { w = 0 } /^c/ { w = ($0 ~ /^c(UserEventAgent|mds|mds_stores|mdworker|mdworker_shared|fseventsd|revisiond|backupd|quicklookd)$/) } /^n/ && !w' >"$1"; }
+lsof_snap(){ # an empty file: lsof could not tell
+  lsof -n -P -Fcn -u "$(id -u)" >"$1.raw" 2>/dev/null
+  if [ -s "$1.raw" ]; then { echo lsof; awk '/^p/ { w = 0 } /^c/ { w = ($0 ~ /^c(UserEventAgent|mds|mds_stores|mdworker|mdworker_shared|fseventsd|revisiond|backupd|quicklookd)$/) } /^n/ && !w' "$1.raw"; } >"$1"; else : >"$1"; fi
+  rm -f "$1.raw"
+}
 open_in(){ # folders, one per line [a file with lsof's output, taken already]: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
   local f=${2:-$BODY.du.lsof} d

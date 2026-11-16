@@ -10,6 +10,7 @@ M="$PWD/macup"; X='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,c
 # `running` asks pgrep which apps are open; a fake one answers from FAKE_RUNNING (command lines, one per line), so results never depend on this machine
 mkdir -p "$W/bin"; cat >"$W/bin/pgrep" <<'FAKE'
 #!/bin/bash
+[ "$1" = "-x" ] && { printf '%s\n' "${FAKE_PROCS:-}" | grep -qx -- "$2"; exit; }
 [ "$1" = "-f" ] && [ -n "$2" ] && printf '%s\n' "${FAKE_RUNNING:-}" | grep -qE -- "$2"
 FAKE
 # `lsof` tells which app folders have open files: a fake one lists FAKE_OPEN paths (one per line), or fails with FAKE_LSOF_FAIL
@@ -544,24 +545,48 @@ env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.agy --no-col
 sleep 1; st=$(ps -o stat= -p "$(cat "$H/child.pid")" 2>/dev/null | tr -d ' ')   # gone, or a zombie where nothing reaps it (a container)
 case "$st" in ""|Z*) pass "a stopped step takes its child processes along" ;; *) fail "the child of a stopped step still runs ($st)"; kill "$(cat "$H/child.pid")" 2>/dev/null ;; esac
 
-# --- signing certificates close to their date; a fake `security` hands out two made here
+# --- signing certificates close to their date; a fake `security` hands out identities and certificates made here
 if command -v openssl >/dev/null; then
   H="$W/crt"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
   mk(){ openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days "$2" -subj "/CN=$1/O=Test" 2>/dev/null; }
-  { mk 'Apple Development: Soon Gone (AAAA111111)' 10; mk 'Apple Distribution: Long Lived (BBBB222222)' 300; mk 'Some Web Server' 5; } >"$H/certs.pem"
-  printf '#!/bin/bash\ncat "$HOME/certs.pem"\n' >"$H/.local/bin/security"; chmod +x "$H/.local/bin/security"
+  { mk 'Apple Development: Soon Gone (AAAA111111)' 10; mk 'Apple Distribution: Long Lived (BBBB222222)' 300; mk 'Some Web Server' 5
+    mk 'Apple Development: Renewed (CCCC333333)' 10; mk 'Apple Development: Renewed (CCCC333333)' 300; mk 'Apple Development: No Key (DDDD444444)' 5; } >"$H/certs.pem"
+  printf '  1) 0000000000000000000000000000000000000001 "Apple Development: Soon Gone (AAAA111111)"\n  2) 0000000000000000000000000000000000000002 "Apple Distribution: Long Lived (BBBB222222)"\n  3) 0000000000000000000000000000000000000003 "Apple Development: Renewed (CCCC333333)"\n     3 valid identities found\n' >"$H/identities.txt"
+  printf '#!/bin/bash\ncase "$1" in find-identity) cat "$HOME/identities.txt" ;; find-certificate) cat "$HOME/certs.pem" ;; esac\n' >"$H/.local/bin/security"; chmod +x "$H/.local/bin/security"
   env HOME="$H" /bin/bash "$M" check --only check.certs --no-color </dev/null >"$W/crt.out" 2>&1
-  grep -q 'Signing certificates that expire within 30 days: 1 ' "$W/crt.out" && grep -q 'Apple Development: Soon Gone' "$W/crt.out" && ! grep -qE 'Long Lived|Web Server' "$W/crt.out" \
-    && pass "signing certificates: only the one that expires soon is named" || { fail "signing certificates"; cat "$W/crt.out"; }
+  grep -q 'Signing certificates that expire within 30 days: 1 ' "$W/crt.out" && grep -q 'Apple Development: Soon Gone' "$W/crt.out" && ! grep -qE 'Long Lived|Web Server|Renewed|No Key' "$W/crt.out" \
+    && pass "signing certificates: only an identity whose newest certificate expires soon is named" || { fail "signing certificates"; cat "$W/crt.out"; }
 fi
 
 # --- crashes, sharing, PATH: said in a check
-H="$W/misc"; DR="$H/Library/Logs/DiagnosticReports"; mkdir -p "$DR" "$H/.config/macup" "$H/.local/bin"; printf 'language = en\n' >"$H/.config/macup/config"
-for i in 1 2 3 4; do : >"$DR/Crashy App-2026-11-1$i-10000$i.ips"; done; : >"$DR/Once_2026-11-10-100000_Mac.crash"
+H="$W/misc"; DR="$H/Library/Logs/DiagnosticReports"; mkdir -p "$DR/Retired" "$H/.config/macup" "$H/.local/bin"; printf 'language = en\n' >"$H/.config/macup/config"
+mkips(){ # dir name bug_type days-ago procPath [file-prefix]
+  python3 - "$@" <<'PY'
+import datetime, json, sys, uuid
+d, name, bug, ago, path = sys.argv[1:6]; pre = sys.argv[6] if len(sys.argv) > 6 else ""
+ts = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=float(ago))).strftime("%Y-%m-%d %H:%M:%S.00 +0000")
+head = {"app_name": name, "timestamp": ts, "bug_type": bug, "name": name}
+open("%s/%s%s-%s.ips" % (d, pre, name, uuid.uuid4().hex[:8]), "w").write(json.dumps(head) + "\n" + json.dumps({"procPath": path, "procName": name}).replace("/", "\\/") + "\n")
+PY
+}
+for i in 1 2; do mkips "$DR" "Crashy App" 309 1 "/Applications/Crashy App.app/Contents/MacOS/Crashy App"; mkips "$DR/Retired" "Crashy App" 309 2 "/Applications/Crashy App.app/Contents/MacOS/Crashy App"; done
+for i in 1 2 3; do mkips "$DR" "Crashy App" 309 1 "/Applications/Crashy App.app/Contents/MacOS/Crashy App" ExcUserFault_; done
+for i in 1 2 3; do mkips "$DR/Retired" "Old App" 309 20 "/Applications/Old App.app/Contents/MacOS/Old App"; mkips "$DR" "Hang App" 385 1 "/Applications/Hang App.app/Contents/MacOS/Hang App"; done
+for i in 1 2 3; do mkips "$DR" "Home App" 309 3 "$H/Applications/Home App.app/Contents/MacOS/Home App"; done
+for i in 1 2 3 4 5; do mkips "$DR/Retired" "sysd" 309 1 "/System/Library/CoreServices/sysd"; done
+for i in 1 2 3; do printf 'Process: Legacy App [1]\nPath: /Applications/Legacy App.app/Contents/MacOS/Legacy App\n' >"$DR/Legacy App_2026-11-1$i-100000_Mac.crash"; done
 env HOME="$H" /bin/bash "$M" check --only check.crashes --no-color </dev/null >"$W/misc.out" 2>&1
-grep -q 'Crashed 3 or more times in the last 7 days: Crashy App ×4$' "$W/misc.out" && pass "crashes: the app that keeps crashing is named" || { fail "crashes"; cat "$W/misc.out"; }
+grep -E 'Crashed 3 or more times in the last 7 days: ' "$W/misc.out" | grep -q 'Crashy App ×4' && grep -E 'Crashed 3' "$W/misc.out" | grep -q 'Home App ×3' && grep -E 'Crashed 3' "$W/misc.out" | grep -q 'Legacy App ×3' && ! grep -qE 'Old App|Hang App|sysd' "$W/misc.out" \
+  && pass "crashes: Retired counted, ExcUserFault_, other report types and old crashes skipped, only apps named" || { fail "crashes"; cat "$W/misc.out"; }
+grep -q 'macOS system processes crashed 5 times this week (not yours to fix; Apple gets the reports)$' "$W/misc.out" && ! grep -q "$H" "$W/misc.out" && pass "crashes: system processes are a count" || { fail "crash system count"; cat "$W/misc.out"; }
 FAKE_SHARING='	"com.openssh.sshd" => enabled' env HOME="$H" /bin/bash "$M" check --only check.security --no-color </dev/null >"$W/misc.out" 2>&1
-grep -q 'Remote Login (SSH) is on' "$W/misc.out" && ! grep -q 'Screen Sharing' "$W/misc.out" && pass "sharing: Remote Login that is on is said" || { fail "sharing"; cat "$W/misc.out"; }
+grep -q 'Remote Login (SSH) is on' "$W/misc.out" && ! grep -qE 'Screen Sharing|Remote Management' "$W/misc.out" && pass "sharing: Remote Login that is on is said" || { fail "sharing"; cat "$W/misc.out"; }
+FAKE_SHARING='	"com.apple.RemoteDesktop.agent" => enabled' env HOME="$H" /bin/bash "$M" check --only check.security --no-color </dev/null >"$W/misc.out" 2>&1
+grep -q 'Remote Management is on' "$W/misc.out" && pass "sharing: Remote Management that is on is said" || { fail "Remote Management"; cat "$W/misc.out"; }
+FAKE_SHARING='	"com.apple.RemoteDesktop.agent" => disabled' FAKE_PROCS=ARDAgent env HOME="$H" /bin/bash "$M" check --only check.security --no-color </dev/null >"$W/misc.out" 2>&1
+! grep -q 'Remote Management' "$W/misc.out" && pass "sharing: Remote Management that print-disabled lists as disabled is not said" || { fail "Remote Management disabled"; cat "$W/misc.out"; }
+FAKE_PROCS=ARDAgent env HOME="$H" /bin/bash "$M" check --only check.security --no-color </dev/null >"$W/misc.out" 2>&1
+grep -q 'Remote Management is on' "$W/misc.out" && pass "sharing: ARDAgent running without a print-disabled entry is Remote Management" || { fail "Remote Management by process"; cat "$W/misc.out"; }
 env HOME="$H" PATH="$PATH:$H/no/such/dir:/macup/no/such/system/dir" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/misc.out" 2>&1
 grep -q 'PATH names folders that do not exist: ~/no/such/dir ' "$W/misc.out" && pass "PATH: a folder that does not exist is said" || { fail "PATH folders"; cat "$W/misc.out"; }
 if [ "$(id -u)" = 0 ]; then

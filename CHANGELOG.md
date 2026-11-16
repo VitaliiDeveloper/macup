@@ -29,7 +29,7 @@ New:
 - **Homebrew packages nothing needs any more** (`brew autoremove`) can be picked after a check.
 - **Measured, never deleted:** virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware), core dumps in `/cores`.
 - **Updates:** Windsurf and VSCodium extensions, Google Cloud SDK components (its own install), .NET global tools (.NET 9 or later), Composer global packages.
-- **Checks:** signing certificates that expire within 30 days, a GitHub CLI login that no longer works, apps that crashed 3 or more times in a week, Remote Login and Screen Sharing that are on, folders of yours in `PATH` that do not exist.
+- **Checks:** signing certificates of your code-signing identities that expire within 30 days (a certificate renewed in Xcode no longer warns for the old one, and one without a private key is ignored), a GitHub CLI login that no longer works, apps in `/Applications` that crashed 3 or more times in a week (counted by the time in the report, `Retired/` included; macOS system processes are one count, not a list), Remote Login, Screen Sharing and Remote Management that are on, folders of yours in `PATH` that do not exist.
 - **For other programs (a GUI):** `--json` now carries every line of the run (`items`) and every item that can be cleaned (`cleanable`, each with a stable `key`); `macup clean --pick key,…` cleans exactly those. `macup tasks --json` and `macup history --json` print the lists. `--enable id,…` turns an opt-in task on for one run. See "For scripts and other programs" in the README.
 
 ## 2.8.0 — 2026-11-15

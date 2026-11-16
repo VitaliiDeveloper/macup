@@ -82,6 +82,9 @@ if task check.security; then
   shared(){ printf '%s\n' "$SH" | grep -qE "\"$1\" => (enabled|false)"; }
   shared com.openssh.sshd && info 'Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)'
   shared com.apple.screensharing && info 'Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing)'
+  if shared com.apple.RemoteDesktop.agent || { ! printf '%s\n' "$SH" | grep -q 'com.apple.RemoteDesktop.agent' && pgrep -x ARDAgent >/dev/null 2>&1; }; then
+    info 'Remote Management is on: other computers can see and control this Mac with Apple Remote Desktop (System Settings → General → Sharing)'
+  fi
   # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
   if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
   elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then

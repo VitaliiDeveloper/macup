@@ -10,6 +10,8 @@ MACUP_VERSION="2.8.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
+# every path below hangs off $HOME: with none, "$HOME/Library/Caches" would be the system's /Library/Caches
+case "${HOME:-}" in /?*) ;; *) echo "macup: HOME is not set" >&2; exit 1 ;; esac
 
 case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { export LC_CTYPE=en_US.UTF-8; } 2>/dev/null ;; esac
 
@@ -90,7 +92,7 @@ clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
 clean.uv|on|uv cache: unused entries
 clean.go|on|Go build cache
 clean.bun|on|Bun install cache
-clean.deno|on|Deno cache
+clean.deno|on|Deno cache; localStorage and Deno KV data stay
 clean.logs|on|Your app logs and crash reports older than 30 days
 clean.quicklook|on|Quick Look thumbnail cache
 clean.reports|on|macup reports older than keep_reports_days
@@ -522,7 +524,7 @@ self_update(){
   esac
   if ! ver_gt "$newv" "$MACUP_VERSION"; then _f 'macup %s is already the latest.' "$MACUP_VERSION"; echo; rm -f "$tmp"; exit 0; fi
   target=$(resolve_self)
-  if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; fi
+  if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; echo; rm -f "$tmp"; exit 1; fi
   echo; rm -f "$tmp"
 }
 
@@ -1047,6 +1049,9 @@ the schedule (%s) || розклад (%s)
 Details: macup last || Деталі: macup last
 iPhone and iPad backups: %s (Finder → your device → Manage Backups) || Резервні копії iPhone та iPad: %s (Finder → твій пристрій → Manage Backups)
 Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune) || Образ диска Docker: %s (Docker Desktop → Settings → Resources; зменшується після: docker system prune)
+Deno cache; localStorage and Deno KV data stay || Кеш Deno; дані localStorage і Deno KV залишаються
+Unknown task: %s (see every id with: macup tasks) || Невідома задача: %s (усі id: macup tasks)
+Unknown task in %s: %s (see every id with: macup tasks) || Невідома задача в %s: %s (усі id: macup tasks)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1430,6 +1435,9 @@ the schedule (%s) || расписание (%s)
 Details: macup last || Подробности: macup last
 iPhone and iPad backups: %s (Finder → your device → Manage Backups) || Резервные копии iPhone и iPad: %s (Finder → ваше устройство → Manage Backups)
 Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune) || Образ диска Docker: %s (Docker Desktop → Settings → Resources; уменьшается после: docker system prune)
+Deno cache; localStorage and Deno KV data stay || Кеш Deno; данные localStorage и Deno KV остаются
+Unknown task: %s (see every id with: macup tasks) || Неизвестная задача: %s (все id: macup tasks)
+Unknown task in %s: %s (see every id with: macup tasks) || Неизвестная задача в %s: %s (все id: macup tasks)
 EOF
   ;;
   esac
@@ -1499,6 +1507,16 @@ if [ -z "$ACTION" ]; then
 fi
 
 load_conf
+# a mistyped id used to match nothing without a word: `--only chek.disk` ran no task and said all was fine
+unknown_tasks(){ # comma list → the ids that are neither a task nor a group
+  printf '%s\n' "$1" | tr ',' '\n' | while IFS= read -r id; do
+    case "$id" in ""|check.\*|update.\*|clean.\*) continue ;; esac
+    [ -n "$(task_default "$id")" ] || printf '%s\n' "$id"
+  done | paste -sd, - | sed 's/,/, /g'
+}
+BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP")
+[ -n "$BADIDS" ] && { _f 'Unknown task: %s (see every id with: macup tasks)' "$BADIDS"; echo; exit 2; }
+BADCONF=$(unknown_tasks "$(conf skip "" | tr -d ' '),$(conf enable "" | tr -d ' ')")
 mkdir -p "$LOGDIR" "$STATE_DIR"
 # one run at a time: two would update the same tools and delete the same folders
 RUNLOCK="$STATE_DIR/lock"; HAVE_LOCK=0
@@ -1532,6 +1550,8 @@ trap 'cleanup_body; cleanup_lang; stop_sudo_keep; unlock' EXIT
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"
 printf '%smacup %s%s · %s%s\n' "$B" "$MACUP_VERSION" "$N" "$MODE" "$( [ "$DRY" = 1 ] && printf ' · %s' "$(_ 'nothing is installed or deleted unless you pick it')")"
+
+[ -n "$BADCONF" ] && warn 'Unknown task in %s: %s (see every id with: macup tasks)' "$(tildify "$CONF")" "$BADCONF"
 
 PREV=$( [ -s "$HISTORY" ] && tail -n 1 "$HISTORY")
 
@@ -2035,7 +2055,7 @@ safe_path(){
     */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
     *) return 1 ;;
   esac
-  case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
+  case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*/deno/location_data|*/deno/location_data/*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
     */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
   case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
@@ -2191,8 +2211,8 @@ pick(){ # reads a choice, prints the chosen indexes one per line
     lv=""; case "$tok" in safe|"$(_ safe)") lv=1 ;; standard|"$(_ standard)") lv=2 ;; aggressive|"$(_ aggressive)") lv=3 ;; esac
     if [ -n "$lv" ]; then
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
-    elif echo "$tok" | grep -qE '^[0-9]+(-[0-9]+)?$'; then
-      a=${tok%-*}; b=${tok#*-}
+    elif echo "$tok" | grep -qE '^[0-9]{1,4}(-[0-9]{1,4})?$'; then
+      a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
       while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
     fi
   done | sort -un
@@ -2213,7 +2233,6 @@ clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
 clean.bun|1|Bun install cache|~/.bun/install/cache||
-clean.deno|1|Deno cache|~/Library/Caches/deno||
 clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
 clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
 clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
@@ -2275,6 +2294,13 @@ done <<EOF2
 $TOOL_CACHES
 EOF2
 cover "$HOME/.npm"
+# Deno keeps localStorage and the databases of Deno.openKv() in location_data, next to its caches: that folder stays
+DN="$HOME/Library/Caches/deno"
+if [ -d "$DN" ] && [ ! -L "$DN" ]; then
+  L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
+  [ "$s" -ge 5120 ] && cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L"
+  cover "$DN/location_data"
+fi
 for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done

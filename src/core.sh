@@ -10,6 +10,8 @@ MACUP_VERSION="2.8.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
+# every path below hangs off $HOME: with none, "$HOME/Library/Caches" would be the system's /Library/Caches
+case "${HOME:-}" in /?*) ;; *) echo "macup: HOME is not set" >&2; exit 1 ;; esac
 
 case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf-8*|*UTF8*|*utf8*) ;; *) { export LC_CTYPE=en_US.UTF-8; } 2>/dev/null ;; esac
 
@@ -90,7 +92,7 @@ clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
 clean.uv|on|uv cache: unused entries
 clean.go|on|Go build cache
 clean.bun|on|Bun install cache
-clean.deno|on|Deno cache
+clean.deno|on|Deno cache; localStorage and Deno KV data stay
 clean.logs|on|Your app logs and crash reports older than 30 days
 clean.quicklook|on|Quick Look thumbnail cache
 clean.reports|on|macup reports older than keep_reports_days

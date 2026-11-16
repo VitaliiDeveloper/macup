@@ -60,6 +60,16 @@ if [ -z "$ACTION" ]; then
 fi
 
 load_conf
+# a mistyped id used to match nothing without a word: `--only chek.disk` ran no task and said all was fine
+unknown_tasks(){ # comma list → the ids that are neither a task nor a group
+  printf '%s\n' "$1" | tr ',' '\n' | while IFS= read -r id; do
+    case "$id" in ""|check.\*|update.\*|clean.\*) continue ;; esac
+    [ -n "$(task_default "$id")" ] || printf '%s\n' "$id"
+  done | paste -sd, - | sed 's/,/, /g'
+}
+BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP")
+[ -n "$BADIDS" ] && { _f 'Unknown task: %s (see every id with: macup tasks)' "$BADIDS"; echo; exit 2; }
+BADCONF=$(unknown_tasks "$(conf skip "" | tr -d ' '),$(conf enable "" | tr -d ' ')")
 mkdir -p "$LOGDIR" "$STATE_DIR"
 # one run at a time: two would update the same tools and delete the same folders
 RUNLOCK="$STATE_DIR/lock"; HAVE_LOCK=0
@@ -93,6 +103,8 @@ trap 'cleanup_body; cleanup_lang; stop_sudo_keep; unlock' EXIT
 if [ "$DRY" = 1 ]; then MODE="check"; elif [ "$DO_UPDATE" = 0 ]; then MODE="clean"; elif [ "$DO_CLEAN" = 0 ]; then MODE="update"; else MODE="all"; fi
 [ "$DEEP" = 1 ] && MODE="$MODE+deep"
 printf '%smacup %s%s · %s%s\n' "$B" "$MACUP_VERSION" "$N" "$MODE" "$( [ "$DRY" = 1 ] && printf ' · %s' "$(_ 'nothing is installed or deleted unless you pick it')")"
+
+[ -n "$BADCONF" ] && warn 'Unknown task in %s: %s (see every id with: macup tasks)' "$(tildify "$CONF")" "$BADCONF"
 
 PREV=$( [ -s "$HISTORY" ] && tail -n 1 "$HISTORY")
 

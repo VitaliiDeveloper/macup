@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Deno's cleanup keeps `location_data`.** `clean.deno` emptied the whole of `~/Library/Caches/deno`, and Deno keeps `localStorage` and the default `Deno.openKv()` databases there, in `location_data`. That folder now stays; the caches next to it are cleaned as before.
+- **A mistyped task id is said.** `macup check --only chek.disk` ran no task and reported that nothing needs attention. An unknown id in `--only` or `--skip` now stops the run with exit status 2; one in the config's `skip` or `enable` is a warning.
+- **macup does not start without `HOME`.** With an empty `HOME` its paths pointed at the system's `/Library`.
+- **`macup self-update` exits with 1 when it cannot write the new file.** It exited with 0.
+- **Picking after a check:** `08` is read as 8, and a range like `1-9999` no longer loops for minutes.
+
 ## 2.8.0 — 2026-11-15
 
 Fixes:

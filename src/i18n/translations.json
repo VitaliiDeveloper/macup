@@ -1518,5 +1518,17 @@
   "Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)": {
     "uk": "Образ диска Docker: %s (Docker Desktop → Settings → Resources; зменшується після: docker system prune)",
     "ru": "Образ диска Docker: %s (Docker Desktop → Settings → Resources; уменьшается после: docker system prune)"
+  },
+  "Deno cache; localStorage and Deno KV data stay": {
+    "uk": "Кеш Deno; дані localStorage і Deno KV залишаються",
+    "ru": "Кеш Deno; данные localStorage и Deno KV остаются"
+  },
+  "Unknown task: %s (see every id with: macup tasks)": {
+    "uk": "Невідома задача: %s (усі id: macup tasks)",
+    "ru": "Неизвестная задача: %s (все id: macup tasks)"
+  },
+  "Unknown task in %s: %s (see every id with: macup tasks)": {
+    "uk": "Невідома задача в %s: %s (усі id: macup tasks)",
+    "ru": "Неизвестная задача в %s: %s (все id: macup tasks)"
   }
 }

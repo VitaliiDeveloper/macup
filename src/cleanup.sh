@@ -14,7 +14,7 @@ safe_path(){
     */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
     *) return 1 ;;
   esac
-  case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
+  case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*/deno/location_data|*/deno/location_data/*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
     */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
   case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
@@ -170,8 +170,8 @@ pick(){ # reads a choice, prints the chosen indexes one per line
     lv=""; case "$tok" in safe|"$(_ safe)") lv=1 ;; standard|"$(_ standard)") lv=2 ;; aggressive|"$(_ aggressive)") lv=3 ;; esac
     if [ -n "$lv" ]; then
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
-    elif echo "$tok" | grep -qE '^[0-9]+(-[0-9]+)?$'; then
-      a=${tok%-*}; b=${tok#*-}
+    elif echo "$tok" | grep -qE '^[0-9]{1,4}(-[0-9]{1,4})?$'; then
+      a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
       while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
     fi
   done | sort -un

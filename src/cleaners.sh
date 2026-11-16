@@ -13,7 +13,6 @@ clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
 clean.bun|1|Bun install cache|~/.bun/install/cache||
-clean.deno|1|Deno cache|~/Library/Caches/deno||
 clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
 clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
 clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
@@ -75,6 +74,13 @@ done <<EOF2
 $TOOL_CACHES
 EOF2
 cover "$HOME/.npm"
+# Deno keeps localStorage and the databases of Deno.openKv() in location_data, next to its caches: that folder stays
+DN="$HOME/Library/Caches/deno"
+if [ -d "$DN" ] && [ ! -L "$DN" ]; then
+  L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
+  [ "$s" -ge 5120 ] && cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L"
+  cover "$DN/location_data"
+fi
 for ds in "$DEV/Xcode/"*DeviceSupport; do
   [ -d "$ds" ] && clean_old clean.device_support "$(basename "$ds")" "$ds" "$DS_DAYS"
 done

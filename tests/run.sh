@@ -59,7 +59,7 @@ exp=""; for lv in safe standard aggressive; do
   got=$(deleted "$W/l$lv" clean --level $lv --skip "$X" --no-color)
   [ "$got" = "$(echo "$exp")" ] && pass "clean --level $lv deletes exactly the expected files" || { fail "clean --level $lv"; diff <(echo "$exp") <(echo "$got") | head; }
 done
-echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/|virtualenvs|v21\.2\.5|v21\.7\.0|v23\.|registry/index|Code/(rs|plain)' \
+echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/|virtualenvs|v21\.2\.5|v21\.7\.0|v23\.|registry/index|location_data|Code/(rs|plain)' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
 
@@ -411,5 +411,14 @@ lim 120 env HOME="$I" MACUP_PREFIX="$W/bin" /bin/bash ./install.sh --yes </dev/n
 grep -q '^project_dirs = ~/Code, ~/Work' "$I/.config/macup/config" && grep -q '^language = uk' "$I/.config/macup/config" && [ "$(grep -c '# macup' "$I/.zshrc")" = 1 ] \
   && pass "reinstall keeps settings" || fail "reinstall"
 /bin/bash ./install.sh --bogus >/dev/null 2>&1; [ $? = 2 ] && pass "installer rejects unknown options" || fail "installer options"
+
+# --- a mistyped task id is said, not silently matched to nothing; no HOME, no run
+H="$W/ids"; mkdir -p "$H/.config/macup"; printf 'language = en\nskip = check.tyme_machine\nenable = clean.trash\n' >"$H/.config/macup/config"
+env HOME="$H" /bin/bash "$M" check --only chek.disk --no-color </dev/null >"$W/ids.out" 2>&1; rc=$?
+[ $rc = 2 ] && grep -q 'Unknown task: chek.disk' "$W/ids.out" && [ ! -d "$H/Library/Logs/macup" ] && pass "unknown id in --only stops the run" || fail "unknown id in --only (rc=$rc)"
+env HOME="$H" /bin/bash "$M" check --skip 'update.*,check.docker,clean.nope' --no-color </dev/null >/dev/null 2>&1; [ $? = 2 ] && pass "unknown id in --skip stops the run" || fail "unknown id in --skip"
+env HOME="$H" /bin/bash "$M" check --only 'check.system,clean.*' --no-color </dev/null >"$W/ids.out" 2>&1; rc=$?
+[ $rc = 0 ] && grep -q 'Unknown task in ~/.config/macup/config: check.tyme_machine' "$W/ids.out" && ! grep -q 'clean.trash (' "$W/ids.out" && pass "unknown id in the config is a warning" || { fail "unknown id in the config (rc=$rc)"; cat "$W/ids.out"; }
+env HOME= /bin/bash "$M" version >/dev/null 2>&1; [ $? = 1 ] && pass "no HOME: macup does not start" || fail "empty HOME"
 
 echo; [ $F = 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

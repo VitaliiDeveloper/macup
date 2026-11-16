@@ -67,6 +67,8 @@ blob "$H/.bun/install/cache/x"; blob "$L/Caches/deno/deps"; blob "$L/Caches/pypo
 blob "$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/lib" 64; printf 'version = 3.12.1\n' >"$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/pyvenv.cfg"
 blob "$H/.cargo/registry/cache/index.crates.io"; blob "$H/.cargo/registry/src/index.crates.io"; mkdir -p "$H/.cargo/registry/index"; echo idx >"$H/.cargo/registry/index/keep"
 blob "$L/Caches/JetBrains/IntelliJIdea2025.1/index"
+# Deno keeps localStorage and Deno.openKv() databases inside its cache folder: they stay
+mkdir -p "$L/Caches/deno/location_data/abc"; echo kv >"$L/Caches/deno/location_data/abc/kv.sqlite3"; echo ls >"$L/Caches/deno/location_data/abc/local_storage"
 # a pin without the patch (.nvmrc "21.2") keeps the newest 21.2.x; a pin in package.json (volta, engines) counts too
 for v in v21.2.0 v21.2.5 v21.7.0 v23.1.0 v23.4.0; do blob "$H/.nvm/versions/node/$v" 1024; done
 mkdir -p "$H/Code/partial" "$H/Code/volta"; echo "21.2" >"$H/Code/partial/.nvmrc"

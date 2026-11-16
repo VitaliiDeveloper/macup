@@ -170,9 +170,9 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
            # never "cleaned" for something macup would not touch
-           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see log)' "$lbl"; return 0; fi ;;
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
-           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see log)' "$lbl"; return 0; fi
+           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see the report)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac

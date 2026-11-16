@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------- arguments
-DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; SCHED_ARG=""; YES=0; QUIET=0; JSON=0; NOTIFY=0
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; SCHED_ARG=""; REP_ARG=""; YES=0; QUIET=0; JSON=0; NOTIFY=0
 cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
 trap cleanup_lang EXIT
 set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do case "$1" in
   lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
   last|--last)          CMD=last ;;
   history|--history)    CMD=history ;;
-  reports|--reports)    CMD=reports ;;
+  reports|--reports)    CMD=reports; case "${2:-}" in ""|-*) ;; *) REP_ARG=$2; shift ;; esac ;;
   tasks|--tasks)        CMD=tasks ;;
   config|--config)      CMD=config ;;
   self-update|selfupdate|upgrade) CMD=self_update ;;
@@ -53,7 +53,7 @@ case "$CMD" in
   lang)        choose_lang "$LANG_ARG"; exit $? ;;
   last)        show_last; exit 0 ;;
   history)     if [ "$JSON" = 1 ]; then history_json; else show_history; fi; exit 0 ;;
-  reports)     mkdir -p "$LOGDIR"; open "$LOGDIR"; exit 0 ;;
+  reports)     reports "$REP_ARG"; exit $? ;;
   tasks)       if [ "$JSON" = 1 ]; then tasks_json; else list_tasks; fi; exit 0 ;;
   config)      open_conf; exit 0 ;;
   self_update) self_update; exit 0 ;;
@@ -95,13 +95,15 @@ fi
 echo $$ >"$RUNLOCK/pid" && HAVE_LOCK=1
 unlock(){ [ "$HAVE_LOCK" = 1 ] && rm -rf "$RUNLOCK"; HAVE_LOCK=0; }
 # macup tidies up after itself on every run, a check too: its reports are its own files, not the Mac's.
-# Reports older than keep_reports_days go, and never more than 60 runs stay; the history keeps its last 500 lines,
+# Reports older than keep_reports_days go, and never more than keep_reports runs stay; the history keeps its last 500 lines,
 # the schedule's log its last 200; temp files a killed run left behind go after a day.
 tidy_own(){
   local f
   case "$SKIP" in *",clean.reports,"*) return 0 ;; esac   # only an explicit skip: --only check.disk still tidies up
-  find "$LOGDIR" -maxdepth 1 -type f -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null
-  ls -t "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +61 | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
+  # .log: the command output that versions before 2.9.0 kept next to each report
+  find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -mtime +"$KEEP_DAYS" -delete 2>/dev/null
+  # this run's report is not written yet: it makes keep_reports
+  ls -r "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +"$KEEP_RUNS" | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
   trim(){ [ -f "$1" ] && [ "$(wc -l <"$1")" -gt $(($2 * 2)) ] && tail -n "$2" "$1" >"$1.tmp" && cat "$1.tmp" >"$1"; rm -f "$1.tmp"; }
   trim "$HISTORY" 500; trim "$LOGDIR/schedule.log" 200
   find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) -mtime +1 -delete 2>/dev/null
@@ -109,11 +111,29 @@ tidy_own(){
 tidy_own
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
-RAW="$LOGDIR/macup_$STAMP.log"
+[ -e "$REPORT" ] && REPORT="$LOGDIR/macup_${STAMP}_$$.md"   # two runs in one second
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
+# what the commands print; it goes to the bottom of the report, so one run leaves one file
+RAW="$BODY.raw"
 # the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det"; }
-trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$RAW"; }
+raw_section(){ # ~~~~ and not backticks: brew prints backtick fences of its own
+  [ -s "$RAW" ] || return 0
+  printf '\n## %s\n\n~~~~\n' "$(_ 'Command output')"; nocolor <"$RAW" | tr -d '\r'; printf '~~~~\n'
+}
+# Ctrl-C: what the run did so far and what its commands printed still land in the report
+interrupted(){
+  [ -n "$TICK" ] && kill "$TICK" 2>/dev/null
+  [ "${REPORT_DONE:-0}" = 1 ] || { echo "# $(_f 'macup report — %s' "$(date '+%Y-%m-%d %H:%M')")"; echo
+    _f 'Mode: %s · macup %s · took %s' "${MODE:-?}" "$MACUP_VERSION" "$((SECONDS / 60))m $((SECONDS % 60))s"; echo; echo
+    echo "**$(_ 'Interrupted: this report is incomplete.')**"; echo
+    cat "$BODY" 2>/dev/null; raw_section; } >"$REPORT" 2>/dev/null
+  printf '\n%s%s%s\n' "$Y" "$(_f 'Interrupted. Report: %s' "$(tildify "$REPORT")")" "$N" >&4
+  cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130
+}
+# 4: the terminal's stderr; the trap can fire inside run, where stdout and stderr go to $RAW
+exec 4>&2
+trap interrupted INT
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
 stop_sudo_keep(){

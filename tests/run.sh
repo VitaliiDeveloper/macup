@@ -295,8 +295,10 @@ agy 'exit 1'; env HOME="$H" /bin/bash "$M" update --only update.agy --no-color <
 [ $rc = 3 ] && grep -q '✗ Antigravity CLI: update failed' "$W/rc.out" && pass "a failed update step: exit status 3" || { fail "exit status of a failed step (rc=$rc)"; cat "$W/rc.out"; }
 agy 'exit 0'; env HOME="$H" /bin/bash "$M" update --only update.agy --no-color --quiet </dev/null >"$W/rc.out" 2>&1; rc=$?
 [ $rc = 0 ] && grep -q 'Summary' "$W/rc.out" && grep -q 'Antigravity CLI' "$H"/Library/Logs/macup/*.md && ! grep -q '▸' "$W/rc.out" && pass "--quiet: only the summary, exit status 0" || { fail "--quiet (rc=$rc)"; cat "$W/rc.out"; }
+r=$(ls -t "$H"/Library/Logs/macup/macup_*.md | head -1); grep -q '^## Command output$' "$r" && grep -qx '$ agy update' "$r" && [ -z "$(ls "$H"/Library/Logs/macup/*.log 2>/dev/null)" ] \
+  && pass "one file per run: what the commands printed is at the end of the report, no .log" || { fail "command output in the report"; cat "$r"; }
 env HOME="$H" /bin/bash "$M" check --only check.sizes --json </dev/null 2>/dev/null >"$W/rc.json"
-python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["mode"]=="check" and d["failed_steps"]==0 and isinstance(d["needs_attention"],list) and d["report"].endswith(".md")' "$W/rc.json" 2>/dev/null \
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["mode"]=="check" and d["failed_steps"]==0 and isinstance(d["needs_attention"],list) and d["report"].endswith(".md") and d["log"]==d["report"]' "$W/rc.json" 2>/dev/null \
   && pass "--json: one valid JSON object" || { fail "--json"; cat "$W/rc.json"; }
 agy 'sleep 60'; t0=$SECONDS
 env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/rc.out" 2>&1; rc=$?
@@ -428,17 +430,65 @@ jq(){ python3 -c "import json,sys; d=json.load(open(sys.argv[1])); $2" "$1"; }  
 # --- macup tidies its own files on every run, a check too: old reports, too many reports, history, the schedule's log, temp files of killed runs
 H="$W/tidy"; LG="$H/Library/Logs/macup"; ST="$H/Library/Application Support/macup"; TT="$W/tidytmp"; mkdir -p "$LG" "$ST" "$TT" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
 for i in $(seq 10 79); do : >"$LG/macup_2026-01-01_00-00-$i.md"; echo x >"$LG/macup_2026-01-01_00-00-$i.log"; done
-: >"$LG/macup_2024-01-01_00-00-00.md"; : >"$LG/macup_2024-01-01_00-00-00.log"; touch -t 202401010000 "$LG"/macup_2024-*
+: >"$LG/macup_2024-01-01_00-00-00.md"; : >"$LG/macup_2024-01-01_00-00-00.log"; : >"$LG/macup_2024-06-01_00-00-00.log"; touch -t 202401010000 "$LG"/macup_2024-*
 seq 1 1500 | sed 's/^/2026-01-01 00:00,check,1,2,3,4,5,6,7,8,/' >"$ST/history.csv"; seq 1 900 >"$LG/schedule.log"
 : >"$TT/macup.AbCdEf"; : >"$TT/macup.AbCdEf.pid"; : >"$TT/macup-lang.GhIjKl"; touch -t 202401010000 "$TT"/macup*; : >"$TT/macup.FrEsH1"; : >"$TT/macup-notes.txt"; touch -t 202401010000 "$TT/macup-notes.txt"
 env HOME="$H" TMPDIR="$TT" /bin/bash "$M" check --only check.system --no-color </dev/null >"$W/tidy.out" 2>&1
 n=$(ls "$LG"/macup_*.md | wc -l | tr -d ' ')
-[ "$n" -le 61 ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.md" ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.log" ] && pass "own reports: old ones go, never more than 60 runs stay ($n)" || fail "own reports ($n left)"
-[ "$(ls "$LG"/macup_*.log 2>/dev/null | wc -l | tr -d ' ')" -le 61 ] && pass "own reports: a removed report takes its log along" || fail "logs of removed reports stay"
+[ "$n" = 20 ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.md" ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.log" ] && [ ! -e "$LG/macup_2024-06-01_00-00-00.log" ] && [ -e "$LG/macup_2026-01-01_00-00-79.md" ] \
+  && pass "own reports: old ones and old orphan logs go, the newest 20 runs stay ($n)" || fail "own reports ($n left)"
+lo=0; for f in "$LG"/macup_*.log; do [ -e "${f%.log}.md" ] || lo=1; done
+[ $lo = 0 ] && [ "$(ls "$LG"/macup_*.log | wc -l | tr -d ' ')" = 19 ] && pass "own reports: a removed report takes the log of an older version along" || { fail "logs of removed reports stay"; ls "$LG"; }
 [ "$(wc -l <"$ST/history.csv" | tr -d ' ')" -le 501 ] && [ "$(wc -l <"$LG/schedule.log" | tr -d ' ')" = 200 ] && tail -1 "$LG/schedule.log" | grep -q '^900$' && pass "history and the schedule's log keep only their last lines" || fail "history or schedule.log not trimmed"
 [ ! -e "$TT/macup.AbCdEf" ] && [ ! -e "$TT/macup.AbCdEf.pid" ] && [ ! -e "$TT/macup-lang.GhIjKl" ] && [ -e "$TT/macup.FrEsH1" ] && [ -e "$TT/macup-notes.txt" ] \
   && [ -z "$(find "$TT" -maxdepth 1 -name 'macup*' ! -name '*FrEsH1' ! -name '*notes*')" ] && pass "temp files of killed runs go after a day; nothing else in the temp folder is touched, none are left" || { fail "temp files"; ls -la "$TT"; }
-new=$(ls -t "$LG"/macup_*.md | head -1); [ ! -e "${new%.md}.log" ] && ! grep -q 'Command log' "$new" && pass "a run that started no command leaves no empty log" || fail "empty log left"
+new=$(ls -t "$LG"/macup_*.md | head -1); [ ! -e "${new%.md}.log" ] && ! grep -q '^## Command output' "$new" && pass "a run that started no command: one report, no command output section" || fail "a run without commands left a log or an empty section"
+printf 'language = en\nkeep_reports_days = 30\nkeep_reports = 5\n' >"$H/.config/macup/config"
+env HOME="$H" TMPDIR="$TT" /bin/bash "$M" check --only check.system --no-color </dev/null >"$W/tidy.out" 2>&1
+[ "$(ls "$LG"/macup_*.md | wc -l | tr -d ' ')" = 5 ] && [ -e "$new" ] && pass "keep_reports caps the runs kept" || { fail "keep_reports"; ls "$LG"; }
+
+# --- macup reports: what there is, clean asks first, --json
+H="$W/rep"; LG="$H/Library/Logs/macup"; mkdir -p "$LG" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '# macup report — 2026-11-01 10:00\n\nMode: check · macup 2.8.0 · took 0m 5s\n' >"$LG/macup_2026-11-01_10-00-00.md"; echo raw >"$LG/macup_2026-11-01_10-00-00.log"
+printf '# звіт macup — 2026-11-02 11:30\n\nРежим: all+deep · macup 2.9.0 · тривалість 1m 2s\n' >"$LG/macup_2026-11-02_11-30-00.md"; echo keep >"$LG/schedule.log"
+env HOME="$H" /bin/bash "$M" reports --no-color </dev/null >"$W/rep.out" 2>&1
+grep -q '^Reports: 2 · .* · ~/Library/Logs/macup$' "$W/rep.out" && grep -q '^Oldest: 2026-11-01 10:00 · newest: 2026-11-02 11:30$' "$W/rep.out" && grep -q 'macup reports clean' "$W/rep.out" \
+  && pass "reports: count, size, folder, dates, how to clean" || { fail "reports"; cat "$W/rep.out"; }
+env HOME="$H" /bin/bash "$M" reports --json </dev/null >"$W/rep.json" 2>/dev/null
+python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); r=d["reports"]; assert d["schema"]==1 and d["count"]==2 and d["kb"]>0 and d["folder"].endswith("Logs/macup"); assert [x["mode"] for x in r]==["check","all+deep"] and r[0]["date"]=="2026-11-01 10:00" and r[0]["file"].endswith(".md") and r[0]["kb"]>0' "$W/rep.json" \
+  && pass "reports --json: valid, with file, date, mode and size" || { fail "reports --json"; cat "$W/rep.json"; }
+env HOME="$H" /bin/bash "$M" reports clean --no-color </dev/null >"$W/rep.out" 2>&1
+[ "$(ls "$LG" | wc -l | tr -d ' ')" = 4 ] && grep -q 'Reports to remove: 2 ' "$W/rep.out" && grep -q 'Nothing removed' "$W/rep.out" && ! grep -q tty "$W/rep.out" \
+  && pass "reports clean without a yes removes nothing" || { fail "reports clean: no answer"; cat "$W/rep.out"; }
+env HOME="$H" /bin/bash "$M" reports clean --yes --no-color </dev/null >"$W/rep.out" 2>&1
+[ "$(ls "$LG")" = schedule.log ] && grep -q 'Removed' "$W/rep.out" && pass "reports clean --yes removes the reports and old logs, keeps schedule.log" || { fail "reports clean --yes"; ls "$LG"; cat "$W/rep.out"; }
+env HOME="$H" /bin/bash "$M" reports nonsense </dev/null >/dev/null 2>&1; [ $? = 2 ] && pass "reports: an unknown word is exit status 2" || fail "reports nonsense"
+
+# --- Ctrl-C: what the commands printed so far is in the report, and the report is named
+H="$W/int"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\ncase "$1" in --version) echo 1.0 ;; update) echo "agy is downloading"; : >"$HOME/started"; sleep 30 ;; esac\n' >"$H/.local/bin/agy"; chmod +x "$H/.local/bin/agy"
+set -m   # its own process group, and SIGINT not ignored as it is for a background job without job control
+env HOME="$H" /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/int.out" 2>&1 & p=$!
+set +m
+for i in $(seq 1 100); do [ -e "$H/started" ] && break; sleep 0.2; done
+kill -INT -- -"$p" 2>/dev/null; wait "$p"; rc=$?
+r=$(ls "$H"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
+[ $rc = 130 ] && [ -n "$r" ] && grep -q 'Interrupted. Report: ~/Library/Logs/macup/macup_' "$W/int.out" && grep -q 'agy is downloading' "$r" && grep -q 'incomplete' "$r" && [ -z "$(ls "$H"/Library/Logs/macup/*.log 2>/dev/null)" ] \
+  && pass "Ctrl-C: the report keeps what the commands printed" || { fail "Ctrl-C (rc=$rc)"; cat "$W/int.out" "$r"; }
+
+# --- since the last run: swap that grew is not "something is filling the disk"
+H="$W/swp"; SW="$W/swpbin"; mkdir -p "$SW" "$H/.config/macup" "$H/Library/Application Support/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\ncase "$*" in *vm.swapusage*) echo "total = 12288.00M  used = ${FAKE_SWAP_MB}.00M  free = 100.00M  (encrypted)" ;; *) exec /usr/sbin/sysctl "$@" ;; esac\n' >"$SW/sysctl"; chmod +x "$SW/sysctl"
+swp(){ # free KB more last time, swap MB last time, swap MB now
+  local fr; fr=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}')
+  echo "2026-11-01 10:00,check,$((fr + $1)),500000000,50,$2,,,0,0,0" >"$H/Library/Application Support/macup/history.csv"
+  FAKE_SWAP_MB=$3 env HOME="$H" PATH="$SW:$PATH" /bin/bash "$M" check --only check.trends,check.memory --no-color </dev/null 2>&1 | grep 'Free space' | head -1; }
+o=$(swp 26214400 0 10240)   # 26.8 GB less, 10.7 GB of it swap: 16 GB is under the 21 GB that warns
+echo "$o" | grep -q '· Free space: -2[67]\.[0-9] GB since 2026-11-01 10:00 (10.7 GB of it is swap, freed on restart)$' && pass "free space: swap is subtracted before warning" || fail "free space with swap: $o"
+o=$(swp 31457280 0 2048)
+echo "$o" | grep -q '! Free space: -3[23]\.[0-9] GB .*(2.1 GB of it is swap, freed on restart) — something is filling the disk' && pass "free space: still a warning when the rest crosses the line" || fail "free space, swap too small: $o"
+o=$(swp 31457280 7000 7000)
+echo "$o" | grep -q '! Free space: -3[23]\.[0-9] GB since 2026-11-01 10:00 — something is filling' && pass "free space: unchanged swap, the warning as before" || fail "free space without swap: $o"
 
 # --- --json carries everything the terminal shows, with a key for each thing that can be cleaned; --pick cleans exactly those
 H="$W/js"; tests/fixture.sh "$H"; (cd "$H" && find . -type f | sort) >"$H.b"

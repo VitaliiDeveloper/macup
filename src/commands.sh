@@ -68,8 +68,9 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
-# Keep macup reports for this many days (never more than the last 60 runs)
+# Keep macup reports for this many days, and at most this many runs (one file per run; remove them all: macup reports clean)
 keep_reports_days = 30
+keep_reports = 20
 
 # Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
 step_timeout_minutes = 60
@@ -97,7 +98,50 @@ choose_lang(){ # [code]
 
 show_last(){
   local f; f=$(ls -t "$LOGDIR"/macup_*.md 2>/dev/null | head -1)
-  if [ -n "$f" ]; then cat "$f"; else _ 'No reports yet. Run: macup check'; echo; fi
+  [ -n "$f" ] || { _ 'No reports yet. Run: macup check'; echo; return; }
+  # the command output can be thousands of lines of brew: it stays in the file
+  awk -v more="$(_f 'The command output is at the end of %s' "$(tildify "$f")")" '{ a[NR] = $0 }
+    END { n = NR; for (i = 1; i <= NR; i++) if (a[i] ~ /^## / && a[i+2] == "~~~~") { n = i - 1; cut = 1; break }
+      for (i = 1; i <= n; i++) print a[i]; if (cut) printf "%s\n", more }' "$f"
+}
+
+# macup's reports: one file per run in $LOGDIR (macup_<date>.md; .log files are left by versions before 2.9.0)
+report_mode(){ sed -n '3s/^[^:]*: \([a-z+]*\) · macup .*/\1/p' "$1" 2>/dev/null; }
+report_date(){ local b=${1##*/macup_}; b=${b%.*}; printf '%s %s:%s' "${b%%_*}" "$(echo "${b#*_}" | cut -d- -f1)" "$(echo "${b#*_}" | cut -d- -f2)"; }
+reports(){ # [clean|open]
+  local mds n kb f m ans first=1
+  mds=$(ls "$LOGDIR"/macup_*.md 2>/dev/null); n=$(cnt "$mds")
+  kb=$(find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -exec du -k {} + 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  case "$1" in
+    "") ;;
+    open)  mkdir -p "$LOGDIR"; open "$LOGDIR"; return 0 ;;
+    clean) [ "$kb" -gt 0 ] || { _ 'Nothing to remove.'; echo; return 0; }
+           _f 'Reports to remove: %s (%s) in %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+           if [ "$YES" != 1 ]; then
+             ans=""; { : </dev/tty; } 2>/dev/null && ans=$(ask "$(_ 'Remove them? [y/N] ')")
+             case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return 0 ;; esac
+           fi
+           find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -delete 2>/dev/null
+           _ 'Removed.'; echo; return 0 ;;
+    *)     echo "macup reports [clean|open] [--yes] [--json]"; return 2 ;;
+  esac
+  if [ "$JSON" = 1 ]; then
+    printf '{"schema":1,"folder":"%s","count":%s,"kb":%s,"reports":[' "$(jstr "$LOGDIR")" "$n" "$kb"
+    [ -n "$mds" ] && while IFS= read -r f; do
+      [ $first = 1 ] || printf ','; first=0
+      m=$(report_mode "$f"); [ -n "$m" ] && m="\"$m\""
+      printf '{"file":"%s","date":"%s","mode":%s,"kb":%s}' "$(jstr "$f")" "$(report_date "$f")" "${m:-null}" \
+        "$(du -k "$f" "${f%.md}.log" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+    done <<EOF
+$mds
+EOF
+    printf ']}\n'; return 0
+  fi
+  [ "$n" -gt 0 ] || { _ 'No reports yet. Run: macup check'; echo; return 0; }
+  _f 'Reports: %s · %s · %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+  _f 'Oldest: %s · newest: %s' "$(report_date "$(echo "$mds" | head -1)")" "$(report_date "$(echo "$mds" | tail -1)")"; echo
+  _f 'Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s)' "$(num "$(conf keep_reports_days 30)" 30)" "$(num "$(conf keep_reports 20)" 20)" "$(tildify "$CONF")"; echo
+  _ 'Remove them all: macup reports clean · open the folder: macup reports open'; echo
 }
 
 show_history(){

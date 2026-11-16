@@ -25,8 +25,8 @@ PY
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
-    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see log)'; fi
-    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see the report)'; fi
+    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see the report)
     printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
   fi
   P2=$(plugins)
@@ -70,7 +70,7 @@ for k, v in d.items():
       [ -z "$p" ] && continue
       if UPD; then
         step 'npm %s' "$p"
-        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see log)' "$p"; fi
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see the report)' "$p"; fi
       else sub "$p: $c → $l"; fi
     done <<EOF
 $NO
@@ -98,7 +98,7 @@ for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash
 $S2
 EOF
       ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
-    else err 'Agent skills: update failed (see log)'; fi
+    else err 'Agent skills: update failed (see the report)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
     LATER_SKILLS="$(_ 'Agent skills')"
@@ -117,7 +117,7 @@ if task update.brew && have brew; then
       SUDO_PRE=0; sudo -n true 2>/dev/null && SUDO_PRE=1
       run brew upgrade; BRC=$?
       [ "$SUDO_PRE" = 0 ] && sudo -k 2>/dev/null
-      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
+      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see the report)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -210,7 +210,7 @@ LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
   task "$id" || return 0
-  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see log)' "$label"; fi
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see the report)' "$label"; fi
   else LATER="$LATER${LATER:+, }$label"; fi
 }
 have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
@@ -250,7 +250,7 @@ if task update.grok && have grok; then
   if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
   elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
     if UPD; then
-      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see log)' 'Grok CLI'; fi
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see the report)' 'Grok CLI'; fi
       upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
     elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
     else ok '%s %s' 'Grok CLI' "$v1"; fi
@@ -261,7 +261,7 @@ fi
 if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
   if UPD; then
     v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
-    run agy update || err '%s: update failed (see log)' 'Antigravity CLI'
+    run agy update || err '%s: update failed (see the report)' 'Antigravity CLI'
     upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
   else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
 fi

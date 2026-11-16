@@ -2207,8 +2207,9 @@ PY
 $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
+  # (no `case` inside $( ): bash 3.2 takes its ")" for the end of the substitution)
   # folders of yours in PATH that do not exist: a line in ~/.zshrc for a tool that was removed (macOS itself lists system folders that may not exist)
-  GONEP=$(printf '%s' "$USER_PATH" | tr ':' '\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do case "$d" in "$HOME"/*) [ -d "$d" ] || tildify "$d" ;; esac; done | paste -sd, - | sed 's/,/, /g')
+  GONEP=$(printf '%s' "$USER_PATH" | tr ':' '\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do [[ "$d" == "$HOME"/* ]] && [ ! -d "$d" ] && tildify "$d"; done | paste -sd, - | sed 's/,/, /g')
   [ -n "$GONEP" ] && info 'PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go' "$GONEP"
 fi
 if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then

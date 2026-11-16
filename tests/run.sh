@@ -505,16 +505,16 @@ r=$(ls "$H"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 # --- since the last run: swap that grew is not "something is filling the disk"
 H="$W/swp"; SW="$W/swpbin"; mkdir -p "$SW" "$H/.config/macup" "$H/Library/Application Support/macup"; printf 'language = en\n' >"$H/.config/macup/config"
 printf '#!/bin/bash\ncase "$*" in *vm.swapusage*) echo "total = 12288.00M  used = ${FAKE_SWAP_MB}.00M  free = 100.00M  (encrypted)" ;; *) exec /usr/sbin/sysctl "$@" ;; esac\n' >"$SW/sysctl"; chmod +x "$SW/sysctl"
-swp(){ # free KB more last time, swap MB last time, swap MB now
+swp(){ # free KB more last time, swap MB last time, swap MB now (the disk itself may change meanwhile: the patterns allow a few GB)
   local fr; fr=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}')
   echo "2026-11-01 10:00,check,$((fr + $1)),500000000,50,$2,,,0,0,0" >"$H/Library/Application Support/macup/history.csv"
   FAKE_SWAP_MB=$3 env HOME="$H" PATH="$SW:$PATH" /bin/bash "$M" check --only check.trends,check.memory --no-color </dev/null 2>&1 | grep 'Free space' | head -1; }
 o=$(swp 26214400 0 10240)   # 26.8 GB less, 10.7 GB of it swap: 16 GB is under the 21 GB that warns
-echo "$o" | grep -q '· Free space: -2[67]\.[0-9] GB since 2026-11-01 10:00 (10.7 GB of it is swap, freed on restart)$' && pass "free space: swap is subtracted before warning" || fail "free space with swap: $o"
+echo "$o" | grep -q '· Free space: -2[4-9]\.[0-9] GB since 2026-11-01 10:00 (10.7 GB of it is swap, freed on restart)$' && pass "free space: swap is subtracted before warning" || fail "free space with swap: $o"
 o=$(swp 31457280 0 2048)
-echo "$o" | grep -q '! Free space: -3[23]\.[0-9] GB .*(2.1 GB of it is swap, freed on restart) — something is filling the disk' && pass "free space: still a warning when the rest crosses the line" || fail "free space, swap too small: $o"
+echo "$o" | grep -q '! Free space: -3[0-5]\.[0-9] GB .*(2.1 GB of it is swap, freed on restart) — something is filling the disk' && pass "free space: still a warning when the rest crosses the line" || fail "free space, swap too small: $o"
 o=$(swp 31457280 7000 7000)
-echo "$o" | grep -q '! Free space: -3[23]\.[0-9] GB since 2026-11-01 10:00 — something is filling' && pass "free space: unchanged swap, the warning as before" || fail "free space without swap: $o"
+echo "$o" | grep -q '! Free space: -3[0-5]\.[0-9] GB since 2026-11-01 10:00 — something is filling' && pass "free space: unchanged swap, the warning as before" || fail "free space without swap: $o"
 
 # --- --json carries everything the terminal shows, with a key for each thing that can be cleaned; --pick cleans exactly those
 H="$W/js"; tests/fixture.sh "$H"; (cd "$H" && find . -type f | sort) >"$H.b"

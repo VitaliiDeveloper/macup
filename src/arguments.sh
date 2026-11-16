@@ -13,6 +13,10 @@ while [ $# -gt 0 ]; do case "$1" in
   --skip=*)             CLI_SKIP="$CLI_SKIP,${1#*=}" ;;
   --only)               CLI_ONLY="$CLI_ONLY,$2"; shift ;;
   --only=*)             CLI_ONLY="$CLI_ONLY,${1#*=}" ;;
+  --enable)             CLI_ENABLE="$CLI_ENABLE,$2"; shift ;;
+  --enable=*)           CLI_ENABLE="$CLI_ENABLE,${1#*=}" ;;
+  --pick)               PICK="$PICK,$2"; shift ;;
+  --pick=*)             PICK="$PICK,${1#*=}" ;;
   --level)              LEVEL=$(level_num "$2"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; }; shift ;;
   --level=*)            LEVEL=$(level_num "${1#*=}"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; } ;;
   --lang)               set_lang "$2"; shift ;;
@@ -36,13 +40,21 @@ while [ $# -gt 0 ]; do case "$1" in
   *) _f 'Unknown command: %s' "$1"; echo; _ 'Type  macup  for the menu or  macup help  for all commands.'; echo; exit 1 ;;
 esac; shift; done
 
+# under sudo the config, the reports and the history would become root's, and the next plain run could not write them
+case "$CMD" in help|version|uninstall) ;; *)
+  if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then _ 'macup does not need sudo: run it as yourself.'; echo; exit 1; fi ;;
+esac
+# --pick: clean exactly the items a check listed (their "key" in --json), nothing else
+# and runs no check either, unless --only names some
+if [ -n "$PICK" ]; then PICK=",$(echo "$PICK" | tr -d ' '),"; DRY=0; DO_UPDATE=0; DO_CLEAN=1; ACTION=clean; [ -n "$CLI_ONLY" ] || CLI_ONLY='clean.*'; fi
+
 # one-off commands run after all options are read, so `macup help --lang uk` works
 case "$CMD" in
   lang)        choose_lang "$LANG_ARG"; exit $? ;;
   last)        show_last; exit 0 ;;
-  history)     show_history; exit 0 ;;
+  history)     if [ "$JSON" = 1 ]; then history_json; else show_history; fi; exit 0 ;;
   reports)     mkdir -p "$LOGDIR"; open "$LOGDIR"; exit 0 ;;
-  tasks)       list_tasks; exit 0 ;;
+  tasks)       if [ "$JSON" = 1 ]; then tasks_json; else list_tasks; fi; exit 0 ;;
   config)      open_conf; exit 0 ;;
   self_update) self_update; exit 0 ;;
   uninstall)   uninstall; exit 0 ;;
@@ -67,7 +79,7 @@ unknown_tasks(){ # comma list → the ids that are neither a task nor a group
     [ -n "$(task_default "$id")" ] || printf '%s\n' "$id"
   done | paste -sd, - | sed 's/,/, /g'
 }
-BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP")
+BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP,$CLI_ENABLE")
 [ -n "$BADIDS" ] && { _f 'Unknown task: %s (see every id with: macup tasks)' "$BADIDS"; echo; exit 2; }
 BADCONF=$(unknown_tasks "$(conf skip "" | tr -d ' '),$(conf enable "" | tr -d ' ')")
 mkdir -p "$LOGDIR" "$STATE_DIR"
@@ -82,12 +94,25 @@ if ! mkdir "$RUNLOCK" 2>/dev/null; then
 fi
 echo $$ >"$RUNLOCK/pid" && HAVE_LOCK=1
 unlock(){ [ "$HAVE_LOCK" = 1 ] && rm -rf "$RUNLOCK"; HAVE_LOCK=0; }
+# macup tidies up after itself on every run, a check too: its reports are its own files, not the Mac's.
+# Reports older than keep_reports_days go, and never more than 60 runs stay; the history keeps its last 500 lines,
+# the schedule's log its last 200; temp files a killed run left behind go after a day.
+tidy_own(){
+  local f
+  case "$SKIP" in *",clean.reports,"*) return 0 ;; esac   # only an explicit skip: --only check.disk still tidies up
+  find "$LOGDIR" -maxdepth 1 -type f -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null
+  ls -t "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +61 | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
+  trim(){ [ -f "$1" ] && [ "$(wc -l <"$1")" -gt $(($2 * 2)) ] && tail -n "$2" "$1" >"$1.tmp" && cat "$1.tmp" >"$1"; rm -f "$1.tmp"; }
+  trim "$HISTORY" 500; trim "$LOGDIR/schedule.log" 200
+  find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) -mtime +1 -delete 2>/dev/null
+}
+tidy_own
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to"; }
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det"; }
 trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.

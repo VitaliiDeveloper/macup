@@ -6,16 +6,30 @@
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
+C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
+# Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
+ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
+artifact_ok(){ # path → true when it is a build folder with its build file next to it
+  local d=${1%/*}
+  case "${1##*/}" in
+    node_modules) ;;
+    Pods)       [ -e "$d/Podfile" ] ;;
+    .build)     [ -e "$d/Package.swift" ] ;;
+    .dart_tool) [ -e "$d/pubspec.yaml" ] ;;
+    .next)      [ -e "$d/package.json" ] ;;
+    target)     [ -e "$d/Cargo.toml" ] || [ -e "$d/pom.xml" ] ;;
+    build)      [ -e "$d/build.gradle" ] || [ -e "$d/build.gradle.kts" ] ;;
+    *) return 1 ;;
+  esac
+}
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
   case "$1" in
     "$HOME"/Library/*|"$HOME"/.*) ;;
-    */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
-    *) return 1 ;;
+    *) in_projects "$1" && artifact_ok "$1" || return 1 ;;   # clean.stale_*: a build folder inside project_dirs, nothing else there
   esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*/deno/location_data|*/deno/location_data/*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
-    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
+    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/.aws|*/.aws/*|*/.kube|*/.kube/*|*/.netrc|*/.config|*/.config/*|*/.claude|*/.claude/*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
   case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
   return 0
@@ -45,6 +59,8 @@ cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — ki
   task_allowed "$1" || return 0
   C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
+  # the same item gets the same key on the next run: CL_KEY names the ones whose paths change from day to day (old logs)
+  C_KEY[C_N]="$1:$(printf '%s' "${CL_KEY:-$5|$6}" | cksum | cut -d' ' -f1)"
   [ "$5" = cmd ] || cover "$6"
   C_N=$((C_N + 1))
 }
@@ -56,6 +72,17 @@ cand_more(){ # label level kb paths open-dirs — adds to the candidate with thi
 }
 # Xcode itself, or an xcodebuild started from a terminal or a CI agent: both write to DerivedData while they run
 XCODE_BUSY='/Xcode.app/Contents/MacOS/Xcode|(^|/)xcodebuild( |$)'
+busy_pat(){ # a name from the tables → the pgrep -f pattern of what uses that cache while it runs
+  case "$1" in
+    xcode)  echo "$XCODE_BUSY" ;;
+    cargo)  echo '(^|/)(cargo|rustc)( |$)' ;;
+    poetry) echo '(^|/)poetry( |$)' ;;
+    maven)  echo 'plexus\.classworlds|(^|/)mvnd?( |$)' ;;
+    deno)   echo '(^|/)deno( |$)' ;;
+    npx)    echo '/\.npm/_npx/' ;;   # MCP servers and CLIs started with npx run from there
+    *)      echo "$1" ;;
+  esac
+}
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
@@ -68,7 +95,7 @@ EOF2
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
-  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc=$XCODE_BUSY
+  local p=$3 s proc; proc=$(busy_pat "$4")
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
   cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
@@ -79,7 +106,7 @@ clean_old(){ # id label dir days [type] — entries older than N days
   old=$(find "$p" -mindepth 1 -maxdepth 1 -type "$type" -mtime +"$days" 2>/dev/null)
   [ -z "$old" ] && return 0
   s=$(kbl "$old"); [ "$s" -lt 1024 ] && return 0
-  cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
+  CL_KEY="old|$p" cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
 }
 measure_cmd(){ # id label dir key — a tool's own clean command; the dir is measured before and after
   [ -e "$3" ] || return 0
@@ -100,12 +127,18 @@ run_key(){ local out r=0
     pip)       run pip3 cache purge ;;
     uv)        run uv cache prune ;;
     go)        run go clean -cache ;;
+    gomod)     run go clean -modcache ;;
+    brewauto)  run brew autoremove ;;
+    dockerct)  out=$(docker container prune -f 2>&1) || r=1; echo "$out" >>"$RAW"
+               KEY_FREED=$(tokb10 "$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | tail -1)"); return $r ;;
+    dockerimg) out=$(docker image prune -a -f 2>&1) || r=1; echo "$out" >>"$RAW"
+               KEY_FREED=$(tokb10 "$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | tail -1)"); return $r ;;
     quicklook) run qlmanage -r cache ;;
     simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     docker)    out=$({ docker builder prune -f; docker image prune -f; } 2>&1); echo "$out" >>"$RAW"
-               KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
+               KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
   esac
 }
 sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1" >>"$RAW"; return 1 ;; esac; }
@@ -149,7 +182,7 @@ EOF2
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; }; }   # small pick-only commands too
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag
   for ((i = 0; i < C_N; i++)); do

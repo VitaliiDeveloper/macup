@@ -120,9 +120,40 @@ PY
 $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
+  # folders of yours in PATH that do not exist: a line in ~/.zshrc for a tool that was removed (macOS itself lists system folders that may not exist)
+  GONEP=$(printf '%s' "$USER_PATH" | tr ':' '\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do case "$d" in "$HOME"/*) [ -d "$d" ] || tildify "$d" ;; esac; done | paste -sd, - | sed 's/,/, /g')
+  [ -n "$GONEP" ] && info 'PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go' "$GONEP"
 fi
 if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
-  DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
-  info 'Docker: %s' "${DDF%; }"
+  # the Reclaimable column has a space inside ("1.2GB (50%)"), so the columns are asked for by name
+  DDF=$(docker system df --format '{{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' 2>/dev/null | paste -sd';' - | sed 's/;/; /g')
+  info 'Docker: %s' "$DDF"
+  DV=$(docker volume ls -qf dangling=true 2>/dev/null | grep -c .)
+  [ "${DV:-0}" -gt 0 ] && info 'Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true' "$DV"
+fi
+# a token GitHub no longer accepts fails later, in the middle of a push or a release
+if task check.gh && have gh && [ -s "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml" ]; then
+  GHS=$(tl 20 gh auth status 2>&1 </dev/null)
+  printf '%s\n' "$GHS" | grep -qiE 'token .* is (invalid|no longer valid)|authentication failed' && warn 'GitHub CLI: the saved login no longer works — run: gh auth login'
+fi
+# signing certificates: Xcode says nothing until the build fails on the day one expires
+if task check.certs && have security && have openssl && have python3; then
+  CE=$(security find-certificate -a -p 2>/dev/null | python3 -c '
+import re, subprocess, sys
+soon, seen = 30 * 86400, set()
+for pem in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", sys.stdin.read(), re.S):
+    def x(*a): return subprocess.run(["openssl", "x509", "-noout", *a], input=pem, capture_output=True, text=True)
+    m = re.search(r"CN\s*=\s*([^,/\n]+)", x("-subject").stdout)
+    name = m.group(1).strip() if m else ""
+    if not re.match(r"(Apple Development|Apple Distribution|Developer ID|iPhone Developer|iPhone Distribution|Mac Developer|3rd Party Mac Developer)", name) or name in seen: continue
+    if x("-checkend", "0").returncode != 0: continue   # already expired: it signs nothing, Keychain Access shows it
+    if x("-checkend", str(soon)).returncode != 0: seen.add(name); print(name)' 2>/dev/null)
+  [ -n "$CE" ] && { warn 'Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts' "$(cnt "$CE")"; lines "$CE"; }
+fi
+# an app that keeps crashing: the reports are in ~/Library/Logs/DiagnosticReports
+if task check.crashes && [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
+  CR=$(find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \( -name '*.ips' -o -name '*.crash' \) -mtime -7 2>/dev/null | sed 's|.*/||; s/[-_][0-9]\{4\}-[0-9][0-9]-[0-9][0-9].*//' \
+    | sort | uniq -c | sort -rn | awk '$1 >= 3 {n=$1; $1=""; sub(/^ /,""); printf "%s ×%d\n", $0, n}' | head -5 | paste -sd, - | sed 's/,/, /g')
+  [ -n "$CR" ] && info 'Crashed 3 or more times in the last 7 days: %s' "$CR"
 fi
 

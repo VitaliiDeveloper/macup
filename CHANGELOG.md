@@ -1,12 +1,34 @@
 # Changelog
 
-## Unreleased
+## 2.9.0 — 2026-11-16
+
+Fixes:
 
 - **Deno's cleanup keeps `location_data`.** `clean.deno` emptied the whole of `~/Library/Caches/deno`, and Deno keeps `localStorage` and the default `Deno.openKv()` databases there, in `location_data`. That folder now stays; the caches next to it are cleaned as before.
-- **A mistyped task id is said.** `macup check --only chek.disk` ran no task and reported that nothing needs attention. An unknown id in `--only` or `--skip` now stops the run with exit status 2; one in the config's `skip` or `enable` is a warning.
-- **macup does not start without `HOME`.** With an empty `HOME` its paths pointed at the system's `/Library`.
+- **A mistyped task id is said.** `macup check --only chek.disk` ran no task and reported that nothing needs attention. An unknown id in `--only`, `--skip` or `--enable` now stops the run with exit status 2; one in the config's `skip` or `enable` is a warning.
+- **`sudo macup` refuses to run.** Its reports, history and config became root's, and the next plain run could not write them. macup also does not start without `HOME`: its paths pointed at the system's `/Library`.
+- **A command that hangs is stopped together with what it started.** Only the command itself was stopped; brew's downloads went on.
+- **Caches are left alone while their tool runs:** Cargo's while `cargo` or `rustc` runs, Maven's while `mvn` runs, Poetry's and Deno's the same.
+- **sudo forgets a password that a cask's installer asked for** during `brew upgrade`, as it already did after the App Store updates.
 - **`macup self-update` exits with 1 when it cannot write the new file.** It exited with 0.
 - **Picking after a check:** `08` is read as 8, and a range like `1-9999` no longer loops for minutes.
+
+macup's own files:
+
+- **Old reports go on every run.** They were removed only by `clean` and `all`, so a Mac that only ran `macup check` (the schedule does) kept every report for ever. Reports are kept for `keep_reports_days`, now 30 by default (a value in your config stays), and never for more than the last 60 runs.
+- **No empty logs.** A run that started no command leaves no `.log` next to its report.
+- **The history keeps its last 500 runs, the schedule's log its last 200 lines,** and temp files that a killed run left behind are removed after a day.
+
+New:
+
+- **Cleaners:** expired provisioning profiles, npm and Gradle daemon logs older than 30 days (safe); the npx cache (skipped while anything started with `npx` runs, MCP servers included), the Go module cache, Cargo's git downloads, old Cypress versions, older Node versions in fnm and Volta (standard).
+- **Stale build folders** (`clean.stale_artifacts`, opt-in): `Pods`, `.build`, `.dart_tool`, `.next`, Rust and Maven `target`, Gradle `build` in projects untouched for `stale_project_days`. Only next to the file that builds them again, never when git tracks files in them, never when they were built recently.
+- **Docker:** images no container uses and stopped containers can be picked after a check (or enabled: `clean.docker_images`, `clean.docker_containers`). Volumes are never deleted; a check says how many no container uses.
+- **Homebrew packages nothing needs any more** (`brew autoremove`) can be picked after a check.
+- **Measured, never deleted:** virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware), core dumps in `/cores`.
+- **Updates:** Windsurf and VSCodium extensions, Google Cloud SDK components (its own install), .NET global tools (.NET 9 or later), Composer global packages.
+- **Checks:** signing certificates that expire within 30 days, a GitHub CLI login that no longer works, apps that crashed 3 or more times in a week, Remote Login and Screen Sharing that are on, folders of yours in `PATH` that do not exist.
+- **For other programs (a GUI):** `--json` now carries every line of the run (`items`) and every item that can be cleaned (`cleanable`, each with a stable `key`); `macup clean --pick key,…` cleans exactly those. `macup tasks --json` and `macup history --json` print the lists. `--enable id,…` turns an opt-in task on for one run. See "For scripts and other programs" in the README.
 
 ## 2.8.0 — 2026-11-15
 

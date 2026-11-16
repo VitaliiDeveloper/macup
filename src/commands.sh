@@ -12,6 +12,28 @@ EOF
   printf '\n'; _f 'Turn tasks off or on in %s (skip = … / enable = …)' "$(tildify "$CONF")"; printf '\n'
 }
 
+# --json: the same lists for a program (a GUI); see "For scripts and other programs" in the README
+tasks_json(){
+  local id def desc on first=1
+  load_conf; printf '{"schema":1,"config":"%s","tasks":[' "$(jstr "$CONF")"
+  while IFS='|' read -r id def desc; do
+    if task "$id"; then on=true; else on=false; fi
+    [ $first = 1 ] || printf ','; first=0
+    printf '{"id":"%s","group":"%s","default":"%s","on":%s,"text":"%s"}' "$id" "${id%%.*}" "$def" "$on" "$(jstr "$(_ "$desc")")"
+  done <<EOF
+$TASKS
+EOF
+  printf ']}\n'
+}
+history_json(){
+  [ -s "$HISTORY" ] || { echo '{"schema":1,"runs":[]}'; return; }
+  awk -F, 'function n(v){ return v == "" ? "null" : v + 0 }
+    BEGIN{ printf "{\"schema\":1,\"runs\":[" }
+    { printf "%s{\"date\":\"%s\",\"mode\":\"%s\",\"free_kb\":%s,\"total_kb\":%s,\"memory_free_pct\":%s,\"swap_mb\":%s,\"battery_cycles\":%s,\"battery_max_pct\":%s,\"updated\":%s,\"freed_kb\":%s,\"warnings\":%s}", \
+        (NR > 1 ? "," : ""), $1, $2, n($3), n($4), n($5), n($6), n($7), n($8), n($9), n($10), n($11) }
+    END{ print "]}" }' "$HISTORY"
+}
+
 write_default_conf(){
   mkdir -p "$CONF_DIR"
   # the heredoc expands \$MSG_LANG, so a backtick in it must be escaped: unescaped, bash runs what is between them
@@ -46,8 +68,8 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
-# Keep macup reports for this many days
-keep_reports_days = 60
+# Keep macup reports for this many days (never more than the last 60 runs)
+keep_reports_days = 30
 
 # Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
 step_timeout_minutes = 60

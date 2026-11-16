@@ -75,3 +75,12 @@ mkdir -p "$H/Code/partial" "$H/Code/volta"; echo "21.2" >"$H/Code/partial/.nvmrc
 printf '{"dependencies":{"left-pad":"23.4.0"},"volta":{"node":"23.1.0"}}\n' >"$H/Code/volta/package.json"
 # --deep: target counts only next to Cargo.toml or pom.xml
 blob "$H/Code/rs/target/debug"; echo '[package]' >"$H/Code/rs/Cargo.toml"; blob "$H/Code/plain/target/data" 64
+# --- 2.9 cleaners: Cargo git, old Cypress versions, expired provisioning profiles, npm and Gradle daemon logs, npx
+blob "$H/.cargo/git/checkouts/repo-1/abc"; blob "$H/.cargo/git/db/repo-1"
+blob "$L/Caches/Cypress/13.1.0/Cypress"; blob "$L/Caches/Cypress/13.6.2/Cypress" 64
+PP="$L/MobileDevice/Provisioning Profiles"; mkdir -p "$PP"
+prof(){ printf 'sig<?xml version="1.0"?><plist version="1.0"><dict><key>ExpirationDate</key><date>%s</date></dict></plist>sig' "$2" >"$PP/$1"; }
+prof expired.mobileprovision 2020-01-01T00:00:00Z; prof valid.mobileprovision 2099-01-01T00:00:00Z; echo broken >"$PP/unreadable.mobileprovision"
+mkdir -p "$H/.npm/_logs" "$H/.gradle/daemon/8.9"; echo old >"$H/.npm/_logs/old-debug-0.log"; old "$H/.npm/_logs/old-debug-0.log"; echo new >"$H/.npm/_logs/new-debug-0.log"
+echo old >"$H/.gradle/daemon/8.9/daemon-1.out.log"; old "$H/.gradle/daemon/8.9/daemon-1.out.log"; echo keep >"$H/.gradle/daemon/8.9/registry.bin"; old "$H/.gradle/daemon/8.9/registry.bin"
+blob "$H/.npm/_npx/abc/node_modules/x"

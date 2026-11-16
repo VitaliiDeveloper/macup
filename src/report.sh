@@ -18,6 +18,11 @@ if task check.sizes; then
   [ "$s" -ge 102400 ] && info 'iPhone and iPad backups: %s (Finder → your device → Manage Backups)' "$(hum "$s")"
   s=$(kbl "$(ls -d "$HOME/Library/Containers/com.docker.docker/Data/vms"/*/data/Docker.raw 2>/dev/null)")
   [ "$s" -ge 102400 ] && info 'Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)' "$(hum "$s")"
+  # virtual machines are whole disks: only their app knows which one is still needed
+  s=$(kbl "$HOME/.colima"$'\n'"$HOME/.lima"$'\n'"$HOME/.local/share/containers/podman/machine"$'\n'"$HOME/.minikube"$'\n'"$HOME/Parallels"$'\n'"$HOME/Virtual Machines.localized")
+  [ "$s" -ge 102400 ] && info 'Virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware): %s — delete the ones you no longer use in their own app' "$(hum "$s")"
+  # a crashed program can leave a copy of its memory in /cores, gigabytes each, and nothing ever removes them
+  s=$(kb /cores); [ "$s" -ge 102400 ] && warn 'Core dumps in /cores: %s — leftovers of crashed programs; remove them with: sudo rm /cores/core.*' "$(hum "$s")"
   if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then
     task clean.trash || info 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
   elif ! task clean.trash; then

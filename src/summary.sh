@@ -42,6 +42,8 @@ if task check.self_update; then
   ;; esac
 fi
 
+# a run that started no command leaves no empty log next to its report
+[ -s "$RAW" ] || { rm -f "$RAW"; RAW=""; }
 T=$SECONDS; TIME="$((T / 60))m $((T % 60))s"
 echo "$(date '+%Y-%m-%d %H:%M'),$MODE,$FREE_AFTER,$D_TOTAL,${MEMFREE:-},${SWAP:-0},${BCYC:-},${BMAX:-},${#UPDATED[@]},$FREED,${#WARN[@]}" >>"$HISTORY"
 
@@ -63,17 +65,26 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
   [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
-  echo
-  _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
+  [ -n "$RAW" ] && { echo; _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo; }
 } >"$SUM"
 cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
 
 [ "$QUIET" = 1 ] && exec >&3 3>&-
 if [ "$JSON" = 1 ]; then
-  printf '{"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
+  # schema grows by adding fields; a change that breaks a reader raises the number
+  json_items(){ local i; printf '['; for ((i = 0; i < IT_N; i++)); do [ $i = 0 ] || printf ','
+    printf '{"section":"%s","kind":"%s","text":"%s","details":%s}' "$(jstr "${IT_SEC[i]}")" "${IT_KIND[i]}" "$(jstr "${IT_MSG[i]}")" "$(jlines "$(awk -F'\t' -v i="$i" '$1 == i { sub(/^[^\t]*\t/, ""); print }' "$BODY.det" 2>/dev/null)")"; done; printf ']'; }
+  json_cands(){ local i first=1 lv inc opt; printf '['
+    [ "$DRY" = 1 ] && for ((i = 0; i < ${C_N:-0}; i++)); do
+      visible "$i" || continue; [ $first = 1 ] || printf ','; first=0
+      case "${C_LVL[i]}" in 1) lv=safe ;; 2) lv=standard ;; *) lv=aggressive ;; esac
+      opt=true; inc=false; [ "${C_AUTO[i]}" = 1 ] && { opt=false; [ "${C_LVL[i]}" -le "$LEVEL" ] && inc=true; }
+      printf '{"key":"%s","task":"%s","level":"%s","kb":%s,"opt_in":%s,"in_clean":%s,"text":"%s"}' "${C_KEY[i]}" "${C_TASK[i]}" "$lv" "${C_KB[i]:-0}" "$opt" "$inc" "$(jstr "${C_LBL[i]}")"
+    done; printf ']'; }
+  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
     "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
-  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s"}\n' \
-    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")"
+  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")" "$(json_items)" "$(json_cands)"
 else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then

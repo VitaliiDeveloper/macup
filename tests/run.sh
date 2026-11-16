@@ -5,7 +5,7 @@
 cd "$(dirname "$0")/.." || exit 1
 W=$(mktemp -d "${TMPDIR:-/tmp}/macup-tests.XXXXXX"); trap 'rm -rf "$W"' EXIT
 F=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; F=1; }
-M="$PWD/macup"; X='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.sim_unavailable,clean.quicklook,clean.docker,check.*'
+M="$PWD/macup"; X='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.go_mod,clean.sim_unavailable,clean.quicklook,clean.docker,clean.docker_images,clean.docker_containers,clean.brew_autoremove,check.*'
 
 # `running` asks pgrep which apps are open; a fake one answers from FAKE_RUNNING (command lines, one per line), so results never depend on this machine
 mkdir -p "$W/bin"; cat >"$W/bin/pgrep" <<'FAKE'
@@ -19,7 +19,8 @@ cat >"$W/bin/lsof" <<'FAKE'
 printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
 FAKE
 # launchctl and osascript only record what macup asked for: no test loads a LaunchAgent or shows a notification
-for c in launchctl osascript; do printf '#!/bin/bash\necho "$*" >>"$HOME/%s.log"\n' "$c" >"$W/bin/$c"; done
+# (print-disabled is a question, not a change: it answers from FAKE_SHARING and is not recorded)
+for c in launchctl osascript; do printf '#!/bin/bash\n[ "$1" = print-disabled ] && { printf "%%s\\n" "${FAKE_SHARING:-}"; exit 0; }\necho "$*" >>"$HOME/%s.log"\n' "$c" >"$W/bin/$c"; done
 chmod +x "$W/bin/pgrep" "$W/bin/lsof" "$W/bin/launchctl" "$W/bin/osascript"; export PATH="$W/bin:$PATH"
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local H=$1; shift; tests/fixture.sh "$H"; (cd "$H" && find . \( -type f -o -type l \) | sort) >"$H.b"
@@ -420,5 +421,135 @@ env HOME="$H" /bin/bash "$M" check --skip 'update.*,check.docker,clean.nope' --n
 env HOME="$H" /bin/bash "$M" check --only 'check.system,clean.*' --no-color </dev/null >"$W/ids.out" 2>&1; rc=$?
 [ $rc = 0 ] && grep -q 'Unknown task in ~/.config/macup/config: check.tyme_machine' "$W/ids.out" && ! grep -q 'clean.trash (' "$W/ids.out" && pass "unknown id in the config is a warning" || { fail "unknown id in the config (rc=$rc)"; cat "$W/ids.out"; }
 env HOME= /bin/bash "$M" version >/dev/null 2>&1; [ $? = 1 ] && pass "no HOME: macup does not start" || fail "empty HOME"
+
+# ============================ 2.9
+jq(){ python3 -c "import json,sys; d=json.load(open(sys.argv[1])); $2" "$1"; }   # file, python that reads d
+
+# --- macup tidies its own files on every run, a check too: old reports, too many reports, history, the schedule's log, temp files of killed runs
+H="$W/tidy"; LG="$H/Library/Logs/macup"; ST="$H/Library/Application Support/macup"; TT="$W/tidytmp"; mkdir -p "$LG" "$ST" "$TT" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+for i in $(seq 10 79); do : >"$LG/macup_2026-01-01_00-00-$i.md"; echo x >"$LG/macup_2026-01-01_00-00-$i.log"; done
+: >"$LG/macup_2024-01-01_00-00-00.md"; : >"$LG/macup_2024-01-01_00-00-00.log"; touch -t 202401010000 "$LG"/macup_2024-*
+seq 1 1500 | sed 's/^/2026-01-01 00:00,check,1,2,3,4,5,6,7,8,/' >"$ST/history.csv"; seq 1 900 >"$LG/schedule.log"
+: >"$TT/macup.AbCdEf"; : >"$TT/macup.AbCdEf.pid"; : >"$TT/macup-lang.GhIjKl"; touch -t 202401010000 "$TT"/macup*; : >"$TT/macup.FrEsH1"; : >"$TT/macup-notes.txt"; touch -t 202401010000 "$TT/macup-notes.txt"
+env HOME="$H" TMPDIR="$TT" /bin/bash "$M" check --only check.system --no-color </dev/null >"$W/tidy.out" 2>&1
+n=$(ls "$LG"/macup_*.md | wc -l | tr -d ' ')
+[ "$n" -le 61 ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.md" ] && [ ! -e "$LG/macup_2024-01-01_00-00-00.log" ] && pass "own reports: old ones go, never more than 60 runs stay ($n)" || fail "own reports ($n left)"
+[ "$(ls "$LG"/macup_*.log 2>/dev/null | wc -l | tr -d ' ')" -le 61 ] && pass "own reports: a removed report takes its log along" || fail "logs of removed reports stay"
+[ "$(wc -l <"$ST/history.csv" | tr -d ' ')" -le 501 ] && [ "$(wc -l <"$LG/schedule.log" | tr -d ' ')" = 200 ] && tail -1 "$LG/schedule.log" | grep -q '^900$' && pass "history and the schedule's log keep only their last lines" || fail "history or schedule.log not trimmed"
+[ ! -e "$TT/macup.AbCdEf" ] && [ ! -e "$TT/macup.AbCdEf.pid" ] && [ ! -e "$TT/macup-lang.GhIjKl" ] && [ -e "$TT/macup.FrEsH1" ] && [ -e "$TT/macup-notes.txt" ] \
+  && [ -z "$(find "$TT" -maxdepth 1 -name 'macup*' ! -name '*FrEsH1' ! -name '*notes*')" ] && pass "temp files of killed runs go after a day; nothing else in the temp folder is touched, none are left" || { fail "temp files"; ls -la "$TT"; }
+new=$(ls -t "$LG"/macup_*.md | head -1); [ ! -e "${new%.md}.log" ] && ! grep -q 'Command log' "$new" && pass "a run that started no command leaves no empty log" || fail "empty log left"
+
+# --- --json carries everything the terminal shows, with a key for each thing that can be cleaned; --pick cleans exactly those
+H="$W/js"; tests/fixture.sh "$H"; (cd "$H" && find . -type f | sort) >"$H.b"
+env HOME="$H" /bin/bash "$M" check --json --skip "$X" </dev/null >"$W/js.json" 2>/dev/null
+jq "$W/js.json" 'c=d["cleanable"]; assert d["schema"]==1 and len(c)>20 and all(k in c[0] for k in ("key","task","level","kb","opt_in","in_clean","text")); assert len({x["key"] for x in c})==len(c); t=[x for x in c if x["task"]=="clean.trash"][0]; assert t["opt_in"] and not t["in_clean"] and t["level"]=="aggressive"; s=[x for x in c if x["task"]=="clean.spm"][0]; assert s["in_clean"] and s["kb"]>5000' \
+  && pass "--json: cleanable items with unique keys, level and size" || { fail "--json cleanable"; head -c 600 "$W/js.json"; }
+mkdir -p "$H/Library/LaunchAgents"; : >"$H/Library/LaunchAgents/com.example.agent.plist"   # its name is a line under "Third-party background services"
+env HOME="$H" /bin/bash "$M" check --json --only check.sizes,check.system,check.startup </dev/null >"$W/js2.json" 2>/dev/null
+jq "$W/js2.json" 'i=d["items"]; assert i and all(x["kind"] in ("ok","info","warn","fail") and x["section"] and isinstance(x["details"],list) for x in i); assert any("Trash" in x["text"] for x in i); assert any(x["details"] for x in i)' \
+  && pass "--json: every line of the run with its section and kind" || { fail "--json items"; head -c 600 "$W/js2.json"; }
+k3=$(jq "$W/js.json" 'print([x["key"] for x in d["cleanable"] if x["task"]=="clean.derived_data"][0])')
+k1=$(jq "$W/js.json" 'print([x["key"] for x in d["cleanable"] if x["task"]=="clean.spm"][0])'); k2=$(jq "$W/js.json" 'print([x["key"] for x in d["cleanable"] if x["task"]=="clean.trash"][0])')
+env HOME="$H" /bin/bash "$M" check --json --skip "$X" </dev/null 2>/dev/null >"$W/js3.json"; [ "$(jq "$W/js3.json" 'print(sorted(x["key"] for x in d["cleanable"]))')" = "$(jq "$W/js.json" 'print(sorted(x["key"] for x in d["cleanable"]))')" ] \
+  && pass "--json: the keys are the same on the next run" || fail "--json keys change between runs"
+env HOME="$H" /bin/bash "$M" clean --pick "$k1,$k2" --json --skip "$X" </dev/null >"$W/js4.json" 2>/dev/null; rc=$?
+got=$( (cd "$H" && find . -type f | sort) | comm -23 "$H.b" - | grep -v 'macup/')
+[ $rc = 0 ] && [ "$got" = "$(printf '%s\n' ./.Trash/thing/blob ./Library/Caches/org.swift.swiftpm/repos/blob)" ] && jq "$W/js4.json" 'assert d["mode"]=="clean" and d["freed_kb"]>10000 and d["cleanable"]==[]' \
+  && pass "--pick cleans exactly the chosen items, an opt-in one too, and nothing else" || { fail "--pick (rc=$rc)"; echo "$got"; }
+env HOME="$H" /bin/bash "$M" clean --pick "$k3,clean.nope:1" --no-color --skip "$X" </dev/null >"$W/js.out" 2>&1; rc=$?
+[ $rc = 3 ] && grep -q 'no longer there: clean.nope:1 ' "$W/js.out" && [ ! -e "$H/Library/Developer/Xcode/DerivedData/App-abc" ] && pass "--pick: a key that is gone is said, exit status 3" || { fail "--pick with a stale key (rc=$rc)"; cat "$W/js.out"; }
+env HOME="$H" /bin/bash "$M" tasks --json >"$W/js5.json" 2>/dev/null; env HOME="$H" /bin/bash "$M" history --json >"$W/js6.json" 2>/dev/null
+jq "$W/js5.json" 't={x["id"]:x for x in d["tasks"]}; assert t["clean.trash"]["on"] is False and t["check.disk"]["on"] and t["clean.spm"]["group"]=="clean" and d["config"].endswith("/config")' \
+  && jq "$W/js6.json" 'r=d["runs"]; assert len(r)>=3 and r[-1]["mode"]=="clean" and isinstance(r[-1]["free_kb"],int) and r[-1]["battery_cycles"] is None' \
+  && pass "tasks --json and history --json" || { fail "tasks/history --json"; head -c 300 "$W/js5.json" "$W/js6.json"; }
+
+# --- --enable turns an opt-in task on for one run
+H="$W/en"; tests/fixture.sh "$H"
+env HOME="$H" /bin/bash "$M" clean --level aggressive --only clean.trash --no-color </dev/null >/dev/null 2>&1; [ -f "$H/.Trash/thing/blob" ] && pass "an opt-in task stays off without --enable" || fail "opt-in task ran without --enable"
+env HOME="$H" /bin/bash "$M" clean --level aggressive --only clean.trash --enable clean.trash --no-color </dev/null >/dev/null 2>&1; [ ! -e "$H/.Trash/thing" ] && pass "--enable turns it on for this run" || fail "--enable"
+
+# --- stale build folders (opt-in): only next to their build file, never tracked by git, never built recently
+H="$W/art"; tests/fixture.sh "$H"; C="$H/Code"
+blob(){ mkdir -p "$1"; dd if=/dev/zero of="$1/blob" bs=1024 count=6144 2>/dev/null; }; old(){ find "$@" -exec touch -t 202401010000 {} +; }
+blob "$C/oldrs/target/debug"; echo '[package]' >"$C/oldrs/Cargo.toml"; mkdir -p "$C/oldrs/src"; echo 'fn main(){}' >"$C/oldrs/src/main.rs"
+blob "$C/oldplain/target/data"; echo notes >"$C/oldplain/readme"                      # no Cargo.toml: someone's data
+blob "$C/oldpods/Pods/Lib"; echo "pod 'Lib'" >"$C/oldpods/Podfile"                      # committed Pods
+blob "$C/oldswift/.build/debug"; echo '// swift' >"$C/oldswift/Package.swift"
+blob "$C/built/target/debug"; echo '[package]' >"$C/built/Cargo.toml"                  # old sources, built yesterday
+blob "$C/oldvenv/.venv/lib"; echo x >"$C/oldvenv/requirements.txt"                     # a venv may hold packages no file lists
+blob "$C/.hidden/proj/target/debug"; echo '[package]' >"$C/.hidden/proj/Cargo.toml"
+if command -v git >/dev/null; then (cd "$C/oldpods" && git init -q . && git add -A && git -c user.name=t -c user.email=t@t commit -qm x) >/dev/null 2>&1; fi
+for d in oldrs oldplain oldpods oldswift oldvenv .hidden; do old "$C/$d"; done; old "$C/built/Cargo.toml"
+(cd "$H" && find . -type f | sort) >"$H.b"
+env HOME="$H" /bin/bash "$M" check --only clean.stale_artifacts --no-color </dev/null >"$W/art.out" 2>&1
+grep -q 'Stale build folders (2, .*(only if you pick it)' "$W/art.out" && [ -d "$C/oldrs/target" ] && pass "stale build folders: listed by a check, only when picked" || { fail "stale build folders: check"; cat "$W/art.out"; }
+env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_artifacts --enable clean.stale_artifacts --no-color </dev/null >"$W/art.out" 2>&1
+got=$( (cd "$H" && find . -type f | sort) | comm -23 "$H.b" - | grep -v 'macup/')
+[ "$got" = "$(printf '%s\n' ./Code/oldrs/target/debug/blob ./Code/oldswift/.build/debug/blob)" ] && pass "stale build folders: only the stale ones with a build file; git-tracked, recent, hidden and .venv stay" || { fail "stale build folders"; echo "$got"; cat "$W/art.out"; }
+
+# --- caches are left alone while the tool that uses them runs: cargo, and anything started with npx (MCP servers)
+H="$W/busy"; tests/fixture.sh "$H"
+FAKE_RUNNING='/Users/me/.cargo/bin/cargo build --release' env HOME="$H" /bin/bash "$M" clean --level standard --only clean.cargo --no-color </dev/null >"$W/busy.out" 2>&1
+[ -f "$H/.cargo/registry/src/index.crates.io/blob" ] && [ -f "$H/.cargo/git/db/repo-1/blob" ] && grep -q 'Cargo registry sources.*skipped' "$W/busy.out" && pass "Cargo's downloads are skipped while cargo runs" || { fail "cargo cleaned while it runs"; cat "$W/busy.out"; }
+FAKE_RUNNING="node $H/.npm/_npx/abc/node_modules/.bin/some-mcp-server" env HOME="$H" /bin/bash "$M" clean --level standard --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1
+[ -f "$H/.npm/_npx/abc/node_modules/x/blob" ] && grep -q 'npx cache.*skipped' "$W/busy.out" && pass "the npx cache is skipped while something started with npx runs" || { fail "npx cache cleaned under a running server"; cat "$W/busy.out"; }
+env HOME="$H" /bin/bash "$M" clean --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1; [ -d "$H/.npm/_npx/abc" ] && pass "the npx cache stays at the safe level" || fail "npx cache cleaned at safe"
+env HOME="$H" /bin/bash "$M" clean --level standard --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1
+[ ! -e "$H/.npm/_npx/abc" ] && pass "the npx cache is cleaned when nothing uses it" || { fail "npx cache"; cat "$W/busy.out"; }
+
+# --- Docker: the build cache at standard; images and stopped containers only when picked; volumes never. A fake docker records what is asked
+H="$W/dk"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+# an exported function, like mas above: a real docker in /usr/local/bin would win over a fake file
+docker(){ case "$*" in
+  info) ;;
+  "system df --format {{.Type}}|{{.Reclaimable}}") printf 'Images|2.5GB (50%%)\nContainers|12MB (100%%)\nLocal Volumes|3GB (100%%)\nBuild Cache|1.5GB\n' ;;
+  system\ df*) printf 'Images 5GB, 2.5GB (50%%) reclaimable\nBuild Cache 1.5GB, 1.5GB reclaimable\n' ;;
+  ps\ -aq*) printf 'aaa\nbbb\n' ;;
+  volume\ ls*) echo vol1 ;;
+  *) echo "$*" >>"$HOME/docker.log"; echo "Total reclaimed space: 1.5GB" ;;
+esac; }
+export -f docker
+DK='clean.docker,clean.docker_images,clean.docker_containers,check.docker'
+env HOME="$H" /bin/bash "$M" check --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1
+grep -q 'standard .*1.5 GB  Docker build cache' "$W/dk.out" && grep -q '2.5 GB  Docker images no container uses.*(only if you pick it)' "$W/dk.out" && grep -q 'aggressive .*Stopped Docker containers (2).*(only if you pick it)' "$W/dk.out" \
+  && grep -q 'Docker volumes no container uses: 1 — macup never deletes volumes' "$W/dk.out" && [ ! -e "$H/docker.log" ] && pass "Docker: a check lists the cache, the images, the stopped containers and unused volumes; nothing is removed" || { fail "Docker check"; cat "$W/dk.out" "$H/docker.log" 2>/dev/null; }
+env HOME="$H" /bin/bash "$M" clean --level aggressive --only "$DK" --no-color </dev/null >"$W/dk.out" 2>&1
+[ "$(cat "$H/docker.log")" = "$(printf 'builder prune -f\nimage prune -f')" ] && pass "Docker: clean takes the build cache and dangling images only, even at --level aggressive" || { fail "Docker clean"; cat "$H/docker.log"; }
+rm -f "$H/docker.log"; env HOME="$H" /bin/bash "$M" clean --level aggressive --only "$DK" --enable clean.docker_images,clean.docker_containers --no-color </dev/null >"$W/dk.out" 2>&1
+grep -qx 'image prune -a -f' "$H/docker.log" && grep -qx 'container prune -f' "$H/docker.log" && ! grep -q volume "$H/docker.log" && grep -q 'Docker images no container uses.*freed 1.5 GB' "$W/dk.out" \
+  && pass "Docker: images and stopped containers when enabled; volumes never" || { fail "Docker opt-in"; cat "$H/docker.log" "$W/dk.out"; }
+unset -f docker
+
+# --- a step that hangs is stopped together with what it started
+H="$W/tree"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\ncase "$1" in --version) echo 1.0 ;; update) sleep 300 & echo $! >"$HOME/child.pid"; wait ;; esac\n' >"$H/.local/bin/agy"; chmod +x "$H/.local/bin/agy"
+env HOME="$H" MACUP_STEP_SECS=2 /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/tree.out" 2>&1
+sleep 1; st=$(ps -o stat= -p "$(cat "$H/child.pid")" 2>/dev/null | tr -d ' ')   # gone, or a zombie where nothing reaps it (a container)
+case "$st" in ""|Z*) pass "a stopped step takes its child processes along" ;; *) fail "the child of a stopped step still runs ($st)"; kill "$(cat "$H/child.pid")" 2>/dev/null ;; esac
+
+# --- signing certificates close to their date; a fake `security` hands out two made here
+if command -v openssl >/dev/null; then
+  H="$W/crt"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+  mk(){ openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days "$2" -subj "/CN=$1/O=Test" 2>/dev/null; }
+  { mk 'Apple Development: Soon Gone (AAAA111111)' 10; mk 'Apple Distribution: Long Lived (BBBB222222)' 300; mk 'Some Web Server' 5; } >"$H/certs.pem"
+  printf '#!/bin/bash\ncat "$HOME/certs.pem"\n' >"$H/.local/bin/security"; chmod +x "$H/.local/bin/security"
+  env HOME="$H" /bin/bash "$M" check --only check.certs --no-color </dev/null >"$W/crt.out" 2>&1
+  grep -q 'Signing certificates that expire within 30 days: 1 ' "$W/crt.out" && grep -q 'Apple Development: Soon Gone' "$W/crt.out" && ! grep -qE 'Long Lived|Web Server' "$W/crt.out" \
+    && pass "signing certificates: only the one that expires soon is named" || { fail "signing certificates"; cat "$W/crt.out"; }
+fi
+
+# --- crashes, sharing, PATH: said in a check
+H="$W/misc"; DR="$H/Library/Logs/DiagnosticReports"; mkdir -p "$DR" "$H/.config/macup" "$H/.local/bin"; printf 'language = en\n' >"$H/.config/macup/config"
+for i in 1 2 3 4; do : >"$DR/Crashy App-2026-11-1$i-10000$i.ips"; done; : >"$DR/Once_2026-11-10-100000_Mac.crash"
+env HOME="$H" /bin/bash "$M" check --only check.crashes --no-color </dev/null >"$W/misc.out" 2>&1
+grep -q 'Crashed 3 or more times in the last 7 days: Crashy App ×4$' "$W/misc.out" && pass "crashes: the app that keeps crashing is named" || { fail "crashes"; cat "$W/misc.out"; }
+FAKE_SHARING='	"com.openssh.sshd" => enabled' env HOME="$H" /bin/bash "$M" check --only check.security --no-color </dev/null >"$W/misc.out" 2>&1
+grep -q 'Remote Login (SSH) is on' "$W/misc.out" && ! grep -q 'Screen Sharing' "$W/misc.out" && pass "sharing: Remote Login that is on is said" || { fail "sharing"; cat "$W/misc.out"; }
+env HOME="$H" PATH="$PATH:$H/no/such/dir:/macup/no/such/system/dir" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/misc.out" 2>&1
+grep -q 'PATH names folders that do not exist: ~/no/such/dir ' "$W/misc.out" && pass "PATH: a folder that does not exist is said" || { fail "PATH folders"; cat "$W/misc.out"; }
+if [ "$(id -u)" = 0 ]; then
+  env HOME="$H" SUDO_USER=me /bin/bash "$M" check --only check.system </dev/null >"$W/misc.out" 2>&1; [ $? = 1 ] && grep -q 'does not need sudo' "$W/misc.out" && pass "sudo macup refuses to run" || fail "sudo macup ran"
+fi
 
 echo; [ $F = 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

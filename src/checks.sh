@@ -77,6 +77,11 @@ if task check.security; then
   AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
   CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
   if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
+  # sharing services that let other computers in: said, not judged (a build machine needs them)
+  SH=$(launchctl print-disabled system 2>/dev/null)
+  shared(){ printf '%s\n' "$SH" | grep -qE "\"$1\" => (enabled|false)"; }
+  shared com.openssh.sshd && info 'Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)'
+  shared com.apple.screensharing && info 'Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing)'
   # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
   if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
   elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then

@@ -9,3 +9,6 @@
 ./.cargo/registry/src/index.crates.io/blob
 ./.nvm/versions/node/v21.2.0/blob
 ./Library/Caches/JetBrains/IntelliJIdea2025.1/index/blob
+./.cargo/git/checkouts/repo-1/abc/blob
+./.cargo/git/db/repo-1/blob
+./Library/Caches/Cypress/13.1.0/Cypress/blob

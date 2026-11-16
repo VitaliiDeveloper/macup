@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.8.0"
+MACUP_VERSION="2.9.0"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
@@ -25,6 +25,7 @@ LOGDIR="$HOME/Library/Logs/macup"
 DEV="$HOME/Library/Developer"
 SCHED_LABEL="com.vitaliideveloper.macup"
 SCHED_PLIST="$HOME/Library/LaunchAgents/$SCHED_LABEL.plist"
+USER_PATH=$PATH   # as the terminal has it: check.commands reports its folders that do not exist
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
@@ -46,6 +47,9 @@ check.xcode|on|Xcode, command line tools, simulator runtimes
 check.devtools|on|Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
 check.commands|on|Commands that cannot start: a missing interpreter (node, python) or a broken link
 check.docker|on|Docker disk usage (if Docker is running)
+check.gh|on|GitHub CLI: a saved login that no longer works
+check.certs|on|Code signing certificates that expire within 30 days
+check.crashes|on|Apps that crashed several times in the last 7 days
 check.sizes|on|Sizes of things macup never deletes: Archives, Trash, caches, pub-cache
 check.creative|on|Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only)
 check.trends|on|Compare with the previous run: free space, swap, battery capacity
@@ -66,7 +70,10 @@ update.deno|on|Deno (deno upgrade; a Homebrew install is left to Homebrew)
 update.cargo|on|Programs installed with cargo install (needs cargo-update)
 update.mise|on|Tools managed by mise
 update.asdf|on|asdf plugins
-update.editor_ext|on|VS Code and Cursor extensions
+update.editor_ext|on|VS Code, Cursor, Windsurf and VSCodium extensions
+update.gcloud|on|Google Cloud SDK components (its own install; a Homebrew install is left to Homebrew)
+update.dotnet|on|.NET global tools (needs .NET 9 or later)
+update.composer|on|Composer global packages
 update.gem|off|Ruby gems (opt-in; never the system Ruby)
 update.grok|on|Grok CLI (grok update)
 update.agy|on|Antigravity CLI (agy update)
@@ -91,24 +98,30 @@ clean.pip|on|pip cache
 clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
 clean.uv|on|uv cache: unused entries
 clean.go|on|Go build cache
+clean.go_mod|on|Go module cache (standard); go downloads the modules again
 clean.bun|on|Bun install cache
 clean.deno|on|Deno cache; localStorage and Deno KV data stay
-clean.logs|on|Your app logs and crash reports older than 30 days
+clean.logs|on|Logs and crash reports older than 30 days, also npm and Gradle daemon logs
 clean.quicklook|on|Quick Look thumbnail cache
-clean.reports|on|macup reports older than keep_reports_days
+clean.reports|on|Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too
 clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
 clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
 clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
-clean.cargo|on|Cargo registry downloads and sources (standard)
+clean.cargo|on|Cargo registry and git downloads (standard, skipped while cargo runs)
 clean.jetbrains|on|JetBrains IDE caches (standard, skipped while open)
-clean.docker|on|Docker build cache and dangling images (standard); never containers or volumes
-clean.old_versions|on|Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay
-clean.playwright|on|Old Playwright and Puppeteer browser builds (standard)
+clean.docker|on|Docker build cache and dangling images (standard); never volumes
+clean.docker_images|off|Docker images no container uses (only when you pick them)
+clean.docker_containers|off|Stopped Docker containers (only when you pick them)
+clean.old_versions|on|Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay
+clean.playwright|on|Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays
+clean.profiles|on|Expired provisioning profiles
 clean.ai_tools|on|Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched
 clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
 clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
+clean.stale_artifacts|off|Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in)
+clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
 clean.trash|off|Empty the Trash (opt-in)'
 
 # ---------------------------------------------------------------- config
@@ -123,15 +136,15 @@ conf_set(){ # key value — replace or append
     sed -i '' -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF" 2>/dev/null || sed -i -E "s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|" "$CONF"
   else printf '%s = %s\n' "$1" "$2" >>"$CONF"; fi
 }
-CLI_SKIP=""; CLI_ONLY=""; LEVEL=""
+CLI_SKIP=""; CLI_ONLY=""; CLI_ENABLE=""; PICK=""; LEVEL=""
 level_num(){ case "$1" in safe|1) echo 1 ;; standard|2) echo 2 ;; aggressive|3) echo 3 ;; esac; }
 num(){ case "$1" in ''|*[!0-9]*|0) echo "$2" ;; *) echo "$1" ;; esac; }   # positive integer or the default
 load_conf(){
   SKIP=",$(conf skip "" | tr -d ' '),$(echo "$CLI_SKIP" | tr -d ' '),"
-  ENABLE=",$(conf enable "" | tr -d ' '),"
+  ENABLE=",$(conf enable "" | tr -d ' '),$(echo "$CLI_ENABLE" | tr -d ' '),"
   CLI_ONLY=$(echo "$CLI_ONLY" | tr -d ' ')
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
-  KEEP_DAYS=$(num "$(conf keep_reports_days 60)" 60)
+  KEEP_DAYS=$(num "$(conf keep_reports_days 30)" 30)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
   SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
   STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
@@ -181,17 +194,22 @@ if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
 else B=; G=; Y=; R=; C=; D=; N=; CL=; fi
 
 WARN=(); SKIPPED=(); UPDATED=(); FREED=0; BODY=""; PENDING=""; ERRS=0; STEP_SECS=3600
+# --json: every line of the run, for a program that shows them its own way. kind: ok | info | warn | fail
+IT_N=0; IT_SEC=(); IT_KIND=(); IT_MSG=(); SEC=""
+item()    { [ "${JSON:-0}" = 1 ] || return 0; IT_SEC[IT_N]=$SEC; IT_KIND[IT_N]=$1; IT_MSG[IT_N]=$2; IT_N=$((IT_N + 1)); }
+# the lines under an item go to a file: many are printed from the far end of a pipe, where a variable would be lost
+detail()  { [ "${JSON:-0}" = 1 ] && [ "$IT_N" -gt 0 ] && [ -n "$BODY" ] && printf '%s\t%s\n' "$((IT_N - 1))" "$1" >>"$BODY.det"; return 0; }
 md()      { [ -n "$BODY" ] && printf '%s\n' "$*" >>"$BODY"; }
-section() { PENDING=$(_ "$1"); }   # printed lazily: sections with nothing to say stay hidden
+section() { PENDING=$(_ "$1"); SEC=$PENDING; }   # printed lazily: sections with nothing to say stay hidden
 flush()   { [ -z "$PENDING" ] && return; printf '%s\n%s▸ %s%s\n' "$CL" "$B$C" "$PENDING" "$N"; md ""; md "## $PENDING"; md ""; PENDING=""; }
 # ok/info/warn/fail take a format string (translated) and its arguments
-ok()      { local m; m=$(_f "$@"); flush; printf '%s  %s✓%s %s\n' "$CL" "$G" "$N" "$m"; md "- ✅ $m"; }
-info()    { local m; m=$(_f "$@"); flush; printf '%s  %s·%s %s\n' "$CL" "$D" "$N" "$m"; md "- $m"; }
-warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N" "$m"; md "- ⚠️ $m"; WARN+=("$m"); }
-fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); }
+ok()      { local m; m=$(_f "$@"); flush; printf '%s  %s✓%s %s\n' "$CL" "$G" "$N" "$m"; md "- ✅ $m"; item ok "$m"; }
+info()    { local m; m=$(_f "$@"); flush; printf '%s  %s·%s %s\n' "$CL" "$D" "$N" "$m"; md "- $m"; item info "$m"; }
+warn()    { local m; m=$(_f "$@"); flush; printf '%s  %s!%s %s\n' "$CL" "$Y" "$N" "$m"; md "- ⚠️ $m"; WARN+=("$m"); item warn "$m"; }
+fail()    { local m; m=$(_f "$@"); flush; printf '%s  %s✗%s %s\n' "$CL" "$R" "$N" "$m"; md "- ❌ $m"; WARN+=("$m"); item fail "$m"; }
 err()     { fail "$@"; ERRS=$((ERRS + 1)); }   # a step that did not do its job: the run ends with exit status 3
-sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; }
-mdonly()  { md "    - $*"; }
+sub()     { flush; printf '      %s%s%s\n' "$D" "$*" "$N"; md "    - $*"; detail "$*"; }
+mdonly()  { md "    - $*"; detail "$*"; }
 step()    { [ -t 1 ] && [ -n "$CL" ] && printf '%s  %s… %s%s' "$CL" "$D" "$(_f "$@")" "$N"; return 0; }
 done_upd(){ UPDATED+=("$(_f "$@")"); }
 tl()      { # seconds cmd… — the command, stopped after that long (macOS has no `timeout`); 124 when it was stopped
@@ -202,7 +220,9 @@ tl()      { # seconds cmd… — the command, stopped after that long (macOS has
             ( end=$((SECONDS + secs))
               while [ "$SECONDS" -lt "$end" ]; do kill -0 $$ 2>/dev/null || exit 0; sleep 2; done
               p=$(cat "$BODY.pid" 2>/dev/null); [ -n "$p" ] || exit 0
-              : >"$BODY.to"; kill -TERM "$p" 2>/dev/null; sleep 5; kill -KILL "$p" 2>/dev/null ) >/dev/null 2>&1 &
+              # with what it started: brew's curl and ruby would go on downloading after brew itself is stopped
+              all=$(ps -Ao pid=,ppid= 2>/dev/null | awk -v r="$p" '{par[$1]=$2} END{for(c in par){x=c; while(x in par && x!=r && x>1) x=par[x]; if(x==r) print c} print r}')
+              : >"$BODY.to"; kill -TERM $all 2>/dev/null; sleep 5; kill -KILL $all 2>/dev/null ) >/dev/null 2>&1 &
             wd=$!
             /bin/bash -c 'echo $$ >"$0"; exec "$@"' "$BODY.pid" "$@"; rc=$?
             kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
@@ -215,6 +235,10 @@ run()     { local rc; echo "\$ $*" >>"$RAW"; tl "${RUN_SECS:-$STEP_SECS}" "$@" >
             fi
             return $rc; }
 jstr()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\000-\037'; }   # a string for JSON and AppleScript
+jlines()  { local l first=1; printf '['; while IFS= read -r l; do [ -n "$l" ] || continue; [ $first = 1 ] || printf ','; first=0; printf '"%s"' "$(jstr "$l")"; done <<EOF
+$1
+EOF
+            printf ']'; }
 jarr()    { local x first=1; printf '['; for x in "$@"; do [ $first = 1 ] || printf ','; first=0; printf '"%s"' "$(jstr "$x")"; done; printf ']'; }
 TICK=""
 tick()    { # label cmd… — run; on a terminal the step line counts the time and shows the command's latest "==> " phase, so a long job does not look hung
@@ -248,7 +272,8 @@ cnt()     { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi
 lines()   { [ -n "$1" ] && printf '%s\n' "$1" | while IFS= read -r l; do [ -n "$l" ] && sub "$l"; done; }
 kb()      { if [ -e "$1" ]; then du -sk "$1" 2>/dev/null | awk '{s+=$1} END{print s+0}'; else echo 0; fi; }
 hum()     { awk -v k="${1:-0}" 'BEGIN{ s=""; if(k<0){s="-";k=-k} b=k*1024; if(b>=1e9) printf "%s%.1f GB",s,b/1e9; else if(b>=1e6) printf "%s%.0f MB",s,b/1e6; else printf "%s%d KB",s,b/1e3 }'; }   # decimal, like Finder
-tokb()    { echo "$1" | awk '{n=$1+0; u=$1; gsub(/[0-9.]/,"",u); m=(u=="TB")?1073741824:(u=="GB")?1048576:(u=="MB")?1024:(u=="KB")?1:0; printf "%d", n*m}'; }
+tokb()    { echo "$1" | awk '{n=$1+0; u=$1; gsub(/[0-9.]/,"",u); u=toupper(u); m=(u=="TB")?1073741824:(u=="GB")?1048576:(u=="MB")?1024:(u=="KB")?1:0; printf "%d", n*m}'; }
+tokb10()  { echo "$1" | awk '{n=$1+0; u=$1; gsub(/[0-9.]/,"",u); u=toupper(u); m=(u=="TB")?1e12:(u=="GB")?1e9:(u=="MB")?1e6:(u=="KB")?1e3:(u=="B")?1:0; printf "%d", n*m/1024}'; }   # Docker counts in decimal units
 nocolor() { sed $'s/\x1b\\[[0-9;?]*[A-Za-z]//g'; }
 tildify() { echo "$1" | sed "s|^$HOME|~|"; }
 expand()  { echo "$1" | sed "s|^~|$HOME|"; }
@@ -291,10 +316,13 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
                      (macup --deep без команди — глибока перевірка)
   --skip a,b         Пропустити задачі на цей запуск, напр. --skip update.brew,clean.*
   --only a,b         Виконати лише ці задачі, напр. --only check.*
+  --enable a,b       Увімкнути вимкнені типово задачі на цей запуск, напр. --enable clean.trash
   --lang en|uk|ru    Мова для цього запуску
   --no-color         Без кольорів
   --quiet            Лише підсумок (усе інше — у звіті)
-  --json             Підсумок у JSON, для скриптів
+  --json             Увесь результат одним JSON-об'єктом, для скриптів та інших програм
+                     (також: macup tasks --json, macup history --json)
+  --pick КЛЮЧ,…      Почистити саме ці пункти з macup check --json (поле key), без питань
 
 Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
 Без команди (all, update, clean) чи твого вибору після перевірки нічого не змінюється.
@@ -330,10 +358,13 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
                      (macup --deep без команды — глубокая проверка)
   --skip a,b         Пропустить задачи в этом запуске, напр. --skip update.brew,clean.*
   --only a,b         Выполнить только эти задачи, напр. --only check.*
+  --enable a,b       Включить выключенные по умолчанию задачи на этот запуск, напр. --enable clean.trash
   --lang en|uk|ru    Язык для этого запуска
   --no-color         Без цветов
   --quiet            Только итог (всё остальное — в отчёте)
-  --json             Итог в JSON, для скриптов
+  --json             Весь результат одним JSON-объектом, для скриптов и других программ
+                     (также: macup tasks --json, macup history --json)
+  --pick КЛЮЧ,…      Почистить именно эти пункты из macup check --json (поле key), без вопросов
 
 Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
 Без команды (all, update, clean) или вашего выбора после проверки ничего не меняется.
@@ -369,10 +400,13 @@ Options (combine with any run command)
                      (macup --deep on its own is a deep check)
   --skip a,b         Skip task ids for this run, e.g. --skip update.brew,clean.*
   --only a,b         Run only these task ids, e.g. --only check.*
+  --enable a,b       Turn on opt-in tasks for this run, e.g. --enable clean.trash
   --lang en|uk|ru    Language for this run
   --no-color         Plain output
   --quiet            Only the summary (the rest is in the report)
-  --json             The summary as JSON, for scripts
+  --json             The whole result as one JSON object, for scripts and other programs
+                     (also: macup tasks --json, macup history --json)
+  --pick KEY,…       Clean exactly these items of macup check --json (their key), without asking
 
 Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
 Nothing changes without a command (all, update, clean) or your pick after a check.
@@ -396,6 +430,28 @@ list_tasks(){
 $TASKS
 EOF
   printf '\n'; _f 'Turn tasks off or on in %s (skip = … / enable = …)' "$(tildify "$CONF")"; printf '\n'
+}
+
+# --json: the same lists for a program (a GUI); see "For scripts and other programs" in the README
+tasks_json(){
+  local id def desc on first=1
+  load_conf; printf '{"schema":1,"config":"%s","tasks":[' "$(jstr "$CONF")"
+  while IFS='|' read -r id def desc; do
+    if task "$id"; then on=true; else on=false; fi
+    [ $first = 1 ] || printf ','; first=0
+    printf '{"id":"%s","group":"%s","default":"%s","on":%s,"text":"%s"}' "$id" "${id%%.*}" "$def" "$on" "$(jstr "$(_ "$desc")")"
+  done <<EOF
+$TASKS
+EOF
+  printf ']}\n'
+}
+history_json(){
+  [ -s "$HISTORY" ] || { echo '{"schema":1,"runs":[]}'; return; }
+  awk -F, 'function n(v){ return v == "" ? "null" : v + 0 }
+    BEGIN{ printf "{\"schema\":1,\"runs\":[" }
+    { printf "%s{\"date\":\"%s\",\"mode\":\"%s\",\"free_kb\":%s,\"total_kb\":%s,\"memory_free_pct\":%s,\"swap_mb\":%s,\"battery_cycles\":%s,\"battery_max_pct\":%s,\"updated\":%s,\"freed_kb\":%s,\"warnings\":%s}", \
+        (NR > 1 ? "," : ""), $1, $2, n($3), n($4), n($5), n($6), n($7), n($8), n($9), n($10), n($11) }
+    END{ print "]}" }' "$HISTORY"
 }
 
 write_default_conf(){
@@ -432,8 +488,8 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
-# Keep macup reports for this many days
-keep_reports_days = 60
+# Keep macup reports for this many days (never more than the last 60 runs)
+keep_reports_days = 30
 
 # Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
 step_timeout_minutes = 60
@@ -846,7 +902,6 @@ uv cache || Кеш uv
 Go build cache || Кеш збірки Go
 Old logs & crash reports (%s files) || Старі логи й крешрепорти (файлів: %s)
 Trash || Кошик
-Looking for stale node_modules || Шукаю старі node_modules
 Stale node_modules (%s projects untouched for %s days; npm install brings them back) || Старі node_modules (%s проєктів без змін %s днів; npm install поверне їх)
 Not touched by macup || macup цього не чіпає
 Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes) || Xcode Archives: %s — видали старі білди в Xcode → Organizer (лиши потрібні для символікації крешів)
@@ -936,9 +991,7 @@ npm cache garbage (npm cache verify) || Сміття в кеші npm (npm cache 
 pnpm store: unreferenced packages || Сховище pnpm: невикористані пакети
 uv cache: unused entries || Кеш uv: невикористані записи
 Old Homebrew versions and downloads || Старі версії й завантаження Homebrew
-Your app logs and crash reports older than 30 days || Логи програм і крешрепорти, старші за 30 днів
 Quick Look thumbnail cache || Кеш мініатюр Quick Look
-macup reports older than keep_reports_days || Звіти macup, старші за keep_reports_days
 node_modules in projects untouched for stale_project_days (opt-in) || node_modules у проєктах без змін stale_project_days днів (вмикається вручну)
 Empty the Trash (opt-in) || Очищати Кошик (вмикається вручну)
 %s cache || Кеш %s
@@ -958,8 +1011,6 @@ Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → 
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистити зараз? Номери (1,3 або 2-5), рівень (safe, standard, aggressive) або Enter — пропустити: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || Історія чатів Codex: %s (це не кеш; старі чати видаляй у самому Codex)
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
-Docker build cache and dangling images (never containers or volumes) || Кеш збірки Docker і непотрібні образи (не контейнери й не томи)
-Docker build cache and dangling images (standard); never containers or volumes || Кеш збірки Docker і непотрібні образи (стандартна); не контейнери й не томи
 Docker: %s || Docker: %s
 Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files || Файли рендеру Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files
 Gradle caches || Кеші Gradle
@@ -970,10 +1021,7 @@ Maven repository ~/.m2/repository (standard); settings.xml stays || Репози
 More with a higher level or by picking: ~%s || Ще можна вищим рівнем або вибором: ~%s
 Nothing to clean at level %s || На рівні %s чистити нічого
 Old Gradle wrappers || Старі Gradle wrapper
-Old Playwright and Puppeteer browser builds (standard) || Старі збірки браузерів Playwright і Puppeteer (стандартна)
-Old Playwright/Puppeteer browsers (%s) || Старі браузери Playwright/Puppeteer (%s)
 Older %s versions (%s): %s || Старіші версії %s (%s): %s
-Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Старіші патч-версії в nvm, rbenv, pyenv, mise, asdf (стандартна); закріплені лишаються
 Other big folders in ~/Library/Caches (aggressive, only when you pick them) || Інші великі папки в ~/Library/Caches (агресивна, лише якщо вибереш)
 Quick Look cache || Кеш Quick Look
 Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only) || Кеші рендеру й прев'ю Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (лише вимірюються)
@@ -1014,12 +1062,10 @@ Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrad
 Programs installed with cargo install (needs cargo-update) || Програми, встановлені через cargo install (потрібен cargo-update)
 Tools managed by mise || Інструменти, якими керує mise
 asdf plugins || Плагіни asdf
-VS Code and Cursor extensions || Розширення VS Code і Cursor
 Ruby gems (opt-in; never the system Ruby) || Ruby-геми (вмикається вручну; системний Ruby не чіпається)
 Poetry cache and downloads; its virtualenvs stay || Кеш і завантаження Poetry; його virtualenv лишаються
 Bun install cache || Кеш встановлень Bun
 Deno cache || Кеш Deno
-Cargo registry downloads and sources (standard) || Завантаження й вихідники реєстру Cargo (стандартна)
 JetBrains IDE caches (standard, skipped while open) || Кеші IDE JetBrains (стандартна, пропускаються, коли відкриті)
 Poetry cache || Кеш Poetry
 Poetry downloads || Завантаження Poetry
@@ -1052,6 +1098,52 @@ Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks aft
 Deno cache; localStorage and Deno KV data stay || Кеш Deno; дані localStorage і Deno KV залишаються
 Unknown task: %s (see every id with: macup tasks) || Невідома задача: %s (усі id: macup tasks)
 Unknown task in %s: %s (see every id with: macup tasks) || Невідома задача в %s: %s (усі id: macup tasks)
+.NET global tools || Глобальні інструменти .NET
+.NET global tools (needs .NET 9 or later) || Глобальні інструменти .NET (потрібен .NET 9 або новіший)
+Apps that crashed several times in the last 7 days || Програми, що кілька разів аварійно завершились за останні 7 днів
+Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in) || Папки збірки в проєктах, яких не чіпали stale_project_days днів: Pods, .build, .dart_tool, .next, target, build (лише якщо ввімкнути)
+Cargo git checkouts || Git-копії Cargo
+Cargo git sources || Git-джерела Cargo
+Cargo registry and git downloads (standard, skipped while cargo runs) || Завантаження Cargo з реєстру та git (standard, пропускається, поки працює cargo)
+Code signing certificates that expire within 30 days || Сертифікати підпису коду, що спливають протягом 30 днів
+Composer global packages || Глобальні пакети Composer
+Core dumps in /cores: %s — leftovers of crashed programs; remove them with: sudo rm /cores/core.* || Дампи пам'яті в /cores: %s — залишки програм, що аварійно завершились; видалити: sudo rm /cores/core.*
+Crashed 3 or more times in the last 7 days: %s || Аварійно завершились 3 і більше разів за останні 7 днів: %s
+Docker build cache and dangling images (never volumes) || Кеш збірки Docker і образи без тегів (томи ніколи)
+Docker build cache and dangling images (standard); never volumes || Кеш збірки Docker і образи без тегів (standard); томи ніколи
+Docker images no container uses (docker pulls or builds them again) || Образи Docker, якими не користується жоден контейнер (docker завантажить або збере їх знову)
+Docker images no container uses (only when you pick them) || Образи Docker, якими не користується жоден контейнер (лише якщо вибрати)
+Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true || Томи Docker, якими не користується жоден контейнер: %s — macup ніколи не видаляє томи; переглянути: docker volume ls -f dangling=true
+Expired provisioning profiles || Прострочені provisioning-профілі
+Expired provisioning profiles (%s) || Прострочені provisioning-профілі (%s)
+GitHub CLI: a saved login that no longer works || GitHub CLI: збережений вхід, який більше не працює
+GitHub CLI: the saved login no longer works — run: gh auth login || GitHub CLI: збережений вхід більше не працює — виконай: gh auth login
+Go module cache || Кеш модулів Go
+Go module cache (standard); go downloads the modules again || Кеш модулів Go (standard); go завантажить модулі знову
+Google Cloud SDK || Google Cloud SDK
+Google Cloud SDK components (its own install; a Homebrew install is left to Homebrew) || Компоненти Google Cloud SDK (власне встановлення; встановлене через Homebrew оновлює Homebrew)
+Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them) || Пакети Homebrew, встановлені лише як залежності, які вже нічому не потрібні (лише якщо вибрати)
+Homebrew packages nothing needs any more: %s || Пакети Homebrew, які вже нічому не потрібні: %s
+Logs and crash reports older than 30 days, also npm and Gradle daemon logs || Логи та звіти про збої, старші за 30 днів, також логи npm і демона Gradle
+Looking for stale build folders || Шукаю застарілі папки збірки
+Old Playwright, Puppeteer and Cypress builds (%s) || Старі збірки Playwright, Puppeteer і Cypress (%s)
+Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays || Старі збірки Playwright, Puppeteer і Cypress (standard); найновіша кожної лишається
+Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too || Старі звіти macup (keep_reports_days), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються
+Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Старіші патч-версії в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закріплені лишаються
+PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go || У PATH є папки, яких не існує: %s — рядки, що їх додають (~/.zshrc, ~/.zprofile), можна прибрати
+Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing) || Віддалений вхід (SSH) увімкнено: інші комп'ютери можуть входити на цей Mac (Системні параметри → Загальні → Спільний доступ)
+Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing) || Спільний екран увімкнено: інші комп'ютери можуть бачити цей Mac і керувати ним (Системні параметри → Загальні → Спільний доступ)
+Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts || Сертифікати підпису, що спливають протягом 30 днів: %s — онови їх у Xcode → Settings → Accounts
+Stale build folders (%s, projects untouched for %s days; the next build makes them again): %s || Застарілі папки збірки (%s, проєкти не чіпали %s днів; наступна збірка створить їх знову): %s
+Stopped Docker containers (%s): files saved inside them are lost, volumes stay || Зупинені контейнери Docker (%s): файли, збережені всередині них, зникнуть, томи лишаються
+Stopped Docker containers (only when you pick them) || Зупинені контейнери Docker (лише якщо вибрати)
+VS Code, Cursor, Windsurf and VSCodium extensions || Розширення VS Code, Cursor, Windsurf і VSCodium
+VSCodium extensions || Розширення VSCodium
+Virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware): %s — delete the ones you no longer use in their own app || Віртуальні машини (Colima, Lima, Podman, minikube, Parallels, VMware): %s — видали непотрібні у їхній власній програмі
+Windsurf extensions || Розширення Windsurf
+macup does not need sudo: run it as yourself. || macup не потребує sudo: запусти його від свого імені.
+npx cache || Кеш npx
+Not cleaned, no longer there: %s — run macup check again || Не почищено, цього вже немає: %s — запусти macup check ще раз
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1232,7 +1324,6 @@ uv cache || Кэш uv
 Go build cache || Кэш сборки Go
 Old logs & crash reports (%s files) || Старые логи и крэш-репорты (файлов: %s)
 Trash || Корзина
-Looking for stale node_modules || Ищу старые node_modules
 Stale node_modules (%s projects untouched for %s days; npm install brings them back) || Старые node_modules (%s проектов без изменений %s дней; npm install вернёт их)
 Not touched by macup || macup это не трогает
 Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes) || Xcode Archives: %s — удалите старые билды в Xcode → Organizer (оставьте нужные для символикации крэшей)
@@ -1322,9 +1413,7 @@ npm cache garbage (npm cache verify) || Мусор в кэше npm (npm cache ve
 pnpm store: unreferenced packages || Хранилище pnpm: неиспользуемые пакеты
 uv cache: unused entries || Кэш uv: неиспользуемые записи
 Old Homebrew versions and downloads || Старые версии и загрузки Homebrew
-Your app logs and crash reports older than 30 days || Логи приложений и крэш-репорты старше 30 дней
 Quick Look thumbnail cache || Кэш миниатюр Quick Look
-macup reports older than keep_reports_days || Отчёты macup старше keep_reports_days
 node_modules in projects untouched for stale_project_days (opt-in) || node_modules в проектах без изменений stale_project_days дней (включается вручную)
 Empty the Trash (opt-in) || Очищать Корзину (включается вручную)
 %s cache || Кэш %s
@@ -1344,8 +1433,6 @@ Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → 
 Clean now? Numbers (1,3 or 2-5), a level (safe, standard, aggressive), or Enter to skip:  || Почистить сейчас? Номера (1,3 или 2-5), уровень (safe, standard, aggressive) или Enter — пропустить: 
 Codex chat history: %s (not a cache; delete old chats in Codex itself) || История чатов Codex: %s (это не кэш; старые чаты удаляйте в самом Codex)
 DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache || Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache
-Docker build cache and dangling images (never containers or volumes) || Кэш сборки Docker и ненужные образы (не контейнеры и не тома)
-Docker build cache and dangling images (standard); never containers or volumes || Кэш сборки Docker и ненужные образы (стандартная); не контейнеры и не тома
 Docker: %s || Docker: %s
 Final Cut Pro render files: %s — Final Cut: File → Delete Generated Library Files || Файлы рендера Final Cut Pro: %s — Final Cut: File → Delete Generated Library Files
 Gradle caches || Кэши Gradle
@@ -1356,10 +1443,7 @@ Maven repository ~/.m2/repository (standard); settings.xml stays || Репози
 More with a higher level or by picking: ~%s || Ещё можно уровнем выше или выбором: ~%s
 Nothing to clean at level %s || На уровне %s чистить нечего
 Old Gradle wrappers || Старые Gradle wrapper
-Old Playwright and Puppeteer browser builds (standard) || Старые сборки браузеров Playwright и Puppeteer (стандартная)
-Old Playwright/Puppeteer browsers (%s) || Старые браузеры Playwright/Puppeteer (%s)
 Older %s versions (%s): %s || Более старые версии %s (%s): %s
-Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Более старые патч-версии в nvm, rbenv, pyenv, mise, asdf (стандартная); закреплённые остаются
 Other big folders in ~/Library/Caches (aggressive, only when you pick them) || Другие большие папки в ~/Library/Caches (агрессивная, только если выберете)
 Quick Look cache || Кэш Quick Look
 Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only) || Кэши рендера и превью Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (только измеряются)
@@ -1400,12 +1484,10 @@ Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrad
 Programs installed with cargo install (needs cargo-update) || Программы, установленные через cargo install (нужен cargo-update)
 Tools managed by mise || Инструменты под управлением mise
 asdf plugins || Плагины asdf
-VS Code and Cursor extensions || Расширения VS Code и Cursor
 Ruby gems (opt-in; never the system Ruby) || Ruby-гемы (включается вручную; системный Ruby не трогается)
 Poetry cache and downloads; its virtualenvs stay || Кэш и загрузки Poetry; его virtualenv остаются
 Bun install cache || Кэш установок Bun
 Deno cache || Кэш Deno
-Cargo registry downloads and sources (standard) || Загрузки и исходники реестра Cargo (стандартная)
 JetBrains IDE caches (standard, skipped while open) || Кэши IDE JetBrains (стандартная, пропускаются, когда открыты)
 Poetry cache || Кэш Poetry
 Poetry downloads || Загрузки Poetry
@@ -1438,6 +1520,52 @@ Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks aft
 Deno cache; localStorage and Deno KV data stay || Кеш Deno; данные localStorage и Deno KV остаются
 Unknown task: %s (see every id with: macup tasks) || Неизвестная задача: %s (все id: macup tasks)
 Unknown task in %s: %s (see every id with: macup tasks) || Неизвестная задача в %s: %s (все id: macup tasks)
+.NET global tools || Глобальные инструменты .NET
+.NET global tools (needs .NET 9 or later) || Глобальные инструменты .NET (нужен .NET 9 или новее)
+Apps that crashed several times in the last 7 days || Приложения, которые несколько раз аварийно завершились за последние 7 дней
+Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in) || Папки сборки в проектах, которые не трогали stale_project_days дней: Pods, .build, .dart_tool, .next, target, build (только если включить)
+Cargo git checkouts || Git-копии Cargo
+Cargo git sources || Git-источники Cargo
+Cargo registry and git downloads (standard, skipped while cargo runs) || Загрузки Cargo из реестра и git (standard, пропускается, пока работает cargo)
+Code signing certificates that expire within 30 days || Сертификаты подписи кода, которые истекают в течение 30 дней
+Composer global packages || Глобальные пакеты Composer
+Core dumps in /cores: %s — leftovers of crashed programs; remove them with: sudo rm /cores/core.* || Дампы памяти в /cores: %s — остатки аварийно завершившихся программ; удалить: sudo rm /cores/core.*
+Crashed 3 or more times in the last 7 days: %s || Аварийно завершились 3 и более раз за последние 7 дней: %s
+Docker build cache and dangling images (never volumes) || Кеш сборки Docker и образы без тегов (тома никогда)
+Docker build cache and dangling images (standard); never volumes || Кеш сборки Docker и образы без тегов (standard); тома никогда
+Docker images no container uses (docker pulls or builds them again) || Образы Docker, которые не использует ни один контейнер (docker скачает или соберёт их заново)
+Docker images no container uses (only when you pick them) || Образы Docker, которые не использует ни один контейнер (только если выбрать)
+Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true || Тома Docker, которые не использует ни один контейнер: %s — macup никогда не удаляет тома; посмотреть: docker volume ls -f dangling=true
+Expired provisioning profiles || Просроченные provisioning-профили
+Expired provisioning profiles (%s) || Просроченные provisioning-профили (%s)
+GitHub CLI: a saved login that no longer works || GitHub CLI: сохранённый вход, который больше не работает
+GitHub CLI: the saved login no longer works — run: gh auth login || GitHub CLI: сохранённый вход больше не работает — выполните: gh auth login
+Go module cache || Кеш модулей Go
+Go module cache (standard); go downloads the modules again || Кеш модулей Go (standard); go скачает модули заново
+Google Cloud SDK || Google Cloud SDK
+Google Cloud SDK components (its own install; a Homebrew install is left to Homebrew) || Компоненты Google Cloud SDK (собственная установка; установленное через Homebrew обновляет Homebrew)
+Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them) || Пакеты Homebrew, установленные только как зависимости, которые уже ничему не нужны (только если выбрать)
+Homebrew packages nothing needs any more: %s || Пакеты Homebrew, которые уже ничему не нужны: %s
+Logs and crash reports older than 30 days, also npm and Gradle daemon logs || Логи и отчёты о сбоях старше 30 дней, также логи npm и демона Gradle
+Looking for stale build folders || Ищу устаревшие папки сборки
+Old Playwright, Puppeteer and Cypress builds (%s) || Старые сборки Playwright, Puppeteer и Cypress (%s)
+Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays || Старые сборки Playwright, Puppeteer и Cypress (standard); самая новая каждой остаётся
+Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too || Старые отчёты macup (keep_reports_days), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются
+Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Более старые патч-версии в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закреплённые остаются
+PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go || В PATH есть папки, которых не существует: %s — строки, которые их добавляют (~/.zshrc, ~/.zprofile), можно убрать
+Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing) || Удалённый вход (SSH) включён: другие компьютеры могут входить на этот Mac (Системные настройки → Основные → Общий доступ)
+Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing) || Общий экран включён: другие компьютеры могут видеть этот Mac и управлять им (Системные настройки → Основные → Общий доступ)
+Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts || Сертификаты подписи, которые истекают в течение 30 дней: %s — обновите их в Xcode → Settings → Accounts
+Stale build folders (%s, projects untouched for %s days; the next build makes them again): %s || Устаревшие папки сборки (%s, проекты не трогали %s дней; следующая сборка создаст их заново): %s
+Stopped Docker containers (%s): files saved inside them are lost, volumes stay || Остановленные контейнеры Docker (%s): файлы, сохранённые внутри них, пропадут, тома остаются
+Stopped Docker containers (only when you pick them) || Остановленные контейнеры Docker (только если выбрать)
+VS Code, Cursor, Windsurf and VSCodium extensions || Расширения VS Code, Cursor, Windsurf и VSCodium
+VSCodium extensions || Расширения VSCodium
+Virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware): %s — delete the ones you no longer use in their own app || Виртуальные машины (Colima, Lima, Podman, minikube, Parallels, VMware): %s — удалите ненужные в их собственном приложении
+Windsurf extensions || Расширения Windsurf
+macup does not need sudo: run it as yourself. || macup не нужен sudo: запустите его от своего имени.
+npx cache || Кеш npx
+Not cleaned, no longer there: %s — run macup check again || Не очищено, этого уже нет: %s — запустите macup check ещё раз
 EOF
   ;;
   esac
@@ -1460,6 +1588,10 @@ while [ $# -gt 0 ]; do case "$1" in
   --skip=*)             CLI_SKIP="$CLI_SKIP,${1#*=}" ;;
   --only)               CLI_ONLY="$CLI_ONLY,$2"; shift ;;
   --only=*)             CLI_ONLY="$CLI_ONLY,${1#*=}" ;;
+  --enable)             CLI_ENABLE="$CLI_ENABLE,$2"; shift ;;
+  --enable=*)           CLI_ENABLE="$CLI_ENABLE,${1#*=}" ;;
+  --pick)               PICK="$PICK,$2"; shift ;;
+  --pick=*)             PICK="$PICK,${1#*=}" ;;
   --level)              LEVEL=$(level_num "$2"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; }; shift ;;
   --level=*)            LEVEL=$(level_num "${1#*=}"); [ -z "$LEVEL" ] && { echo "--level: safe | standard | aggressive"; exit 2; } ;;
   --lang)               set_lang "$2"; shift ;;
@@ -1483,13 +1615,21 @@ while [ $# -gt 0 ]; do case "$1" in
   *) _f 'Unknown command: %s' "$1"; echo; _ 'Type  macup  for the menu or  macup help  for all commands.'; echo; exit 1 ;;
 esac; shift; done
 
+# under sudo the config, the reports and the history would become root's, and the next plain run could not write them
+case "$CMD" in help|version|uninstall) ;; *)
+  if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then _ 'macup does not need sudo: run it as yourself.'; echo; exit 1; fi ;;
+esac
+# --pick: clean exactly the items a check listed (their "key" in --json), nothing else
+# and runs no check either, unless --only names some
+if [ -n "$PICK" ]; then PICK=",$(echo "$PICK" | tr -d ' '),"; DRY=0; DO_UPDATE=0; DO_CLEAN=1; ACTION=clean; [ -n "$CLI_ONLY" ] || CLI_ONLY='clean.*'; fi
+
 # one-off commands run after all options are read, so `macup help --lang uk` works
 case "$CMD" in
   lang)        choose_lang "$LANG_ARG"; exit $? ;;
   last)        show_last; exit 0 ;;
-  history)     show_history; exit 0 ;;
+  history)     if [ "$JSON" = 1 ]; then history_json; else show_history; fi; exit 0 ;;
   reports)     mkdir -p "$LOGDIR"; open "$LOGDIR"; exit 0 ;;
-  tasks)       list_tasks; exit 0 ;;
+  tasks)       if [ "$JSON" = 1 ]; then tasks_json; else list_tasks; fi; exit 0 ;;
   config)      open_conf; exit 0 ;;
   self_update) self_update; exit 0 ;;
   uninstall)   uninstall; exit 0 ;;
@@ -1514,7 +1654,7 @@ unknown_tasks(){ # comma list → the ids that are neither a task nor a group
     [ -n "$(task_default "$id")" ] || printf '%s\n' "$id"
   done | paste -sd, - | sed 's/,/, /g'
 }
-BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP")
+BADIDS=$(unknown_tasks "$CLI_ONLY,$CLI_SKIP,$CLI_ENABLE")
 [ -n "$BADIDS" ] && { _f 'Unknown task: %s (see every id with: macup tasks)' "$BADIDS"; echo; exit 2; }
 BADCONF=$(unknown_tasks "$(conf skip "" | tr -d ' '),$(conf enable "" | tr -d ' ')")
 mkdir -p "$LOGDIR" "$STATE_DIR"
@@ -1529,12 +1669,25 @@ if ! mkdir "$RUNLOCK" 2>/dev/null; then
 fi
 echo $$ >"$RUNLOCK/pid" && HAVE_LOCK=1
 unlock(){ [ "$HAVE_LOCK" = 1 ] && rm -rf "$RUNLOCK"; HAVE_LOCK=0; }
+# macup tidies up after itself on every run, a check too: its reports are its own files, not the Mac's.
+# Reports older than keep_reports_days go, and never more than 60 runs stay; the history keeps its last 500 lines,
+# the schedule's log its last 200; temp files a killed run left behind go after a day.
+tidy_own(){
+  local f
+  case "$SKIP" in *",clean.reports,"*) return 0 ;; esac   # only an explicit skip: --only check.disk still tidies up
+  find "$LOGDIR" -maxdepth 1 -type f -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null
+  ls -t "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +61 | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
+  trim(){ [ -f "$1" ] && [ "$(wc -l <"$1")" -gt $(($2 * 2)) ] && tail -n "$2" "$1" >"$1.tmp" && cat "$1.tmp" >"$1"; rm -f "$1.tmp"; }
+  trim "$HISTORY" 500; trim "$LOGDIR/schedule.log" 200
+  find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) -mtime +1 -delete 2>/dev/null
+}
+tidy_own
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to"; }
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det"; }
 trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
@@ -1634,6 +1787,11 @@ if task check.security; then
   AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
   CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
   if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
+  # sharing services that let other computers in: said, not judged (a build machine needs them)
+  SH=$(launchctl print-disabled system 2>/dev/null)
+  shared(){ printf '%s\n' "$SH" | grep -qE "\"$1\" => (enabled|false)"; }
+  shared com.openssh.sshd && info 'Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)'
+  shared com.apple.screensharing && info 'Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing)'
   # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
   if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
   elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then
@@ -1762,7 +1920,11 @@ if task update.brew && have brew; then
   else
     if UPD; then
       step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
+      # a cask's installer may ask for the Mac password: the updaters that run next must not find sudo unlocked by it
+      SUDO_PRE=0; sudo -n true 2>/dev/null && SUDO_PRE=1
+      run brew upgrade; BRC=$?
+      [ "$SUDO_PRE" = 0 ] && sudo -k 2>/dev/null
+      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -1871,8 +2033,20 @@ home_bin deno && simple_update update.deno 'Deno' deno upgrade
 have cargo && have cargo-install-update && simple_update update.cargo 'cargo programs' cargo install-update -a
 have mise && simple_update update.mise 'mise tools'   mise upgrade
 have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
-have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions
-have cursor && simple_update update.editor_ext 'Cursor extensions'  cursor --update-extensions
+have code     && simple_update update.editor_ext 'VS Code extensions'  code --update-extensions
+have cursor   && simple_update update.editor_ext 'Cursor extensions'   cursor --update-extensions
+have windsurf && simple_update update.editor_ext 'Windsurf extensions' windsurf --update-extensions
+have codium   && simple_update update.editor_ext 'VSCodium extensions' codium --update-extensions
+# gcloud from Google's own installer updates its components itself; a Homebrew cask is brew's
+home_bin gcloud && simple_update update.gcloud 'Google Cloud SDK' gcloud components update --quiet
+# `dotnet tool update --all` exists since .NET 9; asked only when there are global tools
+if have dotnet && task update.dotnet && [ -n "$(ls -A "$HOME/.dotnet/tools" 2>/dev/null)" ]; then
+  DN=$(tl 20 dotnet --version 2>/dev/null); DN=${DN%%.*}
+  case "$DN" in ''|*[!0-9]*) ;; *) [ "$DN" -ge 9 ] && simple_update update.dotnet '.NET global tools' dotnet tool update --global --all ;; esac
+fi
+for cj in "$HOME/.composer/composer.json" "$HOME/.config/composer/composer.json"; do
+  [ -f "$cj" ] && have composer && { simple_update update.composer 'Composer global packages' composer global update --no-interaction; break; }
+done
 # opt-in: updating every gem takes long; the system Ruby's gems belong to macOS and need sudo
 have gem && [ "$(command -v gem)" != /usr/bin/gem ] && simple_update update.gem 'Ruby gems' gem update
 
@@ -2033,10 +2207,41 @@ PY
 $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
+  # folders of yours in PATH that do not exist: a line in ~/.zshrc for a tool that was removed (macOS itself lists system folders that may not exist)
+  GONEP=$(printf '%s' "$USER_PATH" | tr ':' '\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do case "$d" in "$HOME"/*) [ -d "$d" ] || tildify "$d" ;; esac; done | paste -sd, - | sed 's/,/, /g')
+  [ -n "$GONEP" ] && info 'PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go' "$GONEP"
 fi
 if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
-  DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
-  info 'Docker: %s' "${DDF%; }"
+  # the Reclaimable column has a space inside ("1.2GB (50%)"), so the columns are asked for by name
+  DDF=$(docker system df --format '{{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' 2>/dev/null | paste -sd';' - | sed 's/;/; /g')
+  info 'Docker: %s' "$DDF"
+  DV=$(docker volume ls -qf dangling=true 2>/dev/null | grep -c .)
+  [ "${DV:-0}" -gt 0 ] && info 'Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true' "$DV"
+fi
+# a token GitHub no longer accepts fails later, in the middle of a push or a release
+if task check.gh && have gh && [ -s "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml" ]; then
+  GHS=$(tl 20 gh auth status 2>&1 </dev/null)
+  printf '%s\n' "$GHS" | grep -qiE 'token .* is (invalid|no longer valid)|authentication failed' && warn 'GitHub CLI: the saved login no longer works — run: gh auth login'
+fi
+# signing certificates: Xcode says nothing until the build fails on the day one expires
+if task check.certs && have security && have openssl && have python3; then
+  CE=$(security find-certificate -a -p 2>/dev/null | python3 -c '
+import re, subprocess, sys
+soon, seen = 30 * 86400, set()
+for pem in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", sys.stdin.read(), re.S):
+    def x(*a): return subprocess.run(["openssl", "x509", "-noout", *a], input=pem, capture_output=True, text=True)
+    m = re.search(r"CN\s*=\s*([^,/\n]+)", x("-subject").stdout)
+    name = m.group(1).strip() if m else ""
+    if not re.match(r"(Apple Development|Apple Distribution|Developer ID|iPhone Developer|iPhone Distribution|Mac Developer|3rd Party Mac Developer)", name) or name in seen: continue
+    if x("-checkend", "0").returncode != 0: continue   # already expired: it signs nothing, Keychain Access shows it
+    if x("-checkend", str(soon)).returncode != 0: seen.add(name); print(name)' 2>/dev/null)
+  [ -n "$CE" ] && { warn 'Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts' "$(cnt "$CE")"; lines "$CE"; }
+fi
+# an app that keeps crashing: the reports are in ~/Library/Logs/DiagnosticReports
+if task check.crashes && [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
+  CR=$(find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \( -name '*.ips' -o -name '*.crash' \) -mtime -7 2>/dev/null | sed 's|.*/||; s/[-_][0-9]\{4\}-[0-9][0-9]-[0-9][0-9].*//' \
+    | sort | uniq -c | sort -rn | awk '$1 >= 3 {n=$1; $1=""; sub(/^ /,""); printf "%s ×%d\n", $0, n}' | head -5 | paste -sd, - | sed 's/,/, /g')
+  [ -n "$CR" ] && info 'Crashed 3 or more times in the last 7 days: %s' "$CR"
 fi
 
 # ================================================================ CLEANUP
@@ -2047,16 +2252,30 @@ fi
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=()
+C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
+# Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
+ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
+artifact_ok(){ # path → true when it is a build folder with its build file next to it
+  local d=${1%/*}
+  case "${1##*/}" in
+    node_modules) ;;
+    Pods)       [ -e "$d/Podfile" ] ;;
+    .build)     [ -e "$d/Package.swift" ] ;;
+    .dart_tool) [ -e "$d/pubspec.yaml" ] ;;
+    .next)      [ -e "$d/package.json" ] ;;
+    target)     [ -e "$d/Cargo.toml" ] || [ -e "$d/pom.xml" ] ;;
+    build)      [ -e "$d/build.gradle" ] || [ -e "$d/build.gradle.kts" ] ;;
+    *) return 1 ;;
+  esac
+}
 # Only these places, and never these names, whatever a cleaner asks for.
 safe_path(){
   case "$1" in
     "$HOME"/Library/*|"$HOME"/.*) ;;
-    */node_modules) in_projects "$1" || return 1 ;;   # clean.stale_node_modules: only inside project_dirs
-    *) return 1 ;;
+    *) in_projects "$1" && artifact_ok "$1" || return 1 ;;   # clean.stale_*: a build folder inside project_dirs, nothing else there
   esac
   case "$1" in */../*|*/..|*/.codex/sessions*|*/.codex/archived_sessions*|*/deno/location_data|*/deno/location_data/*|*.sqlite|*/User|*/User/*|*/Backups|*/Backups/*|\
-    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
+    */gradle.properties|*/settings.xml|*/.android/avd*|*/.android/*key*|*/.ssh*|*/.gnupg*|*/Keychains*|*/.aws|*/.aws/*|*/.kube|*/.kube/*|*/.netrc|*/.config|*/.config/*|*/.claude|*/.claude/*|*/org.sparkle-project.Sparkle|*/org.sparkle-project.Sparkle/*|*.ShipIt|*.ShipIt/*) return 1 ;; esac   # updaters keep downloaded updates here until installed
   # in Application Support only what sits in a Chromium/Electron cache folder: never profiles or app data
   case "$1" in "$HOME/Library/Application Support/"*) in_cache_dir "${1#"$HOME/Library/Application Support"}" || return 1 ;; esac
   return 0
@@ -2086,6 +2305,8 @@ cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — ki
   task_allowed "$1" || return 0
   C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
+  # the same item gets the same key on the next run: CL_KEY names the ones whose paths change from day to day (old logs)
+  C_KEY[C_N]="$1:$(printf '%s' "${CL_KEY:-$5|$6}" | cksum | cut -d' ' -f1)"
   [ "$5" = cmd ] || cover "$6"
   C_N=$((C_N + 1))
 }
@@ -2097,6 +2318,17 @@ cand_more(){ # label level kb paths open-dirs — adds to the candidate with thi
 }
 # Xcode itself, or an xcodebuild started from a terminal or a CI agent: both write to DerivedData while they run
 XCODE_BUSY='/Xcode.app/Contents/MacOS/Xcode|(^|/)xcodebuild( |$)'
+busy_pat(){ # a name from the tables → the pgrep -f pattern of what uses that cache while it runs
+  case "$1" in
+    xcode)  echo "$XCODE_BUSY" ;;
+    cargo)  echo '(^|/)(cargo|rustc)( |$)' ;;
+    poetry) echo '(^|/)poetry( |$)' ;;
+    maven)  echo 'plexus\.classworlds|(^|/)mvnd?( |$)' ;;
+    deno)   echo '(^|/)deno( |$)' ;;
+    npx)    echo '/\.npm/_npx/' ;;   # MCP servers and CLIs started with npx run from there
+    *)      echo "$1" ;;
+  esac
+}
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
 open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
@@ -2109,7 +2341,7 @@ EOF2
 
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
-  local p=$3 s proc=$4; [ "$proc" = xcode ] && proc=$XCODE_BUSY
+  local p=$3 s proc; proc=$(busy_pat "$4")
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
   cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
@@ -2120,7 +2352,7 @@ clean_old(){ # id label dir days [type] — entries older than N days
   old=$(find "$p" -mindepth 1 -maxdepth 1 -type "$type" -mtime +"$days" 2>/dev/null)
   [ -z "$old" ] && return 0
   s=$(kbl "$old"); [ "$s" -lt 1024 ] && return 0
-  cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
+  CL_KEY="old|$p" cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
 }
 measure_cmd(){ # id label dir key — a tool's own clean command; the dir is measured before and after
   [ -e "$3" ] || return 0
@@ -2141,12 +2373,18 @@ run_key(){ local out r=0
     pip)       run pip3 cache purge ;;
     uv)        run uv cache prune ;;
     go)        run go clean -cache ;;
+    gomod)     run go clean -modcache ;;
+    brewauto)  run brew autoremove ;;
+    dockerct)  out=$(docker container prune -f 2>&1) || r=1; echo "$out" >>"$RAW"
+               KEY_FREED=$(tokb10 "$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | tail -1)"); return $r ;;
+    dockerimg) out=$(docker image prune -a -f 2>&1) || r=1; echo "$out" >>"$RAW"
+               KEY_FREED=$(tokb10 "$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | tail -1)"); return $r ;;
     quicklook) run qlmanage -r cache ;;
     simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     docker)    out=$({ docker builder prune -f; docker image prune -f; } 2>&1); echo "$out" >>"$RAW"
-               KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
+               KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}') ;;
   esac
 }
 sim_id(){ case "$1" in ""|*[!0-9A-Fa-f-]*) echo "macup refused simulator id: $1" >>"$RAW"; return 1 ;; esac; }
@@ -2190,7 +2428,7 @@ EOF2
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; }; }   # small pick-only commands too
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag
   for ((i = 0; i < C_N; i++)); do
@@ -2222,7 +2460,7 @@ pick(){ # reads a choice, prints the chosen indexes one per line
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
 
 # Folders whose contents can simply be deleted (the folder itself stays).
-# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f; xcode = Xcode or xcodebuild) | only if this tool exists
+# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f, or a name from busy_pat: xcode, cargo, …) | only if this tool exists
 CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|xcode|
 clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|xcode|
 clean.sim_caches|1|Simulator caches|~/Library/Developer/CoreSimulator/Caches||
@@ -2232,11 +2470,14 @@ clean.carthage|1|Carthage cache|~/Library/Caches/org.carthage.CarthageKit||
 clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
+clean.npm|2|npx cache|~/.npm/_npx|npx|
 clean.bun|1|Bun install cache|~/.bun/install/cache||
-clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
-clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
-clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
-clean.cargo|2|Cargo registry sources|~/.cargo/registry/src||
+clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache|poetry|
+clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts|poetry|
+clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache|cargo|
+clean.cargo|2|Cargo registry sources|~/.cargo/registry/src|cargo|
+clean.cargo|2|Cargo git checkouts|~/.cargo/git/checkouts|cargo|
+clean.cargo|2|Cargo git sources|~/.cargo/git/db|cargo|
 clean.gradle|2|Gradle caches|~/.gradle/caches|GradleDaemon|
 clean.android|2|Android cache|~/.android/cache||'
 
@@ -2247,7 +2488,8 @@ TOOL_CACHES='clean.npm|1|npm cache|npm|npm|~/.npm/_cacache
 clean.pnpm|1|pnpm store|pnpm|pnpm|@pnpm
 clean.pip|1|pip cache|pip3|pip|~/Library/Caches/pip
 clean.uv|1|uv cache|uv|uv|@uv
-clean.go|1|Go build cache|go|go|@go'
+clean.go|1|Go build cache|go|go|@go
+clean.go_mod|2|Go module cache|go|gomod|@gomod'
 
 # Electron apps: only these cache subfolders (also in Default/ and Partitions/*), never User/ (settings) or Backups/ (unsaved files).
 # folder in ~/Library/Application Support | app name (skipped while it runs, as is anything started with that folder as --user-data-dir)
@@ -2277,7 +2519,7 @@ Brave|Brave Browser|BraveSoftware
 Opera|Opera|com.operasoftware.Opera
 Vivaldi|Vivaldi|Vivaldi'
 
-tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
+tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; @gomod) go env GOMODCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
 
 if WANT_CLN; then
 while IFS='|' read -r id lv label dir proc tool; do
@@ -2298,7 +2540,7 @@ cover "$HOME/.npm"
 DN="$HOME/Library/Caches/deno"
 if [ -d "$DN" ] && [ ! -L "$DN" ]; then
   L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
-  [ "$s" -ge 5120 ] && cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L"
+  [ "$s" -ge 5120 ] && CL_KEY=deno cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L" "$(busy_pat deno)"
   cover "$DN/location_data"
 fi
 for ds in "$DEV/Xcode/"*DeviceSupport; do
@@ -2362,34 +2604,75 @@ if task_allowed clean.brew && have brew; then
   cand clean.brew 1 "$(_ 'Homebrew old versions & downloads')" "$( [ -n "$FR" ] && tokb "$FR" || echo 0)" cmd brew
 fi
 if task_allowed clean.logs; then
-  OLDLOGS=$(find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null)
+  # npm keeps a log per failed command, a Gradle daemon one per start: nobody reads them a month later
+  OLDLOGS=$( { find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null
+               find "$HOME/.npm/_logs" "$HOME/.gradle/daemon" -type f -name '*.log' -mtime +30 2>/dev/null; } )
   if [ -n "$OLDLOGS" ]; then
     s=$(printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}')
-    [ "${s:-0}" -ge 1024 ] && cand clean.logs 1 "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s" rm "$OLDLOGS"
+    [ "${s:-0}" -ge 1024 ] && CL_KEY=logs cand clean.logs 1 "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s" rm "$OLDLOGS"
   fi
 fi
 cand clean.quicklook 1 "$(_ 'Quick Look cache')" 0 cmd quicklook
-if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
+# macup's own reports are tidied on every run, before this one starts (tidy_own)
 
-if task_allowed clean.stale_node_modules; then
-  step 'Looking for stale node_modules'
-  STALE=""
+# --- build folders in projects nobody touched for stale_project_days, only when you pick or enable them.
+# A folder counts only next to the file that makes it again (artifact_ok), never when git tracks files in it (a committed Pods),
+# and never when it was built recently itself: someone still runs that project.
+if task_allowed clean.stale_node_modules || task_allowed clean.stale_artifacts; then
+  step 'Looking for stale build folders'
+  STALE=""; STALE_ART=""
+  NAMEX=$(for n in $ARTIFACT_NAMES; do printf -- '-o -name %s ' "$n"; done)
   while IFS= read -r root; do
     [ -z "$root" ] && continue
-    while IFS= read -r nm; do
-      [ -z "$nm" ] && continue
-      case "${nm#"$root"}" in */.*|*/lib/node_modules) continue ;; esac   # hidden folders, global npm installs
-      proj=$(dirname "$nm")
-      recent=$(find "$proj" -maxdepth 3 \( -name node_modules -o -name .git \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
+    # shellcheck disable=SC2086 # NAMEX is a list of find arguments
+    ARTS=$(find "$root" -maxdepth 5 -type d \( -name .git $NAMEX \) -prune -print 2>/dev/null | grep -v '/\.git$')
+    while IFS= read -r a; do
+      [ -z "$a" ] && continue
+      rel=${a#"$root"}
+      case "${rel%/*}" in */.*) continue ;; esac   # inside a hidden folder
+      case "$rel" in */lib/node_modules) continue ;; esac   # global npm installs
+      artifact_ok "$a" || continue
+      recent=$(find "${a%/*}" -maxdepth 3 \( -name node_modules -o -name .git -o -path "$a" \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
       [ -n "$recent" ] && continue
-      STALE="$STALE$nm"$'\n'
+      [ -n "$(find "$a" -maxdepth 2 -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)" ] && continue
+      if [ "${a##*/}" = node_modules ]; then STALE="$STALE$a"$'\n'
+      else
+        # anything but "not a git repository" keeps the folder: tracked files, or a repository git refuses to read
+        have git || continue
+        [ -n "$(git -C "$a" ls-files . 2>&1 | grep -v 'not a git repository' | head -1)" ] && continue
+        STALE_ART="$STALE_ART$a"$'\n'
+      fi
     done <<EOF2
-$(find "$root" -maxdepth 5 -type d -name node_modules -prune 2>/dev/null)
+$ARTS
 EOF2
   done <<EOF2
 $(project_roots)
 EOF2
-  [ -n "$STALE" ] && cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
+  [ -n "$STALE" ] && CL_KEY=stale_nm cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
+  if [ -n "$STALE_ART" ]; then
+    AL=$(printf '%s' "$STALE_ART" | head -4 | while IFS= read -r a; do tildify "$a"; done | paste -sd, - | sed 's/,/, /g'); AN=$(cnt "$STALE_ART")
+    [ "$AN" -gt 4 ] && AL="$AL +$((AN - 4))"
+    CL_KEY=stale_art cand clean.stale_artifacts 2 "$(_f 'Stale build folders (%s, projects untouched for %s days; the next build makes them again): %s' "$AN" "$STALE_DAYS" "$AL")" "$(kbl "$STALE_ART")" rm "$STALE_ART"
+  fi
+fi
+# --- provisioning profiles past their date sign nothing; Xcode downloads the ones it manages again
+if task_allowed clean.profiles && have python3; then
+  L=$(python3 - "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" <<'PY' 2>/dev/null
+import datetime, os, plistlib, sys
+now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+for d in sys.argv[1:]:
+    if not os.path.isdir(d) or os.path.islink(d): continue
+    for n in sorted(os.listdir(d)):
+        p = os.path.join(d, n)
+        if not n.endswith((".mobileprovision", ".provisionprofile")) or os.path.islink(p) or not os.path.isfile(p): continue
+        try:
+            raw = open(p, "rb").read(); a = raw.index(b"<?xml"); b = raw.index(b"</plist>", a) + 8
+            exp = plistlib.loads(raw[a:b]).get("ExpirationDate")
+        except Exception: continue   # unreadable: not ours to judge
+        if isinstance(exp, datetime.datetime) and exp.replace(tzinfo=None) < now: print(p)
+PY
+)
+  [ -n "$L" ] && CL_KEY=profiles cand clean.profiles 1 "$(_f 'Expired provisioning profiles (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 # without Full Disk Access the terminal cannot even list the Trash: say so instead of a silent 0
 if task_allowed clean.trash; then
@@ -2412,12 +2695,22 @@ for d in "$HOME/Library/Caches/JetBrains"/*; do
 done
 # `mvn install` puts your own builds (often SNAPSHOTs) here; those exist nowhere else
 if [ -n "$(find "$HOME/.m2/repository" -name maven-metadata-local.xml -print 2>/dev/null | head -1)" ]; then
-  CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository"
-else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository"; fi
+  CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository" maven
+else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository" maven; fi
 CL_LVL=""
-if task_allowed clean.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
-  BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
-  cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never containers or volumes)')" "$(tokb "${BCR:-0B}")" cmd docker
+# --- Docker. Volumes hold databases and are never touched. Images and stopped containers only when you pick them.
+if have docker && { task_allowed clean.docker || task_allowed clean.docker_images || task_allowed clean.docker_containers; } && tl 20 docker info >/dev/null 2>&1; then
+  DDF=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null)
+  ddf(){ tokb10 "$(printf '%s\n' "$DDF" | awk -F'|' -v t="$1" '$1==t{print $2}' | awk '{print $1}')"; }   # "1.2GB (50%)" → KB
+  cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never volumes)')" "$(ddf 'Build Cache')" cmd docker
+  s=$(ddf Images); [ "${s:-0}" -ge 1024 ] && cand clean.docker_images 2 "$(_ 'Docker images no container uses (docker pulls or builds them again)')" "$s" cmd dockerimg
+  n=$(docker ps -aq -f status=exited -f status=created -f status=dead 2>/dev/null | grep -c .)
+  [ "$n" -gt 0 ] && cand clean.docker_containers 3 "$(_f 'Stopped Docker containers (%s): files saved inside them are lost, volumes stay' "$n")" "$(ddf Containers)" cmd dockerct
+fi
+# --- Homebrew packages that came only as dependencies of something already removed
+if task_allowed clean.brew_autoremove && have brew; then
+  AR=$(tl 60 brew autoremove --dry-run 2>/dev/null | grep -v '^==>' | grep . | paste -sd, - | sed 's/,/, /g')
+  [ -n "$AR" ] && cand clean.brew_autoremove 2 "$(_f 'Homebrew packages nothing needs any more: %s' "$AR")" 0 cmd brewauto
 fi
 
 # --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
@@ -2425,6 +2718,9 @@ fi
 if task_allowed clean.old_versions; then
   PINSRC=$( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
+    # Volta's default Node; fnm's aliases and the version each open shell uses are links to the version folder
+    cat "$HOME/.volta/tools/user/platform.json" 2>/dev/null; echo
+    for a in "$HOME/.local/share/fnm/aliases"/* "$HOME/.fnm/aliases"/* "$HOME/.local/state/fnm_multishells"/*; do [ -L "$a" ] && readlink "$a"; done
     # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
     find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
       "$HOME/.local/share/virtualenvs" "$HOME/.virtualenvs" "$HOME/Library/Application Support/hatch/env/virtual" -maxdepth 3 \
@@ -2457,9 +2753,12 @@ if task_allowed clean.old_versions; then
   }
   vm(){ # tool manager dir series
     local l; l=$(old_versions "$3" "$4"); [ -z "$l" ] && return 0
-    cand clean.old_versions 2 "$(_f 'Older %s versions (%s): %s' "$1" "$2" "$(echo "$l" | sed 's|.*/v*||' | paste -sd ',' - | sed 's/,/, /g')")" "$(kbl "$l")" rm "$l"
+    CL_KEY="ver|$3" cand clean.old_versions 2 "$(_f 'Older %s versions (%s): %s' "$1" "$2" "$(echo "$l" | sed 's|.*/v*||' | paste -sd ',' - | sed 's/,/, /g')")" "$(kbl "$l")" rm "$l"
   }
   vm Node.js nvm   "$HOME/.nvm/versions/node" 1
+  vm Node.js fnm   "$HOME/.local/share/fnm/node-versions" 1
+  vm Node.js fnm   "$HOME/.fnm/node-versions" 1
+  vm Node.js Volta "$HOME/.volta/tools/image/node" 1
   vm Ruby    rbenv "$HOME/.rbenv/versions"    2
   vm Python  pyenv "$HOME/.pyenv/versions"    2
   for m in "$HOME/.local/share/mise/installs" "$HOME/.asdf/installs"; do
@@ -2474,18 +2773,21 @@ if task_allowed clean.playwright; then
       | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | sed "s|^|$1/|"; }
   cover "$HOME/Library/Caches/ms-playwright"; cover "$HOME/Library/Caches/ms-playwright-go"   # browsers in use stay
   L=""; for d in "$HOME/Library/Caches/ms-playwright" "$HOME/.cache/puppeteer"/*; do [ -d "$d" ] && L="$L$(old_builds "$d")"$'\n'; done
+  # Cypress keeps every version it ever ran, about 600 MB each
+  CY="$HOME/Library/Caches/Cypress"; cover "$CY"
+  [ -d "$CY" ] && [ ! -L "$CY" ] && L="$L$(for e in "$CY"/*; do [ -d "$e" ] && [ ! -L "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | sed '$d' | sed "s|^|$CY/|")"$'\n'
   L=$(printf '%s' "$L" | grep .)
-  [ -n "$L" ] && cand clean.playwright 2 "$(_f 'Old Playwright/Puppeteer browsers (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+  [ -n "$L" ] && CL_KEY=browsers cand clean.playwright 2 "$(_f 'Old Playwright, Puppeteer and Cypress builds (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 
 # --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
 L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtime +7 2>/dev/null)
-[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
-[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
 # agy update keeps the replaced binary next to the new one
 L=$(find "$HOME/.local/bin" -maxdepth 1 -type f -name 'agy.*.old' 2>/dev/null)
-[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=agy_old cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
 
 # --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
 dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one per line
@@ -2592,7 +2894,13 @@ for ((i = 0; i < C_N; i++)); do
   visible "$i" || continue
   if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
-if CLEAN; then
+if CLEAN && [ -n "$PICK" ]; then
+  # --pick: the keys a check gave, chosen by a person in another program; that choice is the confirmation
+  section "Cleanup"
+  for ((i = 0; i < C_N; i++)); do case "$PICK" in *",${C_KEY[i]},"*) exec_cand "$i"; PICK=${PICK/,${C_KEY[i]},/,} ;; esac; done
+  GONE=$(printf '%s' "$PICK" | tr ',' '\n' | grep . | paste -sd, - | sed 's/,/, /g')
+  [ -n "$GONE" ] && err 'Not cleaned, no longer there: %s — run macup check again' "$GONE"
+elif CLEAN; then
   section "Cleanup"
   for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ] && exec_cand "$i"; done
   [ "$DID_CLEAN" = 0 ] && info 'Nothing to clean at level %s' "$(lvl_word "$LEVEL")"
@@ -2622,6 +2930,11 @@ if task check.sizes; then
   [ "$s" -ge 102400 ] && info 'iPhone and iPad backups: %s (Finder → your device → Manage Backups)' "$(hum "$s")"
   s=$(kbl "$(ls -d "$HOME/Library/Containers/com.docker.docker/Data/vms"/*/data/Docker.raw 2>/dev/null)")
   [ "$s" -ge 102400 ] && info 'Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)' "$(hum "$s")"
+  # virtual machines are whole disks: only their app knows which one is still needed
+  s=$(kbl "$HOME/.colima"$'\n'"$HOME/.lima"$'\n'"$HOME/.local/share/containers/podman/machine"$'\n'"$HOME/.minikube"$'\n'"$HOME/Parallels"$'\n'"$HOME/Virtual Machines.localized")
+  [ "$s" -ge 102400 ] && info 'Virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware): %s — delete the ones you no longer use in their own app' "$(hum "$s")"
+  # a crashed program can leave a copy of its memory in /cores, gigabytes each, and nothing ever removes them
+  s=$(kb /cores); [ "$s" -ge 102400 ] && warn 'Core dumps in /cores: %s — leftovers of crashed programs; remove them with: sudo rm /cores/core.*' "$(hum "$s")"
   if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then
     task clean.trash || info 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
   elif ! task clean.trash; then
@@ -2758,6 +3071,8 @@ if task check.self_update; then
   ;; esac
 fi
 
+# a run that started no command leaves no empty log next to its report
+[ -s "$RAW" ] || { rm -f "$RAW"; RAW=""; }
 T=$SECONDS; TIME="$((T / 60))m $((T % 60))s"
 echo "$(date '+%Y-%m-%d %H:%M'),$MODE,$FREE_AFTER,$D_TOTAL,${MEMFREE:-},${SWAP:-0},${BCYC:-},${BMAX:-},${#UPDATED[@]},$FREED,${#WARN[@]}" >>"$HISTORY"
 
@@ -2779,17 +3094,26 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
   [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
-  echo
-  _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
+  [ -n "$RAW" ] && { echo; _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo; }
 } >"$SUM"
 cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
 
 [ "$QUIET" = 1 ] && exec >&3 3>&-
 if [ "$JSON" = 1 ]; then
-  printf '{"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
+  # schema grows by adding fields; a change that breaks a reader raises the number
+  json_items(){ local i; printf '['; for ((i = 0; i < IT_N; i++)); do [ $i = 0 ] || printf ','
+    printf '{"section":"%s","kind":"%s","text":"%s","details":%s}' "$(jstr "${IT_SEC[i]}")" "${IT_KIND[i]}" "$(jstr "${IT_MSG[i]}")" "$(jlines "$(awk -F'\t' -v i="$i" '$1 == i { sub(/^[^\t]*\t/, ""); print }' "$BODY.det" 2>/dev/null)")"; done; printf ']'; }
+  json_cands(){ local i first=1 lv inc opt; printf '['
+    [ "$DRY" = 1 ] && for ((i = 0; i < ${C_N:-0}; i++)); do
+      visible "$i" || continue; [ $first = 1 ] || printf ','; first=0
+      case "${C_LVL[i]}" in 1) lv=safe ;; 2) lv=standard ;; *) lv=aggressive ;; esac
+      opt=true; inc=false; [ "${C_AUTO[i]}" = 1 ] && { opt=false; [ "${C_LVL[i]}" -le "$LEVEL" ] && inc=true; }
+      printf '{"key":"%s","task":"%s","level":"%s","kb":%s,"opt_in":%s,"in_clean":%s,"text":"%s"}' "${C_KEY[i]}" "${C_TASK[i]}" "$lv" "${C_KB[i]:-0}" "$opt" "$inc" "$(jstr "${C_LBL[i]}")"
+    done; printf ']'; }
+  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
     "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
-  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s"}\n' \
-    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")"
+  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")" "$(json_items)" "$(json_cands)"
 else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then

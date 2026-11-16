@@ -2,7 +2,7 @@
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
 
 # Folders whose contents can simply be deleted (the folder itself stays).
-# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f; xcode = Xcode or xcodebuild) | only if this tool exists
+# task | level | label | folder (~ = home) | skipped while this runs (pgrep -f, or a name from busy_pat: xcode, cargo, …) | only if this tool exists
 CACHE_DIRS='clean.derived_data|1|Xcode DerivedData|~/Library/Developer/Xcode/DerivedData|xcode|
 clean.xcode_previews|1|SwiftUI previews|~/Library/Developer/Xcode/UserData/Previews|xcode|
 clean.sim_caches|1|Simulator caches|~/Library/Developer/CoreSimulator/Caches||
@@ -12,11 +12,14 @@ clean.carthage|1|Carthage cache|~/Library/Caches/org.carthage.CarthageKit||
 clean.yarn|1|Yarn cache|~/Library/Caches/Yarn||yarn
 clean.pnpm|1|pnpm metadata cache|~/Library/Caches/pnpm||
 clean.npm|1|node-gyp headers|~/Library/Caches/node-gyp||
+clean.npm|2|npx cache|~/.npm/_npx|npx|
 clean.bun|1|Bun install cache|~/.bun/install/cache||
-clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache||
-clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts||
-clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache||
-clean.cargo|2|Cargo registry sources|~/.cargo/registry/src||
+clean.poetry|1|Poetry cache|~/Library/Caches/pypoetry/cache|poetry|
+clean.poetry|1|Poetry downloads|~/Library/Caches/pypoetry/artifacts|poetry|
+clean.cargo|2|Cargo registry downloads|~/.cargo/registry/cache|cargo|
+clean.cargo|2|Cargo registry sources|~/.cargo/registry/src|cargo|
+clean.cargo|2|Cargo git checkouts|~/.cargo/git/checkouts|cargo|
+clean.cargo|2|Cargo git sources|~/.cargo/git/db|cargo|
 clean.gradle|2|Gradle caches|~/.gradle/caches|GradleDaemon|
 clean.android|2|Android cache|~/.android/cache||'
 
@@ -27,7 +30,8 @@ TOOL_CACHES='clean.npm|1|npm cache|npm|npm|~/.npm/_cacache
 clean.pnpm|1|pnpm store|pnpm|pnpm|@pnpm
 clean.pip|1|pip cache|pip3|pip|~/Library/Caches/pip
 clean.uv|1|uv cache|uv|uv|@uv
-clean.go|1|Go build cache|go|go|@go'
+clean.go|1|Go build cache|go|go|@go
+clean.go_mod|2|Go module cache|go|gomod|@gomod'
 
 # Electron apps: only these cache subfolders (also in Default/ and Partitions/*), never User/ (settings) or Backups/ (unsaved files).
 # folder in ~/Library/Application Support | app name (skipped while it runs, as is anything started with that folder as --user-data-dir)
@@ -57,7 +61,7 @@ Brave|Brave Browser|BraveSoftware
 Opera|Opera|com.operasoftware.Opera
 Vivaldi|Vivaldi|Vivaldi'
 
-tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
+tool_dir(){ case "$1" in @pnpm) pnpm store path 2>/dev/null ;; @uv) uv cache dir 2>/dev/null ;; @go) go env GOCACHE 2>/dev/null ;; @gomod) go env GOMODCACHE 2>/dev/null ;; *) expand "$1" ;; esac; }
 
 if WANT_CLN; then
 while IFS='|' read -r id lv label dir proc tool; do
@@ -78,7 +82,7 @@ cover "$HOME/.npm"
 DN="$HOME/Library/Caches/deno"
 if [ -d "$DN" ] && [ ! -L "$DN" ]; then
   L=$(find "$DN" -mindepth 1 -maxdepth 1 ! -name location_data 2>/dev/null); s=$(kbl "$L")
-  [ "$s" -ge 5120 ] && cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L"
+  [ "$s" -ge 5120 ] && CL_KEY=deno cand clean.deno 1 "$(_ 'Deno cache')" "$s" rm "$L" "$(busy_pat deno)"
   cover "$DN/location_data"
 fi
 for ds in "$DEV/Xcode/"*DeviceSupport; do
@@ -142,34 +146,75 @@ if task_allowed clean.brew && have brew; then
   cand clean.brew 1 "$(_ 'Homebrew old versions & downloads')" "$( [ -n "$FR" ] && tokb "$FR" || echo 0)" cmd brew
 fi
 if task_allowed clean.logs; then
-  OLDLOGS=$(find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null)
+  # npm keeps a log per failed command, a Gradle daemon one per start: nobody reads them a month later
+  OLDLOGS=$( { find "$HOME/Library/Logs" -type f -mtime +30 -not -path "$LOGDIR/*" 2>/dev/null
+               find "$HOME/.npm/_logs" "$HOME/.gradle/daemon" -type f -name '*.log' -mtime +30 2>/dev/null; } )
   if [ -n "$OLDLOGS" ]; then
     s=$(printf '%s\n' "$OLDLOGS" | tr '\n' '\0' | xargs -0 du -sk 2>/dev/null | awk '{s+=$1} END{print s+0}')
-    [ "${s:-0}" -ge 1024 ] && cand clean.logs 1 "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s" rm "$OLDLOGS"
+    [ "${s:-0}" -ge 1024 ] && CL_KEY=logs cand clean.logs 1 "$(_f 'Old logs & crash reports (%s files)' "$(cnt "$OLDLOGS")")" "$s" rm "$OLDLOGS"
   fi
 fi
 cand clean.quicklook 1 "$(_ 'Quick Look cache')" 0 cmd quicklook
-if task clean.reports && [ "$DRY" = 0 ]; then find "$LOGDIR" -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null; fi
+# macup's own reports are tidied on every run, before this one starts (tidy_own)
 
-if task_allowed clean.stale_node_modules; then
-  step 'Looking for stale node_modules'
-  STALE=""
+# --- build folders in projects nobody touched for stale_project_days, only when you pick or enable them.
+# A folder counts only next to the file that makes it again (artifact_ok), never when git tracks files in it (a committed Pods),
+# and never when it was built recently itself: someone still runs that project.
+if task_allowed clean.stale_node_modules || task_allowed clean.stale_artifacts; then
+  step 'Looking for stale build folders'
+  STALE=""; STALE_ART=""
+  NAMEX=$(for n in $ARTIFACT_NAMES; do printf -- '-o -name %s ' "$n"; done)
   while IFS= read -r root; do
     [ -z "$root" ] && continue
-    while IFS= read -r nm; do
-      [ -z "$nm" ] && continue
-      case "${nm#"$root"}" in */.*|*/lib/node_modules) continue ;; esac   # hidden folders, global npm installs
-      proj=$(dirname "$nm")
-      recent=$(find "$proj" -maxdepth 3 \( -name node_modules -o -name .git \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
+    # shellcheck disable=SC2086 # NAMEX is a list of find arguments
+    ARTS=$(find "$root" -maxdepth 5 -type d \( -name .git $NAMEX \) -prune -print 2>/dev/null | grep -v '/\.git$')
+    while IFS= read -r a; do
+      [ -z "$a" ] && continue
+      rel=${a#"$root"}
+      case "${rel%/*}" in */.*) continue ;; esac   # inside a hidden folder
+      case "$rel" in */lib/node_modules) continue ;; esac   # global npm installs
+      artifact_ok "$a" || continue
+      recent=$(find "${a%/*}" -maxdepth 3 \( -name node_modules -o -name .git -o -path "$a" \) -prune -o -type f -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)
       [ -n "$recent" ] && continue
-      STALE="$STALE$nm"$'\n'
+      [ -n "$(find "$a" -maxdepth 2 -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)" ] && continue
+      if [ "${a##*/}" = node_modules ]; then STALE="$STALE$a"$'\n'
+      else
+        # anything but "not a git repository" keeps the folder: tracked files, or a repository git refuses to read
+        have git || continue
+        [ -n "$(git -C "$a" ls-files . 2>&1 | grep -v 'not a git repository' | head -1)" ] && continue
+        STALE_ART="$STALE_ART$a"$'\n'
+      fi
     done <<EOF2
-$(find "$root" -maxdepth 5 -type d -name node_modules -prune 2>/dev/null)
+$ARTS
 EOF2
   done <<EOF2
 $(project_roots)
 EOF2
-  [ -n "$STALE" ] && cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
+  [ -n "$STALE" ] && CL_KEY=stale_nm cand clean.stale_node_modules 2 "$(_f 'Stale node_modules (%s projects untouched for %s days; npm install brings them back)' "$(cnt "$STALE")" "$STALE_DAYS")" "$(kbl "$STALE")" rm "$STALE"
+  if [ -n "$STALE_ART" ]; then
+    AL=$(printf '%s' "$STALE_ART" | head -4 | while IFS= read -r a; do tildify "$a"; done | paste -sd, - | sed 's/,/, /g'); AN=$(cnt "$STALE_ART")
+    [ "$AN" -gt 4 ] && AL="$AL +$((AN - 4))"
+    CL_KEY=stale_art cand clean.stale_artifacts 2 "$(_f 'Stale build folders (%s, projects untouched for %s days; the next build makes them again): %s' "$AN" "$STALE_DAYS" "$AL")" "$(kbl "$STALE_ART")" rm "$STALE_ART"
+  fi
+fi
+# --- provisioning profiles past their date sign nothing; Xcode downloads the ones it manages again
+if task_allowed clean.profiles && have python3; then
+  L=$(python3 - "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" <<'PY' 2>/dev/null
+import datetime, os, plistlib, sys
+now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+for d in sys.argv[1:]:
+    if not os.path.isdir(d) or os.path.islink(d): continue
+    for n in sorted(os.listdir(d)):
+        p = os.path.join(d, n)
+        if not n.endswith((".mobileprovision", ".provisionprofile")) or os.path.islink(p) or not os.path.isfile(p): continue
+        try:
+            raw = open(p, "rb").read(); a = raw.index(b"<?xml"); b = raw.index(b"</plist>", a) + 8
+            exp = plistlib.loads(raw[a:b]).get("ExpirationDate")
+        except Exception: continue   # unreadable: not ours to judge
+        if isinstance(exp, datetime.datetime) and exp.replace(tzinfo=None) < now: print(p)
+PY
+)
+  [ -n "$L" ] && CL_KEY=profiles cand clean.profiles 1 "$(_f 'Expired provisioning profiles (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 # without Full Disk Access the terminal cannot even list the Trash: say so instead of a silent 0
 if task_allowed clean.trash; then
@@ -192,12 +237,22 @@ for d in "$HOME/Library/Caches/JetBrains"/*; do
 done
 # `mvn install` puts your own builds (often SNAPSHOTs) here; those exist nowhere else
 if [ -n "$(find "$HOME/.m2/repository" -name maven-metadata-local.xml -print 2>/dev/null | head -1)" ]; then
-  CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository"
-else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository"; fi
+  CL_MANUAL=1 clean_dir clean.maven 'Maven repository (has your own mvn install builds)' "$HOME/.m2/repository" maven
+else clean_dir clean.maven 'Maven repository' "$HOME/.m2/repository" maven; fi
 CL_LVL=""
-if task_allowed clean.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
-  BCR=$(docker system df 2>/dev/null | awk '/^Build Cache/{print $6}')
-  cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never containers or volumes)')" "$(tokb "${BCR:-0B}")" cmd docker
+# --- Docker. Volumes hold databases and are never touched. Images and stopped containers only when you pick them.
+if have docker && { task_allowed clean.docker || task_allowed clean.docker_images || task_allowed clean.docker_containers; } && tl 20 docker info >/dev/null 2>&1; then
+  DDF=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null)
+  ddf(){ tokb10 "$(printf '%s\n' "$DDF" | awk -F'|' -v t="$1" '$1==t{print $2}' | awk '{print $1}')"; }   # "1.2GB (50%)" → KB
+  cand clean.docker 2 "$(_ 'Docker build cache and dangling images (never volumes)')" "$(ddf 'Build Cache')" cmd docker
+  s=$(ddf Images); [ "${s:-0}" -ge 1024 ] && cand clean.docker_images 2 "$(_ 'Docker images no container uses (docker pulls or builds them again)')" "$s" cmd dockerimg
+  n=$(docker ps -aq -f status=exited -f status=created -f status=dead 2>/dev/null | grep -c .)
+  [ "$n" -gt 0 ] && cand clean.docker_containers 3 "$(_f 'Stopped Docker containers (%s): files saved inside them are lost, volumes stay' "$n")" "$(ddf Containers)" cmd dockerct
+fi
+# --- Homebrew packages that came only as dependencies of something already removed
+if task_allowed clean.brew_autoremove && have brew; then
+  AR=$(tl 60 brew autoremove --dry-run 2>/dev/null | grep -v '^==>' | grep . | paste -sd, - | sed 's/,/, /g')
+  [ -n "$AR" ] && cand clean.brew_autoremove 2 "$(_f 'Homebrew packages nothing needs any more: %s' "$AR")" 0 cmd brewauto
 fi
 
 # --- older patch versions of Node, Ruby, Python. The newest of each line stays, and so does
@@ -205,6 +260,9 @@ fi
 if task_allowed clean.old_versions; then
   PINSRC=$( { cat "$HOME/.rbenv/version" "$HOME/.pyenv/version" "$HOME/.tool-versions" "$HOME/.config/mise/config.toml" 2>/dev/null; echo
     find "$HOME/.nvm/alias" -type f 2>/dev/null | tr '\n' '\0' | xargs -0 cat 2>/dev/null   # default → lts/iron → x.y.z
+    # Volta's default Node; fnm's aliases and the version each open shell uses are links to the version folder
+    cat "$HOME/.volta/tools/user/platform.json" 2>/dev/null; echo
+    for a in "$HOME/.local/share/fnm/aliases"/* "$HOME/.fnm/aliases"/* "$HOME/.local/state/fnm_multishells"/*; do [ -L "$a" ] && readlink "$a"; done
     # pipx, uv tools, poetry, pipenv, virtualenvwrapper, hatch
     find "$HOME/.local/pipx/venvs" "$HOME/.local/share/uv/tools" "$HOME/Library/Caches/pypoetry/virtualenvs" \
       "$HOME/.local/share/virtualenvs" "$HOME/.virtualenvs" "$HOME/Library/Application Support/hatch/env/virtual" -maxdepth 3 \
@@ -237,9 +295,12 @@ if task_allowed clean.old_versions; then
   }
   vm(){ # tool manager dir series
     local l; l=$(old_versions "$3" "$4"); [ -z "$l" ] && return 0
-    cand clean.old_versions 2 "$(_f 'Older %s versions (%s): %s' "$1" "$2" "$(echo "$l" | sed 's|.*/v*||' | paste -sd ',' - | sed 's/,/, /g')")" "$(kbl "$l")" rm "$l"
+    CL_KEY="ver|$3" cand clean.old_versions 2 "$(_f 'Older %s versions (%s): %s' "$1" "$2" "$(echo "$l" | sed 's|.*/v*||' | paste -sd ',' - | sed 's/,/, /g')")" "$(kbl "$l")" rm "$l"
   }
   vm Node.js nvm   "$HOME/.nvm/versions/node" 1
+  vm Node.js fnm   "$HOME/.local/share/fnm/node-versions" 1
+  vm Node.js fnm   "$HOME/.fnm/node-versions" 1
+  vm Node.js Volta "$HOME/.volta/tools/image/node" 1
   vm Ruby    rbenv "$HOME/.rbenv/versions"    2
   vm Python  pyenv "$HOME/.pyenv/versions"    2
   for m in "$HOME/.local/share/mise/installs" "$HOME/.asdf/installs"; do
@@ -254,18 +315,21 @@ if task_allowed clean.playwright; then
       | sort -k1,1 -k2,2V | awk '{if(p==$1) print last; p=$1; last=$3}' | sed "s|^|$1/|"; }
   cover "$HOME/Library/Caches/ms-playwright"; cover "$HOME/Library/Caches/ms-playwright-go"   # browsers in use stay
   L=""; for d in "$HOME/Library/Caches/ms-playwright" "$HOME/.cache/puppeteer"/*; do [ -d "$d" ] && L="$L$(old_builds "$d")"$'\n'; done
+  # Cypress keeps every version it ever ran, about 600 MB each
+  CY="$HOME/Library/Caches/Cypress"; cover "$CY"
+  [ -d "$CY" ] && [ ! -L "$CY" ] && L="$L$(for e in "$CY"/*; do [ -d "$e" ] && [ ! -L "$e" ] && printf '%s\n' "${e##*/}"; done | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | sed '$d' | sed "s|^|$CY/|")"$'\n'
   L=$(printf '%s' "$L" | grep .)
-  [ -n "$L" ] && cand clean.playwright 2 "$(_f 'Old Playwright/Puppeteer browsers (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+  [ -n "$L" ] && CL_KEY=browsers cand clean.playwright 2 "$(_f 'Old Playwright, Puppeteer and Cypress builds (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 
 # --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
 L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtime +7 2>/dev/null)
-[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
-[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
 # agy update keeps the replaced binary next to the new one
 L=$(find "$HOME/.local/bin" -maxdepth 1 -type f -name 'agy.*.old' 2>/dev/null)
-[ -n "$L" ] && cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=agy_old cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
 
 # --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
 dirs_in(){ # base folder, list separated by | or ; → the ones that exist, one per line
@@ -372,7 +436,13 @@ for ((i = 0; i < C_N; i++)); do
   visible "$i" || continue
   if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
-if CLEAN; then
+if CLEAN && [ -n "$PICK" ]; then
+  # --pick: the keys a check gave, chosen by a person in another program; that choice is the confirmation
+  section "Cleanup"
+  for ((i = 0; i < C_N; i++)); do case "$PICK" in *",${C_KEY[i]},"*) exec_cand "$i"; PICK=${PICK/,${C_KEY[i]},/,} ;; esac; done
+  GONE=$(printf '%s' "$PICK" | tr ',' '\n' | grep . | paste -sd, - | sed 's/,/, /g')
+  [ -n "$GONE" ] && err 'Not cleaned, no longer there: %s — run macup check again' "$GONE"
+elif CLEAN; then
   section "Cleanup"
   for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ] && exec_cand "$i"; done
   [ "$DID_CLEAN" = 0 ] && info 'Nothing to clean at level %s' "$(lvl_word "$LEVEL")"

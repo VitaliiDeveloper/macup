@@ -28,10 +28,13 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
                      (macup --deep без команди — глибока перевірка)
   --skip a,b         Пропустити задачі на цей запуск, напр. --skip update.brew,clean.*
   --only a,b         Виконати лише ці задачі, напр. --only check.*
+  --enable a,b       Увімкнути вимкнені типово задачі на цей запуск, напр. --enable clean.trash
   --lang en|uk|ru    Мова для цього запуску
   --no-color         Без кольорів
   --quiet            Лише підсумок (усе інше — у звіті)
-  --json             Підсумок у JSON, для скриптів
+  --json             Увесь результат одним JSON-об'єктом, для скриптів та інших програм
+                     (також: macup tasks --json, macup history --json)
+  --pick КЛЮЧ,…      Почистити саме ці пункти з macup check --json (поле key), без питань
 
 Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
 Без команди (all, update, clean) чи твого вибору після перевірки нічого не змінюється.
@@ -67,10 +70,13 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
                      (macup --deep без команды — глубокая проверка)
   --skip a,b         Пропустить задачи в этом запуске, напр. --skip update.brew,clean.*
   --only a,b         Выполнить только эти задачи, напр. --only check.*
+  --enable a,b       Включить выключенные по умолчанию задачи на этот запуск, напр. --enable clean.trash
   --lang en|uk|ru    Язык для этого запуска
   --no-color         Без цветов
   --quiet            Только итог (всё остальное — в отчёте)
-  --json             Итог в JSON, для скриптов
+  --json             Весь результат одним JSON-объектом, для скриптов и других программ
+                     (также: macup tasks --json, macup history --json)
+  --pick КЛЮЧ,…      Почистить именно эти пункты из macup check --json (поле key), без вопросов
 
 Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
 Без команды (all, update, clean) или вашего выбора после проверки ничего не меняется.
@@ -106,10 +112,13 @@ Options (combine with any run command)
                      (macup --deep on its own is a deep check)
   --skip a,b         Skip task ids for this run, e.g. --skip update.brew,clean.*
   --only a,b         Run only these task ids, e.g. --only check.*
+  --enable a,b       Turn on opt-in tasks for this run, e.g. --enable clean.trash
   --lang en|uk|ru    Language for this run
   --no-color         Plain output
   --quiet            Only the summary (the rest is in the report)
-  --json             The summary as JSON, for scripts
+  --json             The whole result as one JSON object, for scripts and other programs
+                     (also: macup tasks --json, macup history --json)
+  --pick KEY,…       Clean exactly these items of macup check --json (their key), without asking
 
 Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
 Nothing changes without a command (all, update, clean) or your pick after a check.

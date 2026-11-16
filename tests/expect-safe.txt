@@ -26,3 +26,6 @@
 ./Library/Caches/deno/deps/blob
 ./Library/Caches/pypoetry/artifacts/y/blob
 ./Library/Caches/pypoetry/cache/x/blob
+./.gradle/daemon/8.9/daemon-1.out.log
+./.npm/_logs/old-debug-0.log
+./Library/MobileDevice/Provisioning Profiles/expired.mobileprovision

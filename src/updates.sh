@@ -113,7 +113,11 @@ if task update.brew && have brew; then
   else
     if UPD; then
       step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
+      # a cask's installer may ask for the Mac password: the updaters that run next must not find sudo unlocked by it
+      SUDO_PRE=0; sudo -n true 2>/dev/null && SUDO_PRE=1
+      run brew upgrade; BRC=$?
+      [ "$SUDO_PRE" = 0 ] && sudo -k 2>/dev/null
+      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -222,8 +226,20 @@ home_bin deno && simple_update update.deno 'Deno' deno upgrade
 have cargo && have cargo-install-update && simple_update update.cargo 'cargo programs' cargo install-update -a
 have mise && simple_update update.mise 'mise tools'   mise upgrade
 have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
-have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions
-have cursor && simple_update update.editor_ext 'Cursor extensions'  cursor --update-extensions
+have code     && simple_update update.editor_ext 'VS Code extensions'  code --update-extensions
+have cursor   && simple_update update.editor_ext 'Cursor extensions'   cursor --update-extensions
+have windsurf && simple_update update.editor_ext 'Windsurf extensions' windsurf --update-extensions
+have codium   && simple_update update.editor_ext 'VSCodium extensions' codium --update-extensions
+# gcloud from Google's own installer updates its components itself; a Homebrew cask is brew's
+home_bin gcloud && simple_update update.gcloud 'Google Cloud SDK' gcloud components update --quiet
+# `dotnet tool update --all` exists since .NET 9; asked only when there are global tools
+if have dotnet && task update.dotnet && [ -n "$(ls -A "$HOME/.dotnet/tools" 2>/dev/null)" ]; then
+  DN=$(tl 20 dotnet --version 2>/dev/null); DN=${DN%%.*}
+  case "$DN" in ''|*[!0-9]*) ;; *) [ "$DN" -ge 9 ] && simple_update update.dotnet '.NET global tools' dotnet tool update --global --all ;; esac
+fi
+for cj in "$HOME/.composer/composer.json" "$HOME/.config/composer/composer.json"; do
+  [ -f "$cj" ] && have composer && { simple_update update.composer 'Composer global packages' composer global update --no-interaction; break; }
+done
 # opt-in: updating every gem takes long; the system Ruby's gems belong to macOS and need sudo
 have gem && [ "$(command -v gem)" != /usr/bin/gem ] && simple_update update.gem 'Ruby gems' gem update
 

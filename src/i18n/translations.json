@@ -707,10 +707,6 @@
     "uk": "Кошик",
     "ru": "Корзина"
   },
-  "Looking for stale node_modules": {
-    "uk": "Шукаю старі node_modules",
-    "ru": "Ищу старые node_modules"
-  },
   "Stale node_modules (%s projects untouched for %s days; npm install brings them back)": {
     "uk": "Старі node_modules (%s проєктів без змін %s днів; npm install поверне їх)",
     "ru": "Старые node_modules (%s проектов без изменений %s дней; npm install вернёт их)"
@@ -1067,17 +1063,9 @@
     "uk": "Старі версії й завантаження Homebrew",
     "ru": "Старые версии и загрузки Homebrew"
   },
-  "Your app logs and crash reports older than 30 days": {
-    "uk": "Логи програм і крешрепорти, старші за 30 днів",
-    "ru": "Логи приложений и крэш-репорты старше 30 дней"
-  },
   "Quick Look thumbnail cache": {
     "uk": "Кеш мініатюр Quick Look",
     "ru": "Кэш миниатюр Quick Look"
-  },
-  "macup reports older than keep_reports_days": {
-    "uk": "Звіти macup, старші за keep_reports_days",
-    "ru": "Отчёты macup старше keep_reports_days"
   },
   "node_modules in projects untouched for stale_project_days (opt-in)": {
     "uk": "node_modules у проєктах без змін stale_project_days днів (вмикається вручну)",
@@ -1155,14 +1143,6 @@
     "uk": "Кеш рендеру DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache",
     "ru": "Кэш рендера DaVinci Resolve: %s — Resolve: Playback → Delete Render Cache"
   },
-  "Docker build cache and dangling images (never containers or volumes)": {
-    "uk": "Кеш збірки Docker і непотрібні образи (не контейнери й не томи)",
-    "ru": "Кэш сборки Docker и ненужные образы (не контейнеры и не тома)"
-  },
-  "Docker build cache and dangling images (standard); never containers or volumes": {
-    "uk": "Кеш збірки Docker і непотрібні образи (стандартна); не контейнери й не томи",
-    "ru": "Кэш сборки Docker и ненужные образы (стандартная); не контейнеры и не тома"
-  },
   "Docker: %s": {
     "uk": "Docker: %s",
     "ru": "Docker: %s"
@@ -1203,21 +1183,9 @@
     "uk": "Старі Gradle wrapper",
     "ru": "Старые Gradle wrapper"
   },
-  "Old Playwright and Puppeteer browser builds (standard)": {
-    "uk": "Старі збірки браузерів Playwright і Puppeteer (стандартна)",
-    "ru": "Старые сборки браузеров Playwright и Puppeteer (стандартная)"
-  },
-  "Old Playwright/Puppeteer browsers (%s)": {
-    "uk": "Старі браузери Playwright/Puppeteer (%s)",
-    "ru": "Старые браузеры Playwright/Puppeteer (%s)"
-  },
   "Older %s versions (%s): %s": {
     "uk": "Старіші версії %s (%s): %s",
     "ru": "Более старые версии %s (%s): %s"
-  },
-  "Older patch versions in nvm, rbenv, pyenv, mise, asdf (standard); pinned ones stay": {
-    "uk": "Старіші патч-версії в nvm, rbenv, pyenv, mise, asdf (стандартна); закріплені лишаються",
-    "ru": "Более старые патч-версии в nvm, rbenv, pyenv, mise, asdf (стандартная); закреплённые остаются"
   },
   "Other big folders in ~/Library/Caches (aggressive, only when you pick them)": {
     "uk": "Інші великі папки в ~/Library/Caches (агресивна, лише якщо вибереш)",
@@ -1379,10 +1347,6 @@
     "uk": "Плагіни asdf",
     "ru": "Плагины asdf"
   },
-  "VS Code and Cursor extensions": {
-    "uk": "Розширення VS Code і Cursor",
-    "ru": "Расширения VS Code и Cursor"
-  },
   "Ruby gems (opt-in; never the system Ruby)": {
     "uk": "Ruby-геми (вмикається вручну; системний Ruby не чіпається)",
     "ru": "Ruby-гемы (включается вручную; системный Ruby не трогается)"
@@ -1398,10 +1362,6 @@
   "Deno cache": {
     "uk": "Кеш Deno",
     "ru": "Кэш Deno"
-  },
-  "Cargo registry downloads and sources (standard)": {
-    "uk": "Завантаження й вихідники реєстру Cargo (стандартна)",
-    "ru": "Загрузки и исходники реестра Cargo (стандартная)"
   },
   "JetBrains IDE caches (standard, skipped while open)": {
     "uk": "Кеші IDE JetBrains (стандартна, пропускаються, коли відкриті)",
@@ -1530,5 +1490,189 @@
   "Unknown task in %s: %s (see every id with: macup tasks)": {
     "uk": "Невідома задача в %s: %s (усі id: macup tasks)",
     "ru": "Неизвестная задача в %s: %s (все id: macup tasks)"
+  },
+  ".NET global tools": {
+    "uk": "Глобальні інструменти .NET",
+    "ru": "Глобальные инструменты .NET"
+  },
+  ".NET global tools (needs .NET 9 or later)": {
+    "uk": "Глобальні інструменти .NET (потрібен .NET 9 або новіший)",
+    "ru": "Глобальные инструменты .NET (нужен .NET 9 или новее)"
+  },
+  "Apps that crashed several times in the last 7 days": {
+    "uk": "Програми, що кілька разів аварійно завершились за останні 7 днів",
+    "ru": "Приложения, которые несколько раз аварийно завершились за последние 7 дней"
+  },
+  "Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in)": {
+    "uk": "Папки збірки в проєктах, яких не чіпали stale_project_days днів: Pods, .build, .dart_tool, .next, target, build (лише якщо ввімкнути)",
+    "ru": "Папки сборки в проектах, которые не трогали stale_project_days дней: Pods, .build, .dart_tool, .next, target, build (только если включить)"
+  },
+  "Cargo git checkouts": {
+    "uk": "Git-копії Cargo",
+    "ru": "Git-копии Cargo"
+  },
+  "Cargo git sources": {
+    "uk": "Git-джерела Cargo",
+    "ru": "Git-источники Cargo"
+  },
+  "Cargo registry and git downloads (standard, skipped while cargo runs)": {
+    "uk": "Завантаження Cargo з реєстру та git (standard, пропускається, поки працює cargo)",
+    "ru": "Загрузки Cargo из реестра и git (standard, пропускается, пока работает cargo)"
+  },
+  "Code signing certificates that expire within 30 days": {
+    "uk": "Сертифікати підпису коду, що спливають протягом 30 днів",
+    "ru": "Сертификаты подписи кода, которые истекают в течение 30 дней"
+  },
+  "Composer global packages": {
+    "uk": "Глобальні пакети Composer",
+    "ru": "Глобальные пакеты Composer"
+  },
+  "Core dumps in /cores: %s — leftovers of crashed programs; remove them with: sudo rm /cores/core.*": {
+    "uk": "Дампи пам'яті в /cores: %s — залишки програм, що аварійно завершились; видалити: sudo rm /cores/core.*",
+    "ru": "Дампы памяти в /cores: %s — остатки аварийно завершившихся программ; удалить: sudo rm /cores/core.*"
+  },
+  "Crashed 3 or more times in the last 7 days: %s": {
+    "uk": "Аварійно завершились 3 і більше разів за останні 7 днів: %s",
+    "ru": "Аварийно завершились 3 и более раз за последние 7 дней: %s"
+  },
+  "Docker build cache and dangling images (never volumes)": {
+    "uk": "Кеш збірки Docker і образи без тегів (томи ніколи)",
+    "ru": "Кеш сборки Docker и образы без тегов (тома никогда)"
+  },
+  "Docker build cache and dangling images (standard); never volumes": {
+    "uk": "Кеш збірки Docker і образи без тегів (standard); томи ніколи",
+    "ru": "Кеш сборки Docker и образы без тегов (standard); тома никогда"
+  },
+  "Docker images no container uses (docker pulls or builds them again)": {
+    "uk": "Образи Docker, якими не користується жоден контейнер (docker завантажить або збере їх знову)",
+    "ru": "Образы Docker, которые не использует ни один контейнер (docker скачает или соберёт их заново)"
+  },
+  "Docker images no container uses (only when you pick them)": {
+    "uk": "Образи Docker, якими не користується жоден контейнер (лише якщо вибрати)",
+    "ru": "Образы Docker, которые не использует ни один контейнер (только если выбрать)"
+  },
+  "Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true": {
+    "uk": "Томи Docker, якими не користується жоден контейнер: %s — macup ніколи не видаляє томи; переглянути: docker volume ls -f dangling=true",
+    "ru": "Тома Docker, которые не использует ни один контейнер: %s — macup никогда не удаляет тома; посмотреть: docker volume ls -f dangling=true"
+  },
+  "Expired provisioning profiles": {
+    "uk": "Прострочені provisioning-профілі",
+    "ru": "Просроченные provisioning-профили"
+  },
+  "Expired provisioning profiles (%s)": {
+    "uk": "Прострочені provisioning-профілі (%s)",
+    "ru": "Просроченные provisioning-профили (%s)"
+  },
+  "GitHub CLI: a saved login that no longer works": {
+    "uk": "GitHub CLI: збережений вхід, який більше не працює",
+    "ru": "GitHub CLI: сохранённый вход, который больше не работает"
+  },
+  "GitHub CLI: the saved login no longer works — run: gh auth login": {
+    "uk": "GitHub CLI: збережений вхід більше не працює — виконай: gh auth login",
+    "ru": "GitHub CLI: сохранённый вход больше не работает — выполните: gh auth login"
+  },
+  "Go module cache": {
+    "uk": "Кеш модулів Go",
+    "ru": "Кеш модулей Go"
+  },
+  "Go module cache (standard); go downloads the modules again": {
+    "uk": "Кеш модулів Go (standard); go завантажить модулі знову",
+    "ru": "Кеш модулей Go (standard); go скачает модули заново"
+  },
+  "Google Cloud SDK": {
+    "uk": "Google Cloud SDK",
+    "ru": "Google Cloud SDK"
+  },
+  "Google Cloud SDK components (its own install; a Homebrew install is left to Homebrew)": {
+    "uk": "Компоненти Google Cloud SDK (власне встановлення; встановлене через Homebrew оновлює Homebrew)",
+    "ru": "Компоненты Google Cloud SDK (собственная установка; установленное через Homebrew обновляет Homebrew)"
+  },
+  "Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)": {
+    "uk": "Пакети Homebrew, встановлені лише як залежності, які вже нічому не потрібні (лише якщо вибрати)",
+    "ru": "Пакеты Homebrew, установленные только как зависимости, которые уже ничему не нужны (только если выбрать)"
+  },
+  "Homebrew packages nothing needs any more: %s": {
+    "uk": "Пакети Homebrew, які вже нічому не потрібні: %s",
+    "ru": "Пакеты Homebrew, которые уже ничему не нужны: %s"
+  },
+  "Logs and crash reports older than 30 days, also npm and Gradle daemon logs": {
+    "uk": "Логи та звіти про збої, старші за 30 днів, також логи npm і демона Gradle",
+    "ru": "Логи и отчёты о сбоях старше 30 дней, также логи npm и демона Gradle"
+  },
+  "Looking for stale build folders": {
+    "uk": "Шукаю застарілі папки збірки",
+    "ru": "Ищу устаревшие папки сборки"
+  },
+  "Old Playwright, Puppeteer and Cypress builds (%s)": {
+    "uk": "Старі збірки Playwright, Puppeteer і Cypress (%s)",
+    "ru": "Старые сборки Playwright, Puppeteer и Cypress (%s)"
+  },
+  "Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays": {
+    "uk": "Старі збірки Playwright, Puppeteer і Cypress (standard); найновіша кожної лишається",
+    "ru": "Старые сборки Playwright, Puppeteer и Cypress (standard); самая новая каждой остаётся"
+  },
+  "Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too": {
+    "uk": "Старі звіти macup (keep_reports_days), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються",
+    "ru": "Старые отчёты macup (keep_reports_days), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются"
+  },
+  "Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay": {
+    "uk": "Старіші патч-версії в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закріплені лишаються",
+    "ru": "Более старые патч-версии в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закреплённые остаются"
+  },
+  "PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go": {
+    "uk": "У PATH є папки, яких не існує: %s — рядки, що їх додають (~/.zshrc, ~/.zprofile), можна прибрати",
+    "ru": "В PATH есть папки, которых не существует: %s — строки, которые их добавляют (~/.zshrc, ~/.zprofile), можно убрать"
+  },
+  "Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)": {
+    "uk": "Віддалений вхід (SSH) увімкнено: інші комп'ютери можуть входити на цей Mac (Системні параметри → Загальні → Спільний доступ)",
+    "ru": "Удалённый вход (SSH) включён: другие компьютеры могут входить на этот Mac (Системные настройки → Основные → Общий доступ)"
+  },
+  "Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing)": {
+    "uk": "Спільний екран увімкнено: інші комп'ютери можуть бачити цей Mac і керувати ним (Системні параметри → Загальні → Спільний доступ)",
+    "ru": "Общий экран включён: другие компьютеры могут видеть этот Mac и управлять им (Системные настройки → Основные → Общий доступ)"
+  },
+  "Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts": {
+    "uk": "Сертифікати підпису, що спливають протягом 30 днів: %s — онови їх у Xcode → Settings → Accounts",
+    "ru": "Сертификаты подписи, которые истекают в течение 30 дней: %s — обновите их в Xcode → Settings → Accounts"
+  },
+  "Stale build folders (%s, projects untouched for %s days; the next build makes them again): %s": {
+    "uk": "Застарілі папки збірки (%s, проєкти не чіпали %s днів; наступна збірка створить їх знову): %s",
+    "ru": "Устаревшие папки сборки (%s, проекты не трогали %s дней; следующая сборка создаст их заново): %s"
+  },
+  "Stopped Docker containers (%s): files saved inside them are lost, volumes stay": {
+    "uk": "Зупинені контейнери Docker (%s): файли, збережені всередині них, зникнуть, томи лишаються",
+    "ru": "Остановленные контейнеры Docker (%s): файлы, сохранённые внутри них, пропадут, тома остаются"
+  },
+  "Stopped Docker containers (only when you pick them)": {
+    "uk": "Зупинені контейнери Docker (лише якщо вибрати)",
+    "ru": "Остановленные контейнеры Docker (только если выбрать)"
+  },
+  "VS Code, Cursor, Windsurf and VSCodium extensions": {
+    "uk": "Розширення VS Code, Cursor, Windsurf і VSCodium",
+    "ru": "Расширения VS Code, Cursor, Windsurf и VSCodium"
+  },
+  "VSCodium extensions": {
+    "uk": "Розширення VSCodium",
+    "ru": "Расширения VSCodium"
+  },
+  "Virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware): %s — delete the ones you no longer use in their own app": {
+    "uk": "Віртуальні машини (Colima, Lima, Podman, minikube, Parallels, VMware): %s — видали непотрібні у їхній власній програмі",
+    "ru": "Виртуальные машины (Colima, Lima, Podman, minikube, Parallels, VMware): %s — удалите ненужные в их собственном приложении"
+  },
+  "Windsurf extensions": {
+    "uk": "Розширення Windsurf",
+    "ru": "Расширения Windsurf"
+  },
+  "macup does not need sudo: run it as yourself.": {
+    "uk": "macup не потребує sudo: запусти його від свого імені.",
+    "ru": "macup не нужен sudo: запустите его от своего имени."
+  },
+  "npx cache": {
+    "uk": "Кеш npx",
+    "ru": "Кеш npx"
+  },
+  "Not cleaned, no longer there: %s — run macup check again": {
+    "uk": "Не почищено, цього вже немає: %s — запусти macup check ще раз",
+    "ru": "Не очищено, этого уже нет: %s — запустите macup check ещё раз"
   }
 }

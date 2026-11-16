@@ -13,7 +13,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup clean        Лише чистка (плюс перевірки)
   macup last         Останній звіт
   macup history      Тренди: вільне місце, swap, батарея, звільнене місце
-  macup reports      Відкрити папку зі звітами у Finder
+  macup reports      Скільки звітів і їхній розмір; macup reports clean видаляє їх
   macup tasks        Усі задачі з id і чи вони увімкнені
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
@@ -33,7 +33,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   --no-color         Без кольорів
   --quiet            Лише підсумок (усе інше — у звіті)
   --json             Увесь результат одним JSON-об'єктом, для скриптів та інших програм
-                     (також: macup tasks --json, macup history --json)
+                     (також: macup tasks --json, macup history --json, macup reports --json)
   --pick КЛЮЧ,…      Почистити саме ці пункти з macup check --json (поле key), без питань
 
 Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
@@ -55,7 +55,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup clean        Только очистка (плюс проверки)
   macup last         Последний отчёт
   macup history      Тренды: свободное место, swap, батарея, освобождённое место
-  macup reports      Открыть папку с отчётами в Finder
+  macup reports      Сколько отчётов и их размер; macup reports clean удаляет их
   macup tasks        Все задачи с id и включены ли они
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
@@ -75,7 +75,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   --no-color         Без цветов
   --quiet            Только итог (всё остальное — в отчёте)
   --json             Весь результат одним JSON-объектом, для скриптов и других программ
-                     (также: macup tasks --json, macup history --json)
+                     (также: macup tasks --json, macup history --json, macup reports --json)
   --pick КЛЮЧ,…      Почистить именно эти пункты из macup check --json (поле key), без вопросов
 
 Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
@@ -97,7 +97,7 @@ Commands
   macup clean        Cleanup only (plus checks)
   macup last         Show the latest report
   macup history      Trends across runs: free space, swap, battery, freed space
-  macup reports      Open the reports folder in Finder
+  macup reports      How many reports and their size; macup reports clean removes them
   macup tasks        List every task id and whether it's on
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
@@ -117,7 +117,7 @@ Options (combine with any run command)
   --no-color         Plain output
   --quiet            Only the summary (the rest is in the report)
   --json             The whole result as one JSON object, for scripts and other programs
-                     (also: macup tasks --json, macup history --json)
+                     (also: macup tasks --json, macup history --json, macup reports --json)
   --pick KEY,…       Clean exactly these items of macup check --json (their key), without asking
 
 Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.

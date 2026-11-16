@@ -103,7 +103,7 @@ clean.bun|on|Bun install cache
 clean.deno|on|Deno cache; localStorage and Deno KV data stay
 clean.logs|on|Logs and crash reports older than 30 days, also npm and Gradle daemon logs
 clean.quicklook|on|Quick Look thumbnail cache
-clean.reports|on|Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too
+clean.reports|on|Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too
 clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
 clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
 clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
@@ -145,6 +145,7 @@ load_conf(){
   CLI_ONLY=$(echo "$CLI_ONLY" | tr -d ' ')
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
   KEEP_DAYS=$(num "$(conf keep_reports_days 30)" 30)
+  KEEP_RUNS=$(num "$(conf keep_reports 20)" 20)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
   SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
   STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))

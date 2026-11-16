@@ -231,9 +231,9 @@
     "uk": "Набери  macup  для меню або  macup help  для всіх команд.",
     "ru": "Наберите  macup  для меню или  macup help  для всех команд."
   },
-  "Interrupted. Log: %s": {
-    "uk": "Перервано. Лог: %s",
-    "ru": "Прервано. Лог: %s"
+  "Interrupted. Report: %s": {
+    "uk": "Перервано. Звіт: %s",
+    "ru": "Прервано. Отчёт: %s"
   },
   "System": {
     "uk": "Система",
@@ -395,9 +395,9 @@
     "uk": "Маркетплейси плагінів оновлено",
     "ru": "Маркетплейсы плагинов обновлены"
   },
-  "Plugin marketplaces: refresh failed (see log)": {
-    "uk": "Маркетплейси плагінів: помилка оновлення (див. лог)",
-    "ru": "Маркетплейсы плагинов: ошибка обновления (см. лог)"
+  "Plugin marketplaces: refresh failed (see the report)": {
+    "uk": "Маркетплейси плагінів: помилка оновлення (див. звіт)",
+    "ru": "Маркетплейсы плагинов: ошибка обновления (см. отчёт)"
   },
   "Plugin %s": {
     "uk": "Плагін %s",
@@ -435,9 +435,9 @@
     "uk": "%s: пропущено, node немає в PATH — запусти: %s",
     "ru": "%s: пропущено, node нет в PATH — запустите: %s"
   },
-  "%s: update failed (see log)": {
-    "uk": "%s: не вдалося оновити (див. лог)",
-    "ru": "%s: не удалось обновить (см. лог)"
+  "%s: update failed (see the report)": {
+    "uk": "%s: не вдалося оновити (див. звіт)",
+    "ru": "%s: не удалось обновить (см. отчёт)"
   },
   "Agent skills": {
     "uk": "Скіли агентів",
@@ -451,9 +451,9 @@
     "uk": "скіл %s",
     "ru": "скилл %s"
   },
-  "Agent skills: update failed (see log)": {
-    "uk": "Скіли агентів: не вдалося оновити (див. лог)",
-    "ru": "Скиллы агентов: не удалось обновить (см. лог)"
+  "Agent skills: update failed (see the report)": {
+    "uk": "Скіли агентів: не вдалося оновити (див. звіт)",
+    "ru": "Скиллы агентов: не удалось обновить (см. отчёт)"
   },
   "Homebrew: up to date": {
     "uk": "Homebrew: усе актуальне",
@@ -467,9 +467,9 @@
     "uk": "Homebrew: оновлено — формули: %s, програми: %s",
     "ru": "Homebrew: обновлено — формулы: %s, приложения: %s"
   },
-  "Homebrew: upgraded with errors (see log)": {
-    "uk": "Homebrew: оновлено з помилками (див. лог)",
-    "ru": "Homebrew: обновлено с ошибками (см. лог)"
+  "Homebrew: upgraded with errors (see the report)": {
+    "uk": "Homebrew: оновлено з помилками (див. звіт)",
+    "ru": "Homebrew: обновлено с ошибками (см. отчёт)"
   },
   "Homebrew: formulae: %s, casks: %s": {
     "uk": "Homebrew: формули: %s, програми: %s",
@@ -883,10 +883,6 @@
     "uk": "Вийшов macup %s: %s",
     "ru": "Вышел macup %s: %s"
   },
-  "Command log: %s": {
-    "uk": "Лог команд: %s",
-    "ru": "Лог команд: %s"
-  },
   "Report: %s · %s": {
     "uk": "Звіт: %s · %s",
     "ru": "Отчёт: %s · %s"
@@ -1279,9 +1275,9 @@
     "uk": "Симулятори без використання %s+ днів (%s): %s — додати знову: Xcode → Devices and Simulators",
     "ru": "Симуляторы без использования %s+ дней (%s): %s — добавить снова: Xcode → Devices and Simulators"
   },
-  "%s: failed (see log)": {
-    "uk": "%s: не вдалося (див. лог)",
-    "ru": "%s: не удалось (см. лог)"
+  "%s: failed (see the report)": {
+    "uk": "%s: не вдалося (див. звіт)",
+    "ru": "%s: не удалось (см. отчёт)"
   },
   "Grok CLI (grok update)": {
     "uk": "Grok CLI (grok update)",
@@ -1415,9 +1411,9 @@
     "uk": "macup уже працює (pid %s). Якщо ні, видали %s",
     "ru": "macup уже запущен (pid %s). Если нет, удалите %s"
   },
-  "%s: nothing removed, the path is outside what macup may delete (see log)": {
-    "uk": "%s: нічого не видалено, шлях поза тим, що macup може видаляти (див. лог)",
-    "ru": "%s: ничего не удалено, путь вне того, что macup может удалять (см. лог)"
+  "%s: nothing removed, the path is outside what macup may delete (see the report)": {
+    "uk": "%s: нічого не видалено, шлях поза тим, що macup може видаляти (див. звіт)",
+    "ru": "%s: ничего не удалено, путь вне того, что macup может удалять (см. отчёт)"
   },
   "Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)": {
     "uk": "Кошик: немає доступу — дай терміналу повний доступ до диска (System Settings → Privacy & Security)",
@@ -1611,9 +1607,9 @@
     "uk": "Старі збірки Playwright, Puppeteer і Cypress (standard); найновіша кожної лишається",
     "ru": "Старые сборки Playwright, Puppeteer и Cypress (standard); самая новая каждой остаётся"
   },
-  "Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too": {
-    "uk": "Старі звіти macup (keep_reports_days), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються",
-    "ru": "Старые отчёты macup (keep_reports_days), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются"
+  "Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too": {
+    "uk": "Старі звіти macup (keep_reports_days, keep_reports), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються",
+    "ru": "Старые отчёты macup (keep_reports_days, keep_reports), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются"
   },
   "Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay": {
     "uk": "Старіші патч-версії в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закріплені лишаються",
@@ -1690,5 +1686,49 @@
   "macOS updates: could not check (no connection to Apple's server?)": {
     "uk": "Оновлення macOS: не вдалося перевірити (немає зв'язку із сервером Apple?)",
     "ru": "Обновления macOS: не удалось проверить (нет связи с сервером Apple?)"
+  },
+  "Command output": {
+    "uk": "Вивід команд",
+    "ru": "Вывод команд"
+  },
+  "Interrupted: this report is incomplete.": {
+    "uk": "Перервано: звіт неповний.",
+    "ru": "Прервано: отчёт неполный."
+  },
+  "The command output is at the end of %s": {
+    "uk": "Вивід команд — у кінці %s",
+    "ru": "Вывод команд — в конце %s"
+  },
+  "Reports to remove: %s (%s) in %s": {
+    "uk": "Звітів до видалення: %s (%s) у %s",
+    "ru": "Отчётов к удалению: %s (%s) в %s"
+  },
+  "Remove them? [y/N] ": {
+    "uk": "Видалити їх? [y/N] ",
+    "ru": "Удалить их? [y/N] "
+  },
+  "Reports: %s · %s · %s": {
+    "uk": "Звітів: %s · %s · %s",
+    "ru": "Отчётов: %s · %s · %s"
+  },
+  "Oldest: %s · newest: %s": {
+    "uk": "Найстаріший: %s · найновіший: %s",
+    "ru": "Самый старый: %s · самый новый: %s"
+  },
+  "Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s)": {
+    "uk": "Зберігаються: %s днів, не більше %s запусків (keep_reports_days, keep_reports у %s)",
+    "ru": "Хранятся: %s дней, не больше %s запусков (keep_reports_days, keep_reports в %s)"
+  },
+  "Remove them all: macup reports clean · open the folder: macup reports open": {
+    "uk": "Видалити всі: macup reports clean · відкрити папку: macup reports open",
+    "ru": "Удалить все: macup reports clean · открыть папку: macup reports open"
+  },
+  "Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep)": {
+    "uk": "Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску) — щось заповнює диск (спробуй: macup check --deep)",
+    "ru": "Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки) — что-то заполняет диск (попробуйте: macup check --deep)"
+  },
+  "Free space: %s since %s (%s of it is swap, freed on restart)": {
+    "uk": "Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску)",
+    "ru": "Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки)"
   }
 }

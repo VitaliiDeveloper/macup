@@ -103,7 +103,7 @@ clean.bun|on|Bun install cache
 clean.deno|on|Deno cache; localStorage and Deno KV data stay
 clean.logs|on|Logs and crash reports older than 30 days, also npm and Gradle daemon logs
 clean.quicklook|on|Quick Look thumbnail cache
-clean.reports|on|Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too
+clean.reports|on|Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too
 clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
 clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
 clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
@@ -145,6 +145,7 @@ load_conf(){
   CLI_ONLY=$(echo "$CLI_ONLY" | tr -d ' ')
   DS_DAYS=$(num "$(conf device_support_days 90)" 90)
   KEEP_DAYS=$(num "$(conf keep_reports_days 30)" 30)
+  KEEP_RUNS=$(num "$(conf keep_reports 20)" 20)
   STALE_DAYS=$(num "$(conf stale_project_days 90)" 90)
   SIM_DAYS=$(num "$(conf simulator_days 30)" 30)
   STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
@@ -301,7 +302,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   macup clean        Лише чистка (плюс перевірки)
   macup last         Останній звіт
   macup history      Тренди: вільне місце, swap, батарея, звільнене місце
-  macup reports      Відкрити папку зі звітами у Finder
+  macup reports      Скільки звітів і їхній розмір; macup reports clean видаляє їх
   macup tasks        Усі задачі з id і чи вони увімкнені
   macup config       Створити або відкрити файл налаштувань
   macup lang         Змінити мову (en, uk, ru)
@@ -321,7 +322,7 @@ ${B}macup${N} $MACUP_VERSION — догляд за Маком однією ко�
   --no-color         Без кольорів
   --quiet            Лише підсумок (усе інше — у звіті)
   --json             Увесь результат одним JSON-об'єктом, для скриптів та інших програм
-                     (також: macup tasks --json, macup history --json)
+                     (також: macup tasks --json, macup history --json, macup reports --json)
   --pick КЛЮЧ,…      Почистити саме ці пункти з macup check --json (поле key), без питань
 
 Код виходу: 0 — готово · 3 — крок оновлення чи чистки не вдався · 2 — помилка в аргументах.
@@ -343,7 +344,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   macup clean        Только очистка (плюс проверки)
   macup last         Последний отчёт
   macup history      Тренды: свободное место, swap, батарея, освобождённое место
-  macup reports      Открыть папку с отчётами в Finder
+  macup reports      Сколько отчётов и их размер; macup reports clean удаляет их
   macup tasks        Все задачи с id и включены ли они
   macup config       Создать или открыть файл настроек
   macup lang         Сменить язык (en, uk, ru)
@@ -363,7 +364,7 @@ ${B}macup${N} $MACUP_VERSION — уход за Маком одной коман�
   --no-color         Без цветов
   --quiet            Только итог (всё остальное — в отчёте)
   --json             Весь результат одним JSON-объектом, для скриптов и других программ
-                     (также: macup tasks --json, macup history --json)
+                     (также: macup tasks --json, macup history --json, macup reports --json)
   --pick КЛЮЧ,…      Почистить именно эти пункты из macup check --json (поле key), без вопросов
 
 Код выхода: 0 — готово · 3 — шаг обновления или очистки не удался · 2 — ошибка в аргументах.
@@ -385,7 +386,7 @@ Commands
   macup clean        Cleanup only (plus checks)
   macup last         Show the latest report
   macup history      Trends across runs: free space, swap, battery, freed space
-  macup reports      Open the reports folder in Finder
+  macup reports      How many reports and their size; macup reports clean removes them
   macup tasks        List every task id and whether it's on
   macup config       Create or open your config file
   macup lang         Change language (en, uk, ru)
@@ -405,7 +406,7 @@ Options (combine with any run command)
   --no-color         Plain output
   --quiet            Only the summary (the rest is in the report)
   --json             The whole result as one JSON object, for scripts and other programs
-                     (also: macup tasks --json, macup history --json)
+                     (also: macup tasks --json, macup history --json, macup reports --json)
   --pick KEY,…       Clean exactly these items of macup check --json (their key), without asking
 
 Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
@@ -488,8 +489,9 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
-# Keep macup reports for this many days (never more than the last 60 runs)
+# Keep macup reports for this many days, and at most this many runs (one file per run; remove them all: macup reports clean)
 keep_reports_days = 30
+keep_reports = 20
 
 # Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
 step_timeout_minutes = 60
@@ -517,7 +519,50 @@ choose_lang(){ # [code]
 
 show_last(){
   local f; f=$(ls -t "$LOGDIR"/macup_*.md 2>/dev/null | head -1)
-  if [ -n "$f" ]; then cat "$f"; else _ 'No reports yet. Run: macup check'; echo; fi
+  [ -n "$f" ] || { _ 'No reports yet. Run: macup check'; echo; return; }
+  # the command output can be thousands of lines of brew: it stays in the file
+  awk -v more="$(_f 'The command output is at the end of %s' "$(tildify "$f")")" '{ a[NR] = $0 }
+    END { n = NR; for (i = 1; i <= NR; i++) if (a[i] ~ /^## / && a[i+2] == "~~~~") { n = i - 1; cut = 1; break }
+      for (i = 1; i <= n; i++) print a[i]; if (cut) printf "%s\n", more }' "$f"
+}
+
+# macup's reports: one file per run in $LOGDIR (macup_<date>.md; .log files are left by versions before 2.9.0)
+report_mode(){ sed -n '3s/^[^:]*: \([a-z+]*\) · macup .*/\1/p' "$1" 2>/dev/null; }
+report_date(){ local b=${1##*/macup_}; b=${b%.*}; printf '%s %s:%s' "${b%%_*}" "$(echo "${b#*_}" | cut -d- -f1)" "$(echo "${b#*_}" | cut -d- -f2)"; }
+reports(){ # [clean|open]
+  local mds n kb f m ans first=1
+  mds=$(ls "$LOGDIR"/macup_*.md 2>/dev/null); n=$(cnt "$mds")
+  kb=$(find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -exec du -k {} + 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  case "$1" in
+    "") ;;
+    open)  mkdir -p "$LOGDIR"; open "$LOGDIR"; return 0 ;;
+    clean) [ "$kb" -gt 0 ] || { _ 'Nothing to remove.'; echo; return 0; }
+           _f 'Reports to remove: %s (%s) in %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+           if [ "$YES" != 1 ]; then
+             ans=""; { : </dev/tty; } 2>/dev/null && ans=$(ask "$(_ 'Remove them? [y/N] ')")
+             case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return 0 ;; esac
+           fi
+           find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -delete 2>/dev/null
+           _ 'Removed.'; echo; return 0 ;;
+    *)     echo "macup reports [clean|open] [--yes] [--json]"; return 2 ;;
+  esac
+  if [ "$JSON" = 1 ]; then
+    printf '{"schema":1,"folder":"%s","count":%s,"kb":%s,"reports":[' "$(jstr "$LOGDIR")" "$n" "$kb"
+    [ -n "$mds" ] && while IFS= read -r f; do
+      [ $first = 1 ] || printf ','; first=0
+      m=$(report_mode "$f"); [ -n "$m" ] && m="\"$m\""
+      printf '{"file":"%s","date":"%s","mode":%s,"kb":%s}' "$(jstr "$f")" "$(report_date "$f")" "${m:-null}" \
+        "$(du -k "$f" "${f%.md}.log" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+    done <<EOF
+$mds
+EOF
+    printf ']}\n'; return 0
+  fi
+  [ "$n" -gt 0 ] || { _ 'No reports yet. Run: macup check'; echo; return 0; }
+  _f 'Reports: %s · %s · %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+  _f 'Oldest: %s · newest: %s' "$(report_date "$(echo "$mds" | head -1)")" "$(report_date "$(echo "$mds" | tail -1)")"; echo
+  _f 'Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s)' "$(num "$(conf keep_reports_days 30)" 30)" "$(num "$(conf keep_reports 20)" 20)" "$(tildify "$CONF")"; echo
+  _ 'Remove them all: macup reports clean · open the folder: macup reports open'; echo
 }
 
 show_history(){
@@ -783,7 +828,7 @@ macup was installed with Homebrew. Update it with: brew upgrade macup || macup �
 Nothing removed. || Нічого не видалено.
 Unknown command: %s || Невідома команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Набери  macup  для меню або  macup help  для всіх команд.
-Interrupted. Log: %s || Перервано. Лог: %s
+Interrupted. Report: %s || Перервано. Звіт: %s
 System || Система
 macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · працює %s
 macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · працює %s — варто перезавантажити (%s днів без перезавантаження)
@@ -824,7 +869,7 @@ Update status (check only, nothing installed) || Стан оновлень (ли
 %s: %s is on npm (fine if you're on the stable channel) || %s: на npm є %s (це нормально, якщо в тебе канал stable)
 Plugin marketplaces || Маркетплейси плагінів
 Plugin marketplaces refreshed || Маркетплейси плагінів оновлено
-Plugin marketplaces: refresh failed (see log) || Маркетплейси плагінів: помилка оновлення (див. лог)
+Plugin marketplaces: refresh failed (see the report) || Маркетплейси плагінів: помилка оновлення (див. звіт)
 Plugin %s || Плагін %s
 Plugin %s: %s → %s || Плагін %s: %s → %s
 plugin %s %s → %s || плагін %s %s → %s
@@ -834,15 +879,15 @@ npm globals: up to date || npm (глобальні): усе актуальне
 npm globals: %s outdated || npm (глобальні): застаріло %s
 %s: skipped, node is not on PATH || %s: пропущено, node немає в PATH
 %s: skipped, node is not on PATH — run: %s || %s: пропущено, node немає в PATH — запусти: %s
-%s: update failed (see log) || %s: не вдалося оновити (див. лог)
+%s: update failed (see the report) || %s: не вдалося оновити (див. звіт)
 Agent skills || Скіли агентів
 Agent skills: %s installed, %s updated || Скіли агентів: встановлено %s, оновлено %s
 skill %s || скіл %s
-Agent skills: update failed (see log) || Скіли агентів: не вдалося оновити (див. лог)
+Agent skills: update failed (see the report) || Скіли агентів: не вдалося оновити (див. звіт)
 Homebrew: up to date || Homebrew: усе актуальне
 brew upgrade (formulae: %s, casks: %s) || brew upgrade (формули: %s, програми: %s)
 Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: оновлено — формули: %s, програми: %s
-Homebrew: upgraded with errors (see log) || Homebrew: оновлено з помилками (див. лог)
+Homebrew: upgraded with errors (see the report) || Homebrew: оновлено з помилками (див. звіт)
 Homebrew: formulae: %s, casks: %s || Homebrew: формули: %s, програми: %s
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: застаріли — формули: %s, програми: %s
 Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Програми, що оновлюються самі: %s. Примусово: brew upgrade --cask --greedy-auto-updates
@@ -946,7 +991,6 @@ Needs attention (%s): || Потребує уваги (%s):
 Needs attention: %s || Потребує уваги: %s
 Needs attention: nothing || Потребує уваги: нічого
 macup %s is available: %s || Вийшов macup %s: %s
-Command log: %s || Лог команд: %s
 Report: %s · %s || Звіт: %s · %s
 Menu: macup · trends: macup history · help: macup help || Меню: macup · тренди: macup history · довідка: macup help
 Updated: %s || Оновлено: %s
@@ -1045,7 +1089,7 @@ Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Se
 never || ніколи
 Erase simulator %s (%s): its apps and data are removed || Стерти симулятор %s (%s): його програми й дані зникнуть
 Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симулятори без використання %s+ днів (%s): %s — додати знову: Xcode → Devices and Simulators
-%s: failed (see log) || %s: не вдалося (див. лог)
+%s: failed (see the report) || %s: не вдалося (див. звіт)
 Grok CLI (grok update) || Grok CLI (grok update)
 Antigravity CLI (agy update) || Antigravity CLI (agy update)
 Apps outside Homebrew and the App Store that update themselves (only reported) || Програми поза Homebrew і App Store, що оновлюються самі (лише звіт)
@@ -1079,7 +1123,7 @@ Cursor extensions || Розширення Cursor
 Ruby gems || Ruby-геми
 %s: stopped after %s minutes without finishing (step_timeout_minutes in %s) || %s: зупинено через %s хв, не завершилось (step_timeout_minutes у %s)
 macup is already running (pid %s). If it is not, remove %s || macup уже працює (pid %s). Якщо ні, видали %s
-%s: nothing removed, the path is outside what macup may delete (see log) || %s: нічого не видалено, шлях поза тим, що macup може видаляти (див. лог)
+%s: nothing removed, the path is outside what macup may delete (see the report) || %s: нічого не видалено, шлях поза тим, що macup може видаляти (див. звіт)
 Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || Кошик: немає доступу — дай терміналу повний доступ до диска (System Settings → Privacy & Security)
 JetBrains cache (%s) || Кеш JetBrains (%s)
 %s: no answer in %s seconds, skipped || %s: немає відповіді за %s с, пропущено
@@ -1128,7 +1172,7 @@ Logs and crash reports older than 30 days, also npm and Gradle daemon logs || Л
 Looking for stale build folders || Шукаю застарілі папки збірки
 Old Playwright, Puppeteer and Cypress builds (%s) || Старі збірки Playwright, Puppeteer і Cypress (%s)
 Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays || Старі збірки Playwright, Puppeteer і Cypress (standard); найновіша кожної лишається
-Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too || Старі звіти macup (keep_reports_days), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються
+Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too || Старі звіти macup (keep_reports_days, keep_reports), під час кожного запуску; його історія та залишені тимчасові файли теж скорочуються
 Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Старіші патч-версії в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закріплені лишаються
 PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go || У PATH є папки, яких не існує: %s — рядки, що їх додають (~/.zshrc, ~/.zprofile), можна прибрати
 Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing) || Віддалений вхід (SSH) увімкнено: інші комп'ютери можуть входити на цей Mac (Системні параметри → Загальні → Спільний доступ)
@@ -1148,6 +1192,17 @@ npx cache || Кеш npx
 Not cleaned, no longer there: %s — run macup check again || Не почищено, цього вже немає: %s — запусти macup check ще раз
 The Homebrew package list is from %s; macup update refreshes it || Список пакетів Homebrew від %s; macup update оновить його
 macOS updates: could not check (no connection to Apple's server?) || Оновлення macOS: не вдалося перевірити (немає зв'язку із сервером Apple?)
+Command output || Вивід команд
+Interrupted: this report is incomplete. || Перервано: звіт неповний.
+The command output is at the end of %s || Вивід команд — у кінці %s
+Reports to remove: %s (%s) in %s || Звітів до видалення: %s (%s) у %s
+Remove them? [y/N]  || Видалити їх? [y/N] 
+Reports: %s · %s · %s || Звітів: %s · %s · %s
+Oldest: %s · newest: %s || Найстаріший: %s · найновіший: %s
+Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s) || Зберігаються: %s днів, не більше %s запусків (keep_reports_days, keep_reports у %s)
+Remove them all: macup reports clean · open the folder: macup reports open || Видалити всі: macup reports clean · відкрити папку: macup reports open
+Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep) || Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску) — щось заповнює диск (спробуй: macup check --deep)
+Free space: %s since %s (%s of it is swap, freed on restart) || Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1209,7 +1264,7 @@ macup was installed with Homebrew. Update it with: brew upgrade macup || macup �
 Nothing removed. || Ничего не удалено.
 Unknown command: %s || Неизвестная команда: %s
 Type  macup  for the menu or  macup help  for all commands. || Наберите  macup  для меню или  macup help  для всех команд.
-Interrupted. Log: %s || Прервано. Лог: %s
+Interrupted. Report: %s || Прервано. Отчёт: %s
 System || Система
 macOS %s (%s) · %s · up %s || macOS %s (%s) · %s · работает %s
 macOS %s (%s) · %s · up %s — restart recommended (%s days without restart) || macOS %s (%s) · %s · работает %s — стоит перезагрузить (%s дней без перезагрузки)
@@ -1250,7 +1305,7 @@ Update status (check only, nothing installed) || Состояние обновл
 %s: %s is on npm (fine if you're on the stable channel) || %s: на npm есть %s (это нормально, если у вас канал stable)
 Plugin marketplaces || Маркетплейсы плагинов
 Plugin marketplaces refreshed || Маркетплейсы плагинов обновлены
-Plugin marketplaces: refresh failed (see log) || Маркетплейсы плагинов: ошибка обновления (см. лог)
+Plugin marketplaces: refresh failed (see the report) || Маркетплейсы плагинов: ошибка обновления (см. отчёт)
 Plugin %s || Плагин %s
 Plugin %s: %s → %s || Плагин %s: %s → %s
 plugin %s %s → %s || плагин %s %s → %s
@@ -1260,15 +1315,15 @@ npm globals: up to date || npm (глобальные): всё актуально
 npm globals: %s outdated || npm (глобальные): устарело %s
 %s: skipped, node is not on PATH || %s: пропущено, node нет в PATH
 %s: skipped, node is not on PATH — run: %s || %s: пропущено, node нет в PATH — запустите: %s
-%s: update failed (see log) || %s: не удалось обновить (см. лог)
+%s: update failed (see the report) || %s: не удалось обновить (см. отчёт)
 Agent skills || Скиллы агентов
 Agent skills: %s installed, %s updated || Скиллы агентов: установлено %s, обновлено %s
 skill %s || скилл %s
-Agent skills: update failed (see log) || Скиллы агентов: не удалось обновить (см. лог)
+Agent skills: update failed (see the report) || Скиллы агентов: не удалось обновить (см. отчёт)
 Homebrew: up to date || Homebrew: всё актуально
 brew upgrade (formulae: %s, casks: %s) || brew upgrade (формулы: %s, приложения: %s)
 Homebrew: upgraded — formulae: %s, casks: %s || Homebrew: обновлено — формулы: %s, приложения: %s
-Homebrew: upgraded with errors (see log) || Homebrew: обновлено с ошибками (см. лог)
+Homebrew: upgraded with errors (see the report) || Homebrew: обновлено с ошибками (см. отчёт)
 Homebrew: formulae: %s, casks: %s || Homebrew: формулы: %s, приложения: %s
 Homebrew: outdated — formulae: %s, casks: %s || Homebrew: устарели — формулы: %s, приложения: %s
 Casks that update themselves: %s. Force with: brew upgrade --cask --greedy-auto-updates || Приложения, которые обновляются сами: %s. Принудительно: brew upgrade --cask --greedy-auto-updates
@@ -1372,7 +1427,6 @@ Needs attention (%s): || Требует внимания (%s):
 Needs attention: %s || Требует внимания: %s
 Needs attention: nothing || Требует внимания: ничего
 macup %s is available: %s || Вышел macup %s: %s
-Command log: %s || Лог команд: %s
 Report: %s · %s || Отчёт: %s · %s
 Menu: macup · trends: macup history · help: macup help || Меню: macup · тренды: macup history · справка: macup help
 Updated: %s || Обновлено: %s
@@ -1471,7 +1525,7 @@ Simulator runtime %s: last used %s, simulators: %s (Xcode downloads it again: Se
 never || никогда
 Erase simulator %s (%s): its apps and data are removed || Стереть симулятор %s (%s): его приложения и данные удалятся
 Simulators unused for %s+ days (%s): %s — add them again in Xcode → Devices and Simulators || Симуляторы без использования %s+ дней (%s): %s — добавить снова: Xcode → Devices and Simulators
-%s: failed (see log) || %s: не удалось (см. лог)
+%s: failed (see the report) || %s: не удалось (см. отчёт)
 Grok CLI (grok update) || Grok CLI (grok update)
 Antigravity CLI (agy update) || Antigravity CLI (agy update)
 Apps outside Homebrew and the App Store that update themselves (only reported) || Приложения вне Homebrew и App Store, которые обновляются сами (только отчёт)
@@ -1505,7 +1559,7 @@ Cursor extensions || Расширения Cursor
 Ruby gems || Ruby-гемы
 %s: stopped after %s minutes without finishing (step_timeout_minutes in %s) || %s: остановлено через %s мин, не завершилось (step_timeout_minutes в %s)
 macup is already running (pid %s). If it is not, remove %s || macup уже запущен (pid %s). Если нет, удалите %s
-%s: nothing removed, the path is outside what macup may delete (see log) || %s: ничего не удалено, путь вне того, что macup может удалять (см. лог)
+%s: nothing removed, the path is outside what macup may delete (see the report) || %s: ничего не удалено, путь вне того, что macup может удалять (см. отчёт)
 Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || Корзина: нет доступа — дайте терминалу полный доступ к диску (System Settings → Privacy & Security)
 JetBrains cache (%s) || Кэш JetBrains (%s)
 %s: no answer in %s seconds, skipped || %s: нет ответа за %s с, пропущено
@@ -1554,7 +1608,7 @@ Logs and crash reports older than 30 days, also npm and Gradle daemon logs || Л
 Looking for stale build folders || Ищу устаревшие папки сборки
 Old Playwright, Puppeteer and Cypress builds (%s) || Старые сборки Playwright, Puppeteer и Cypress (%s)
 Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays || Старые сборки Playwright, Puppeteer и Cypress (standard); самая новая каждой остаётся
-Old macup reports (keep_reports_days), on every run; its history and leftover temp files are trimmed too || Старые отчёты macup (keep_reports_days), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются
+Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too || Старые отчёты macup (keep_reports_days, keep_reports), при каждом запуске; его история и оставшиеся временные файлы тоже сокращаются
 Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay || Более старые патч-версии в nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); закреплённые остаются
 PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go || В PATH есть папки, которых не существует: %s — строки, которые их добавляют (~/.zshrc, ~/.zprofile), можно убрать
 Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing) || Удалённый вход (SSH) включён: другие компьютеры могут входить на этот Mac (Системные настройки → Основные → Общий доступ)
@@ -1574,6 +1628,17 @@ npx cache || Кеш npx
 Not cleaned, no longer there: %s — run macup check again || Не очищено, этого уже нет: %s — запустите macup check ещё раз
 The Homebrew package list is from %s; macup update refreshes it || Список пакетов Homebrew от %s; macup update обновит его
 macOS updates: could not check (no connection to Apple's server?) || Обновления macOS: не удалось проверить (нет связи с сервером Apple?)
+Command output || Вывод команд
+Interrupted: this report is incomplete. || Прервано: отчёт неполный.
+The command output is at the end of %s || Вывод команд — в конце %s
+Reports to remove: %s (%s) in %s || Отчётов к удалению: %s (%s) в %s
+Remove them? [y/N]  || Удалить их? [y/N] 
+Reports: %s · %s · %s || Отчётов: %s · %s · %s
+Oldest: %s · newest: %s || Самый старый: %s · самый новый: %s
+Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s) || Хранятся: %s дней, не больше %s запусков (keep_reports_days, keep_reports в %s)
+Remove them all: macup reports clean · open the folder: macup reports open || Удалить все: macup reports clean · открыть папку: macup reports open
+Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep) || Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки) — что-то заполняет диск (попробуйте: macup check --deep)
+Free space: %s since %s (%s of it is swap, freed on restart) || Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки)
 EOF
   ;;
   esac
@@ -1582,7 +1647,7 @@ EOF
 load_lang
 
 # ---------------------------------------------------------------- arguments
-DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; SCHED_ARG=""; YES=0; QUIET=0; JSON=0; NOTIFY=0
+DRY=0; DO_UPDATE=1; DO_CLEAN=1; DEEP=0; ACTION=""; CMD=""; LANG_ARG=""; SCHED_ARG=""; REP_ARG=""; YES=0; QUIET=0; JSON=0; NOTIFY=0
 cleanup_lang(){ [ -n "$LANGFILE" ] && rm -f "$LANGFILE"; }
 trap cleanup_lang EXIT
 set_lang(){ case "$1" in en|uk|ru) MSG_LANG=$1 ;; ua) MSG_LANG=uk ;; *) echo "--lang: en | uk | ru"; exit 2 ;; esac; load_lang; }
@@ -1613,7 +1678,7 @@ while [ $# -gt 0 ]; do case "$1" in
   lang|language)        CMD=lang; case "${2:-}" in ""|-*) ;; *) LANG_ARG=$2; shift ;; esac ;;
   last|--last)          CMD=last ;;
   history|--history)    CMD=history ;;
-  reports|--reports)    CMD=reports ;;
+  reports|--reports)    CMD=reports; case "${2:-}" in ""|-*) ;; *) REP_ARG=$2; shift ;; esac ;;
   tasks|--tasks)        CMD=tasks ;;
   config|--config)      CMD=config ;;
   self-update|selfupdate|upgrade) CMD=self_update ;;
@@ -1636,7 +1701,7 @@ case "$CMD" in
   lang)        choose_lang "$LANG_ARG"; exit $? ;;
   last)        show_last; exit 0 ;;
   history)     if [ "$JSON" = 1 ]; then history_json; else show_history; fi; exit 0 ;;
-  reports)     mkdir -p "$LOGDIR"; open "$LOGDIR"; exit 0 ;;
+  reports)     reports "$REP_ARG"; exit $? ;;
   tasks)       if [ "$JSON" = 1 ]; then tasks_json; else list_tasks; fi; exit 0 ;;
   config)      open_conf; exit 0 ;;
   self_update) self_update; exit 0 ;;
@@ -1678,13 +1743,15 @@ fi
 echo $$ >"$RUNLOCK/pid" && HAVE_LOCK=1
 unlock(){ [ "$HAVE_LOCK" = 1 ] && rm -rf "$RUNLOCK"; HAVE_LOCK=0; }
 # macup tidies up after itself on every run, a check too: its reports are its own files, not the Mac's.
-# Reports older than keep_reports_days go, and never more than 60 runs stay; the history keeps its last 500 lines,
+# Reports older than keep_reports_days go, and never more than keep_reports runs stay; the history keeps its last 500 lines,
 # the schedule's log its last 200; temp files a killed run left behind go after a day.
 tidy_own(){
   local f
   case "$SKIP" in *",clean.reports,"*) return 0 ;; esac   # only an explicit skip: --only check.disk still tidies up
-  find "$LOGDIR" -maxdepth 1 -type f -name 'macup_*' -mtime +"$KEEP_DAYS" -delete 2>/dev/null
-  ls -t "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +61 | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
+  # .log: the command output that versions before 2.9.0 kept next to each report
+  find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -mtime +"$KEEP_DAYS" -delete 2>/dev/null
+  # this run's report is not written yet: it makes keep_reports
+  ls -r "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +"$KEEP_RUNS" | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
   trim(){ [ -f "$1" ] && [ "$(wc -l <"$1")" -gt $(($2 * 2)) ] && tail -n "$2" "$1" >"$1.tmp" && cat "$1.tmp" >"$1"; rm -f "$1.tmp"; }
   trim "$HISTORY" 500; trim "$LOGDIR/schedule.log" 200
   find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) -mtime +1 -delete 2>/dev/null
@@ -1692,11 +1759,29 @@ tidy_own(){
 tidy_own
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
-RAW="$LOGDIR/macup_$STAMP.log"
+[ -e "$REPORT" ] && REPORT="$LOGDIR/macup_${STAMP}_$$.md"   # two runs in one second
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
+# what the commands print; it goes to the bottom of the report, so one run leaves one file
+RAW="$BODY.raw"
 # the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det"; }
-trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
+cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$RAW"; }
+raw_section(){ # ~~~~ and not backticks: brew prints backtick fences of its own
+  [ -s "$RAW" ] || return 0
+  printf '\n## %s\n\n~~~~\n' "$(_ 'Command output')"; nocolor <"$RAW" | tr -d '\r'; printf '~~~~\n'
+}
+# Ctrl-C: what the run did so far and what its commands printed still land in the report
+interrupted(){
+  [ -n "$TICK" ] && kill "$TICK" 2>/dev/null
+  [ "${REPORT_DONE:-0}" = 1 ] || { echo "# $(_f 'macup report — %s' "$(date '+%Y-%m-%d %H:%M')")"; echo
+    _f 'Mode: %s · macup %s · took %s' "${MODE:-?}" "$MACUP_VERSION" "$((SECONDS / 60))m $((SECONDS % 60))s"; echo; echo
+    echo "**$(_ 'Interrupted: this report is incomplete.')**"; echo
+    cat "$BODY" 2>/dev/null; raw_section; } >"$REPORT" 2>/dev/null
+  printf '\n%s%s%s\n' "$Y" "$(_f 'Interrupted. Report: %s' "$(tildify "$REPORT")")" "$N" >&4
+  cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130
+}
+# 4: the terminal's stderr; the trap can fire inside run, where stdout and stderr go to $RAW
+exec 4>&2
+trap interrupted INT
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
 stop_sudo_keep(){
@@ -1745,8 +1830,9 @@ if task check.disk; then
   [ "${SNAPS:-0}" -gt 0 ] && info 'Local Time Machine snapshots: %s (macOS frees them automatically when space runs low)' "$SNAPS"
 fi
 
-MEMFREE=""; SWAP=0
+MEMFREE=""; SWAP=0; SWAP_OK=0
 if task check.memory; then
+  SWAP_OK=1
   RAM=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
   MEMFREE=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}')
   SWAP=$(sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}')
@@ -1843,8 +1929,8 @@ PY
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
-    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see log)'; fi
-    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see the report)'; fi
+    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see the report)
     printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
   fi
   P2=$(plugins)
@@ -1888,7 +1974,7 @@ for k, v in d.items():
       [ -z "$p" ] && continue
       if UPD; then
         step 'npm %s' "$p"
-        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see log)' "$p"; fi
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see the report)' "$p"; fi
       else sub "$p: $c → $l"; fi
     done <<EOF
 $NO
@@ -1916,7 +2002,7 @@ for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash
 $S2
 EOF
       ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
-    else err 'Agent skills: update failed (see log)'; fi
+    else err 'Agent skills: update failed (see the report)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
     LATER_SKILLS="$(_ 'Agent skills')"
@@ -1937,7 +2023,7 @@ if task update.brew && have brew; then
       SUDO_PRE=0; sudo -n true 2>/dev/null && SUDO_PRE=1
       run brew upgrade; BRC=$?
       [ "$SUDO_PRE" = 0 ] && sudo -k 2>/dev/null
-      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
+      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see the report)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
@@ -2037,7 +2123,7 @@ LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
   task "$id" || return 0
-  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see log)' "$label"; fi
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see the report)' "$label"; fi
   else LATER="$LATER${LATER:+, }$label"; fi
 }
 have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
@@ -2077,7 +2163,7 @@ if task update.grok && have grok; then
   if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
   elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
     if UPD; then
-      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see log)' 'Grok CLI'; fi
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see the report)' 'Grok CLI'; fi
       upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
     elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
     else ok '%s %s' 'Grok CLI' "$v1"; fi
@@ -2088,7 +2174,7 @@ fi
 if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
   if UPD; then
     v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
-    run agy update || err '%s: update failed (see log)' 'Antigravity CLI'
+    run agy update || err '%s: update failed (see the report)' 'Antigravity CLI'
     upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
   else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
 fi
@@ -2477,9 +2563,9 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
            # never "cleaned" for something macup would not touch
-           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see log)' "$lbl"; return 0; fi ;;
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
-           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see log)' "$lbl"; return 0; fi
+           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see the report)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
@@ -3112,7 +3198,15 @@ if task check.trends && [ -n "$PREV" ]; then
 $PREV
 EOF
   DFREE=$((FREE_AFTER - ${P_FREE:-$FREE_AFTER}))
-  if [ "$DFREE" -lt -20971520 ]; then warn 'Free space: %s since %s — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS"
+  # swap files take disk space and macOS deletes them on restart: growing swap is not something filling the disk
+  DSWAP=0
+  case "$P_SWAP" in ''|*[!0-9]*) ;; *) [ "$SWAP_OK" = 1 ] && [ "$DFREE" -lt 0 ] && DSWAP=$(( (SWAP - P_SWAP) * 1024 )) ;; esac
+  [ "$DSWAP" -lt 0 ] && DSWAP=0
+  [ "$DSWAP" -gt $((-DFREE)) ] && [ "$DSWAP" -gt 0 ] && DSWAP=$((-DFREE))
+  if [ "$DSWAP" -ge 1048576 ]; then
+    if [ $((DFREE + DSWAP)) -lt -20971520 ]; then warn 'Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS" "$(hum "$DSWAP")"
+    else info 'Free space: %s since %s (%s of it is swap, freed on restart)' "$(hum "$DFREE")" "$P_TS" "$(hum "$DSWAP")"; fi
+  elif [ $((DFREE + DSWAP)) -lt -20971520 ]; then warn 'Free space: %s since %s — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS"
   else info 'Free space: %s since %s' "$( [ "$DFREE" -ge 0 ] && printf '+')$(hum "$DFREE")" "$P_TS"; fi
   [ -n "$BMAX" ] && [ -n "$P_MAX" ] && [ "$P_MAX" != "$BMAX" ] && info 'Battery capacity: %s%% → %s%%' "$P_MAX" "$BMAX"
   [ -n "$BCYC" ] && [ -n "$P_CYC" ] && [ "$P_CYC" != "$BCYC" ] && info 'Battery cycles: +%s' "$((BCYC - P_CYC))"
@@ -3132,8 +3226,6 @@ if task check.self_update; then
   ;; esac
 fi
 
-# a run that started no command leaves no empty log next to its report
-[ -s "$RAW" ] || { rm -f "$RAW"; RAW=""; }
 T=$SECONDS; TIME="$((T / 60))m $((T % 60))s"
 echo "$(date '+%Y-%m-%d %H:%M'),$MODE,$FREE_AFTER,$D_TOTAL,${MEMFREE:-},${SWAP:-0},${BCYC:-},${BMAX:-},${#UPDATED[@]},$FREED,${#WARN[@]}" >>"$HISTORY"
 
@@ -3155,13 +3247,13 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
   [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
-  [ -n "$RAW" ] && { echo; _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo; }
 } >"$SUM"
-cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
+{ cat "$SUM" "$BODY"; raw_section; } >"$REPORT"; rm -f "$SUM"; REPORT_DONE=1
 
 [ "$QUIET" = 1 ] && exec >&3 3>&-
 if [ "$JSON" = 1 ]; then
   # schema grows by adding fields; a change that breaks a reader raises the number
+  # "log" stays for older readers: the command output is at the end of the report now, so it names the report
   json_items(){ local i; printf '['; for ((i = 0; i < IT_N; i++)); do [ $i = 0 ] || printf ','
     printf '{"section":"%s","kind":"%s","text":"%s","details":%s}' "$(jstr "${IT_SEC[i]}")" "${IT_KIND[i]}" "$(jstr "${IT_MSG[i]}")" "$(jlines "$(awk -F'\t' -v i="$i" '$1 == i { sub(/^[^\t]*\t/, ""); print }' "$BODY.det" 2>/dev/null)")"; done; printf ']'; }
   json_cands(){ local i first=1 lv inc opt; printf '['
@@ -3174,7 +3266,7 @@ if [ "$JSON" = 1 ]; then
   printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
     "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
   printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
-    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")" "$(json_items)" "$(json_cands)"
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$REPORT")" "$(json_items)" "$(json_cands)"
 else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then

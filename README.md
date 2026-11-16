@@ -141,7 +141,7 @@ Plain `macup` opens a menu:
 | `macup clean` | Cleanup + checks |
 | `macup last` | Print the latest report |
 | `macup history` | Trends across runs: free space, swap, battery, freed space |
-| `macup reports` | Open the reports folder in Finder |
+| `macup reports` | How many reports there are, their size, the oldest and newest. `macup reports clean` removes them all (asks first; `--yes` does not ask), `macup reports open` shows the folder in Finder |
 | `macup tasks` | Every task id and whether it is on |
 | `macup config` | Create or open the config file |
 | `macup lang [en\|uk\|ru]` | Change the interface language |
@@ -162,7 +162,7 @@ Plain `macup` opens a menu:
 | `--lang en\|uk\|ru` | Language for this run |
 | `--no-color` | Plain output |
 | `--quiet` | Print only the summary; the rest is in the report |
-| `--json` | Print the whole result as one JSON object. Also `macup tasks --json` and `macup history --json` |
+| `--json` | Print the whole result as one JSON object. Also `macup tasks --json`, `macup history --json` and `macup reports --json` |
 | `--pick key,…` | Clean exactly these items of `macup check --json`, without asking |
 | `--notify` | Show a macOS notification when something needs attention (the schedule uses it) |
 | `--yes` | `uninstall` without the question |
@@ -192,11 +192,12 @@ A program that shows macup's results its own way (a menu bar app, a GUI) needs n
 
 | Command | What it prints |
 |---|---|
-| `macup check --json` | One object: `free_kb`, `total_kb`, `needs_attention`, `updated`, `failed_steps`, `report`, `log`; `items`, every line of the run with its `section`, `kind` (`ok`, `info`, `warn`, `fail`), `text` and `details`; `cleanable`, every item that can be cleaned with its `key`, `task`, `level`, `kb`, `text`, `opt_in` (cleaned only when picked or enabled) and `in_clean` (a plain `macup clean` takes it) |
+| `macup check --json` | One object: `free_kb`, `total_kb`, `needs_attention`, `updated`, `failed_steps`, `report` (and `log`, the same path: the command output is at the end of the report); `items`, every line of the run with its `section`, `kind` (`ok`, `info`, `warn`, `fail`), `text` and `details`; `cleanable`, every item that can be cleaned with its `key`, `task`, `level`, `kb`, `text`, `opt_in` (cleaned only when picked or enabled) and `in_clean` (a plain `macup clean` takes it) |
 | `macup clean --pick key,… --json` | Cleans exactly the items with these keys, opt-in and aggressive ones too, runs no update and no check, and prints the same object. A key stays the same from run to run. A key that is no longer there is reported and the exit status is 3 |
 | `macup all --json`, `update`, `clean` | The same object after the run; `cleanable` is empty |
 | `macup tasks --json` | Every task: `id`, `group`, `default`, `on`, `text`; and the path of the config |
 | `macup history --json` | The runs of `history.csv` as objects |
+| `macup reports --json` | `folder`, `count`, `kb`, and `reports`: each with `file`, `date`, `mode` and `kb` |
 
 `--pick` asks nothing: the program that calls it shows the choice to the person first. Texts come in the language of `--lang` or the config. Every object has `"schema": 1`; new fields may be added, and the number changes only when an existing field does.
 
@@ -217,7 +218,8 @@ device_support_days = 90      # delete DeviceSupport folders older than this
 simulator_days = 30           # offer simulators unused for this long
 stale_project_days = 90       # a project is stale after this many days without changes
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
-keep_reports_days = 30        # delete macup reports older than this (never more than the last 60 runs stay)
+keep_reports_days = 30        # delete macup reports older than this
+keep_reports = 20             # and never keep more than this many runs (one report file per run)
 step_timeout_minutes = 60     # stop an update or cleanup command that runs longer (App Store installs: four times as long)
 ```
 
@@ -229,7 +231,7 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 |---|---|
 | `~/.local/bin/macup` | The script |
 | `~/.config/macup/config` | Settings |
-| `~/Library/Logs/macup/` | Reports (`.md`) and command logs (`.log`, only for runs that started a command), kept for `keep_reports_days` |
+| `~/Library/Logs/macup/` | One report per run (`.md`, with what the commands printed at the end), kept for `keep_reports_days` and at most `keep_reports` runs; `macup reports clean` removes them. `schedule.log`: the scheduled check's output, its last 200 lines |
 | `~/Library/Application Support/macup/history.csv` | Run history for `macup history`, its last 500 runs |
 | `~/Library/Caches/macup/` | The Homebrew cask catalog for the apps check |
 | `~/Library/LaunchAgents/com.vitaliideveloper.macup.plist` | The schedule, only after `macup schedule weekly` or `daily` |

@@ -27,8 +27,9 @@ if task check.disk; then
   [ "${SNAPS:-0}" -gt 0 ] && info 'Local Time Machine snapshots: %s (macOS frees them automatically when space runs low)' "$SNAPS"
 fi
 
-MEMFREE=""; SWAP=0
+MEMFREE=""; SWAP=0; SWAP_OK=0
 if task check.memory; then
+  SWAP_OK=1
   RAM=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
   MEMFREE=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}')
   SWAP=$(sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}')

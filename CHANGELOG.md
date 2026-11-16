@@ -12,11 +12,13 @@ Fixes:
 - **sudo forgets a password that a cask's installer asked for** during `brew upgrade`, as it already did after the App Store updates.
 - **`macup self-update` exits with 1 when it cannot write the new file.** It exited with 0.
 - **Picking after a check:** `08` is read as 8, and a range like `1-9999` no longer loops for minutes.
+- **Growing swap is no longer "something is filling the disk".** "Since last run" compared free space only, and swap files take disk space until macOS removes them on restart. The swap that grew since the last run is now taken off the drop before it warns, and the line says how much of it is swap.
 
 macup's own files:
 
-- **Old reports go on every run.** They were removed only by `clean` and `all`, so a Mac that only ran `macup check` (the schedule does) kept every report for ever. Reports are kept for `keep_reports_days`, now 30 by default (a value in your config stays), and never for more than the last 60 runs.
-- **No empty logs.** A run that started no command leaves no `.log` next to its report.
+- **One file per run.** What the commands printed went to a `.log` next to each report; it is now at the end of the report, under "Command output". `macup last` stops before that part and says where it is. "(see log)" messages and a Ctrl-C point to the report, and a run stopped with Ctrl-C still writes it, with what the commands printed so far. In `--json`, `log` names the report, the same path as `report`.
+- **Old reports go on every run, a check too.** This reverses the earlier rule that a check deletes nothing: reports are macup's own files, and a Mac that only ran `macup check` (the schedule does) kept every report for ever. Reports are kept for `keep_reports_days`, now 30 by default (a value in your config stays), and for at most `keep_reports` runs, 20 by default (it was a fixed 60). The `.log` files of earlier versions go with their reports, and those without a report after `keep_reports_days`.
+- **`macup reports`** says how many reports there are, their size, the folder, the oldest and the newest. `macup reports clean` removes them all after asking (`--yes` does not ask), `macup reports --json` lists them for other programs. It used to open the folder in Finder; that is now `macup reports open`.
 - **The history keeps its last 500 runs, the schedule's log its last 200 lines,** and temp files that a killed run left behind are removed after a day.
 - **`macup check` no longer changes Homebrew.** It ran `brew update`, which also updates Homebrew itself and its taps. A check now calls `brew` with `HOMEBREW_NO_AUTO_UPDATE=1` and leaves `brew update` to `macup update`. When the package list is more than a day old, the check says from which date it is.
 - **No connection to Apple's server is not "macOS: up to date".** When `softwareupdate -l` fails, a check says it could not check.

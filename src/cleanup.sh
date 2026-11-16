@@ -123,10 +123,12 @@ busy_pat(){ # a name from the tables → the pgrep -f pattern of what uses that 
   esac
 }
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
+# macOS's own watchers (UserEventAgent, Spotlight, fseventsd) keep folders open whether or not their app runs: not "in use"
+lsof_snap(){ lsof -n -P -Fcn -u "$(id -u)" 2>/dev/null | awk '/^p/ { w = 0 } /^c/ { w = ($0 ~ /^c(UserEventAgent|mds|mds_stores|mdworker|mdworker_shared|fseventsd|revisiond|backupd|quicklookd)$/) } /^n/ && !w' >"$1"; }
 open_in(){ # folders, one per line [a file with lsof's output, taken already]: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
   local f=${2:-$BODY.du.lsof} d
-  [ -n "$2" ] || lsof -n -P -Fn -u "$(id -u)" >"$f" 2>/dev/null
+  [ -n "$2" ] || lsof_snap "$f"
   [ -s "$f" ] || return 0
   while IFS= read -r d; do [ -n "$d" ] && grep -qF "n$d/" "$f" && return 0; done <<EOF2
 $1
@@ -229,7 +231,7 @@ lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; 
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
 mark_busy(){ # check: what is in use right now is said in the list and left out of the totals; exec_cand asks again before it cleans
   local i s="$BODY.du.busy"; : >"$s"
-  for ((i = 0; i < C_N; i++)); do [ -n "${C_OPEN[i]}" ] && { lsof -n -P -Fn -u "$(id -u)" >"$s" 2>/dev/null; break; }; done
+  for ((i = 0; i < C_N; i++)); do [ -n "${C_OPEN[i]}" ] && { lsof_snap "$s"; break; }; done
   for ((i = 0; i < C_N; i++)); do
     C_BUSY[i]=0
     # lsof that cannot tell makes the cleanup skip it, but the list does not call it in use

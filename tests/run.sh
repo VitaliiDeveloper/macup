@@ -17,7 +17,7 @@ FAKE
 cat >"$W/bin/lsof" <<'FAKE'
 #!/bin/bash
 [ -n "$FAKE_LSOF_FAIL" ] && exit 1
-printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
+printf 'p1\nc%s\nn/\n' "${FAKE_LSOF_CMD:-SomeApp}"; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
 FAKE
 # launchctl and osascript only record what macup asked for: no test loads a LaunchAgent or shows a notification
 # (print-disabled is a question, not a change: it answers from FAKE_SHARING and is not recorded)
@@ -80,6 +80,9 @@ tests/fixture.sh "$H"   # an app macup has no name for: open while it has files 
 FAKE_OPEN="$H/Library/Application Support/SomeApp/Cookies" env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
 [ -f "$H/Library/Application Support/SomeApp/Cache/c/blob" ] && [ -f "$H/Library/Caches/SomeApp/Default/Cache/blob" ] && grep -q 'SomeApp caches.*skipped' "$W/run.out" \
   && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] && pass "an unknown app with open files is skipped" || fail "an unknown open app was cleaned"
+tests/fixture.sh "$H"   # macOS's UserEventAgent keeps app folders open whether or not the app runs
+FAKE_LSOF_CMD=UserEventAgent FAKE_OPEN="$H/Library/Application Support/SomeApp/Cookies" env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
+[ ! -f "$H/Library/Application Support/SomeApp/Cache/c/blob" ] && pass "a folder only macOS's watchers hold open is not in use" || fail "UserEventAgent's open folder kept an app's cache"
 tests/fixture.sh "$H"
 FAKE_LSOF_FAIL=1 env HOME="$H" /bin/bash "$M" clean --only clean.editors --no-color </dev/null >"$W/run.out" 2>&1
 [ -f "$H/Library/Application Support/SomeApp/Cache/c/blob" ] && [ ! -f "$H/Library/Application Support/Claude/Cache/c/blob" ] \

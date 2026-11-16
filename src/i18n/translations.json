@@ -1091,6 +1091,10 @@
     "uk": "(лише якщо вибереш)",
     "ru": "(только если выберете)"
   },
+  "(in use now — skipped until it is closed)": {
+    "uk": "(зараз використовується — пропускається, доки його не закрито)",
+    "ru": "(сейчас используется — пропускается, пока его не закроют)"
+  },
   "AI models (Hugging Face, Ollama, LM Studio): %s": {
     "uk": "AI-моделі (Hugging Face, Ollama, LM Studio): %s",
     "ru": "AI-модели (Hugging Face, Ollama, LM Studio): %s"

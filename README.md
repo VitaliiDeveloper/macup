@@ -48,7 +48,7 @@ Run `macup tasks` for the full list with task ids.
 - **`clean` and `all` stop at `safe`** unless you set `--level` or `clean_level`.
 - **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed.
 - **Pinned versions stay.** Versions named in `.nvmrc`, `.tool-versions`, `.python-version`, `package.json` (`volta`, `engines`), virtualenvs and similar files are kept. A pin without the patch (`20.5`) keeps the newest `20.5.x`.
-- **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs, Cargo's while `cargo` runs, and the npx cache while anything started with `npx` runs (MCP servers).
+- **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs, Cargo's while `cargo` runs, and the npx cache while anything started with `npx` runs (MCP servers). A check already marks such items in its list and leaves them out of what could be freed.
 - **Build folders in projects are deleted only on request,** only next to the file that builds them again (`target` next to `Cargo.toml`), never when git tracks files in them, and never when they were built recently.
 - **Docker volumes are never deleted.**
 - **One run at a time.** A second `macup` started while one is running refuses to start.
@@ -192,7 +192,7 @@ A program that shows macup's results its own way (a menu bar app, a GUI) needs n
 
 | Command | What it prints |
 |---|---|
-| `macup check --json` | One object: `free_kb`, `total_kb`, `needs_attention`, `updated`, `failed_steps`, `report`, `log`; `items`, every line of the run with its `section`, `kind` (`ok`, `info`, `warn`, `fail`), `text` and `details`; `cleanable`, every item that can be cleaned with its `key`, `task`, `level`, `kb`, `text`, `opt_in` (cleaned only when picked or enabled) and `in_clean` (a plain `macup clean` takes it) |
+| `macup check --json` | One object: `free_kb`, `total_kb`, `needs_attention`, `updated`, `failed_steps`, `report`, `log`; `items`, every line of the run with its `section`, `kind` (`ok`, `info`, `warn`, `fail`), `text` and `details`; `cleanable`, every item that can be cleaned with its `key`, `task`, `level`, `kb`, `text`, `opt_in` (cleaned only when picked or enabled), `in_clean` (a plain `macup clean` takes it), `hidden` (under 1 MB, so the terminal list leaves it out; it can still be picked) and `busy` (in use right now: the cleanup skips it, and `could_free_kb` and `could_free_more_kb` leave it out) |
 | `macup clean --pick key,… --json` | Cleans exactly the items with these keys, opt-in and aggressive ones too, runs no update and no check, and prints the same object. A key stays the same from run to run. A key that is no longer there is reported and the exit status is 3 |
 | `macup all --json`, `update`, `clean` | The same object after the run; `cleanable` is empty |
 | `macup tasks --json` | Every task: `id`, `group`, `default`, `on`, `text`; and the path of the config |

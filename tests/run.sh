@@ -199,6 +199,12 @@ grep -q 'cannot start, macup_no_such_interp is missing: flagcli, nodecli$' "$W/c
   && grep -qF 'gone10 +3 — safe to remove, run in Terminal: find ~/.local/bin -maxdepth 1 -type l ! -exec test -e {} \; -print -delete' "$W/cmds.out" \
   && ! grep -E 'cannot start|Dead links' "$W/cmds.out" | grep -qE 'okscript|okbinary|brewcli|brewgone' \
   && pass "commands that cannot start are listed with a fix; working ones are not" || { fail "commands that cannot start"; cat "$W/cmds.out"; }
+# a uv tool whose Python was removed: uv puts it back, a brew link does not
+U="$H/.local/share/uv/tools/sometool/bin"; mkdir -p "$U"; ln -s "$H/gone/python3.11" "$U/python"; printf '#!%s\n' "$U/python" >"$U/sometool"; chmod +x "$U/sometool"; ln -s "$U/sometool" "$B/sometool"
+env HOME="$H" HOMEBREW_PREFIX="$H/brew" /bin/bash "$M" check --only check.commands --no-color </dev/null >"$W/cmds2.out" 2>&1
+grep -qF 'cannot start, python is missing: sometool — run: uv tool install --reinstall sometool' "$W/cmds2.out" && grep -q 'python is missing: pipxtool — run: pipx reinstall-all' "$W/cmds2.out" \
+  && pass "a uv tool that cannot start: the fix is uv tool install --reinstall" || { fail "uv tool fix"; grep 'cannot start' "$W/cmds2.out"; }
+rm -f "$B/sometool"
 # only the fake home's line: the real /opt/homebrew/bin and /usr/local/bin are scanned too, and their fix may need sudo
 fix=$(sed -n 's|.*Dead links in ~/\.local/bin, .* run in Terminal: \(find ~/\.local/bin .*\)$|\1|p' "$W/cmds.out" | head -1)
 [ -n "$fix" ] && (HOME="$H"; eval "$fix") >/dev/null 2>&1 </dev/null
@@ -487,6 +493,21 @@ grep -q 'Stale build folders (2, .*(only if you pick it)' "$W/art.out" && [ -d "
 env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_artifacts --enable clean.stale_artifacts --no-color </dev/null >"$W/art.out" 2>&1
 got=$( (cd "$H" && find . -type f | sort) | comm -23 "$H.b" - | grep -v 'macup/')
 [ "$got" = "$(printf '%s\n' ./Code/oldrs/target/debug/blob ./Code/oldswift/.build/debug/blob)" ] && pass "stale build folders: only the stale ones with a build file; git-tracked, recent, hidden and .venv stay" || { fail "stale build folders"; echo "$got"; cat "$W/art.out"; }
+# a project edited recently only deep inside (src/app/components/ui/x.tsx) is not stale; the same project untouched is
+H="$W/deep"; C="$H/Code"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+for p in edited untouched; do blob "$C/$p/node_modules/x"; echo '{}' >"$C/$p/package.json"; mkdir -p "$C/$p/src/app/components/ui"; echo x >"$C/$p/src/app/components/ui/x.tsx"; old "$C/$p"; done
+touch "$C/edited/src/app/components/ui/x.tsx"
+env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_node_modules --enable clean.stale_node_modules --no-color </dev/null >"$W/deep.out" 2>&1
+[ -f "$C/edited/node_modules/x/blob" ] && [ ! -e "$C/untouched/node_modules" ] && pass "stale node_modules: a recent file at any depth keeps them" || { fail "stale node_modules: deep recent file"; cat "$W/deep.out"; }
+# a stale Pods folder under 1 MB: hidden in the list, but in --json with "hidden" and cleaned when picked
+H="$W/hid"; C="$H/Code"; mkdir -p "$H/.config/macup" "$C/small/Pods/Lib"; printf 'language = en\n' >"$H/.config/macup/config"
+dd if=/dev/zero of="$C/small/Pods/Lib/blob" bs=1024 count=200 2>/dev/null; echo "pod 'Lib'" >"$C/small/Podfile"; old "$C/small"
+env HOME="$H" /bin/bash "$M" check --only clean.stale_artifacts --no-color </dev/null >"$W/hid.out" 2>&1
+env HOME="$H" /bin/bash "$M" check --json --only clean.stale_artifacts </dev/null >"$W/hid.json" 2>/dev/null
+kh=$(jq "$W/hid.json" 'c=[x for x in d["cleanable"] if x["task"]=="clean.stale_artifacts"]; assert len(c)==1 and c[0]["hidden"] is True and c[0]["busy"] is False and d["could_free_more_kb"]==0; print(c[0]["key"])')
+[ -n "$kh" ] && ! grep -q 'Stale build folders' "$W/hid.out" && pass "--json: a small item hidden from the list is there with \"hidden\": true" || { fail "--json hidden item"; cat "$W/hid.out" "$W/hid.json"; }
+env HOME="$H" /bin/bash "$M" clean --pick "$kh" --only clean.stale_artifacts --no-color </dev/null >"$W/hid.out" 2>&1
+[ -n "$kh" ] && [ ! -e "$C/small/Pods" ] && [ -f "$C/small/Podfile" ] && pass "--pick cleans a hidden item" || { fail "--pick hidden item"; cat "$W/hid.out"; }
 
 # --- caches are left alone while the tool that uses them runs: cargo, and anything started with npx (MCP servers)
 H="$W/busy"; tests/fixture.sh "$H"
@@ -494,6 +515,13 @@ FAKE_RUNNING='/Users/me/.cargo/bin/cargo build --release' env HOME="$H" /bin/bas
 [ -f "$H/.cargo/registry/src/index.crates.io/blob" ] && [ -f "$H/.cargo/git/db/repo-1/blob" ] && grep -q 'Cargo registry sources.*skipped' "$W/busy.out" && pass "Cargo's downloads are skipped while cargo runs" || { fail "cargo cleaned while it runs"; cat "$W/busy.out"; }
 FAKE_RUNNING="node $H/.npm/_npx/abc/node_modules/.bin/some-mcp-server" env HOME="$H" /bin/bash "$M" clean --level standard --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1
 [ -f "$H/.npm/_npx/abc/node_modules/x/blob" ] && grep -q 'npx cache.*skipped' "$W/busy.out" && pass "the npx cache is skipped while something started with npx runs" || { fail "npx cache cleaned under a running server"; cat "$W/busy.out"; }
+# a check says so already, and leaves it out of what could be freed
+env HOME="$H" /bin/bash "$M" check --json --level standard --only clean.npm </dev/null >"$W/busy0.json" 2>/dev/null
+FAKE_RUNNING="node $H/.npm/_npx/abc/node_modules/.bin/some-mcp-server" env HOME="$H" /bin/bash "$M" check --json --level standard --only clean.npm </dev/null >"$W/busy1.json" 2>/dev/null
+FAKE_RUNNING="node $H/.npm/_npx/abc/node_modules/.bin/some-mcp-server" env HOME="$H" /bin/bash "$M" check --level standard --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1
+nk=$(jq "$W/busy1.json" 'print([x["kb"] for x in d["cleanable"] if x["text"]=="npx cache" and x["busy"]][0])')
+jq "$W/busy0.json" "assert d['could_free_kb'] - $nk == $(jq "$W/busy1.json" "print(d['could_free_kb'])") and not any(x['busy'] for x in d['cleanable'])" 2>/dev/null \
+  && grep -q 'npx cache (in use now — skipped until it is closed)' "$W/busy.out" && pass "a check marks the npx cache in use and leaves it out of the total" || { fail "busy npx cache in a check"; cat "$W/busy.out"; }
 env HOME="$H" /bin/bash "$M" clean --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1; [ -d "$H/.npm/_npx/abc" ] && pass "the npx cache stays at the safe level" || fail "npx cache cleaned at safe"
 env HOME="$H" /bin/bash "$M" clean --level standard --only clean.npm --no-color </dev/null >"$W/busy.out" 2>&1
 [ ! -e "$H/.npm/_npx/abc" ] && pass "the npx cache is cleaned when nothing uses it" || { fail "npx cache"; cat "$W/busy.out"; }

@@ -12,6 +12,10 @@ Fixes:
 - **sudo forgets a password that a cask's installer asked for** during `brew upgrade`, as it already did after the App Store updates.
 - **`macup self-update` exits with 1 when it cannot write the new file.** It exited with 0.
 - **Picking after a check:** `08` is read as 8, and a range like `1-9999` no longer loops for minutes.
+- **Stale `node_modules` are judged by the whole project.** Only the top three folder levels were looked at, so a project edited only in `src/app/components/…` counted as untouched and lost its `node_modules`. Every level is looked at now, except `.git` and build folders, and the search stops at the first recent file.
+- **What is in use is said by the check.** The npx cache was listed and counted in "Could free" while MCP servers ran from it, and the cleanup then skipped it. A check now marks anything whose tool or app is running ("in use now") and leaves it out of the totals; the cleanup still asks again right before it cleans.
+- **A uv tool whose Python was removed gets the right fix:** `uv tool install --reinstall <tool>`, not a `brew link` that changes nothing.
+- **A faster check.** The big folders (DerivedData, the pnpm store, `~/Library/Caches`, simulators) are measured side by side, and `brew cleanup -n` runs alongside; `~/Library/Caches` is walked once, not twice. `--only` and `--skip` now skip the measuring of the cleaners they leave out.
 
 macup's own files:
 
@@ -28,7 +32,7 @@ New:
 - **Measured, never deleted:** virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware), core dumps in `/cores`.
 - **Updates:** Windsurf and VSCodium extensions, Google Cloud SDK components (its own install), .NET global tools (.NET 9 or later), Composer global packages.
 - **Checks:** signing certificates that expire within 30 days, a GitHub CLI login that no longer works, apps that crashed 3 or more times in a week, Remote Login and Screen Sharing that are on, folders of yours in `PATH` that do not exist.
-- **For other programs (a GUI):** `--json` now carries every line of the run (`items`) and every item that can be cleaned (`cleanable`, each with a stable `key`); `macup clean --pick key,…` cleans exactly those. `macup tasks --json` and `macup history --json` print the lists. `--enable id,…` turns an opt-in task on for one run. See "For scripts and other programs" in the README.
+- **For other programs (a GUI):** `--json` now carries every line of the run (`items`) and every item that can be cleaned (`cleanable`, each with a stable `key`); `macup clean --pick key,…` cleans exactly those. `cleanable` also has the small items the terminal list hides (`"hidden": true`), so they can be picked too, and says which are in use right now (`"busy": true`). `macup tasks --json` and `macup history --json` print the lists. `--enable id,…` turns an opt-in task on for one run. See "For scripts and other programs" in the README.
 
 ## 2.8.0 — 2026-11-15
 

@@ -111,8 +111,8 @@ STAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT="$LOGDIR/macup_$STAMP.md"
 RAW="$LOGDIR/macup_$STAMP.log"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
-cleanup_body(){ [ -n "$BODY" ] && rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det"; }
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run, background du results and lsof's output in $BODY.du.*; tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
+cleanup_body(){ [ -n "$BODY" ] || return 0; local j; for j in $(jobs -p); do kill "$j" 2>/dev/null; done; rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$BODY".du.*; }
 trap '[ -n "$TICK" ] && kill "$TICK" 2>/dev/null; printf "\n%s%s%s\n" "$Y" "$(_f "Interrupted. Log: %s" "$(tildify "$RAW")")" "$N" >&2; cleanup_body; cleanup_lang; stop_sudo_keep; unlock; exit 130' INT
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.

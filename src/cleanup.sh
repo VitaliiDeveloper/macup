@@ -6,7 +6,7 @@
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
+C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
 artifact_ok(){ # path → true when it is a build folder with its build file next to it
@@ -54,6 +54,45 @@ kbl(){ local s=0 p; while IFS= read -r p; do [ -n "$p" ] && [ ! -L "$p" ] && s=$
 $1
 EOF2
   echo "$s"; }
+# The big folders are measured together in the background while the rest is looked at; kb_get waits for the result.
+# Only before anything is deleted: exec_cand forgets them, so sizes before and after a cleanup are measured anew.
+KBP_N=0; KBP_PATH=(); KBP_PID=(); KBP_SUB=(); KB=0
+kb_bg(){ # path [sub] — sub: also each folder inside it, in the same walk
+  [ -n "$BODY" ] && [ -d "$1" ] && [ ! -L "$1" ] || return 0
+  local i; for ((i = 0; i < KBP_N; i++)); do
+    [ "${KBP_PATH[i]}" = "$1" ] && return 0
+    [ -n "${KBP_SUB[i]}" ] && [ "${KBP_PATH[i]}" = "${1%/*}" ] && return 0
+  done
+  if [ -n "$2" ]; then du -k -d 1 "$1" >"$BODY.du.$KBP_N" 2>/dev/null &
+  else du -sk "$1" >"$BODY.du.$KBP_N" 2>/dev/null &
+  fi
+  KBP_PID[KBP_N]=$!; KBP_PATH[KBP_N]=$1; KBP_SUB[KBP_N]=$2; KBP_N=$((KBP_N + 1))
+}
+kb_get(){ # path → KB; call it outside $( ): only this shell can wait for its background jobs
+  local i v; KB=""
+  for ((i = 0; i < KBP_N; i++)); do
+    if [ "${KBP_PATH[i]}" = "$1" ]; then wait "${KBP_PID[i]}" 2>/dev/null; v=$(tail -1 "$BODY.du.$i" 2>/dev/null | awk '{print $1}')
+    elif [ -n "${KBP_SUB[i]}" ] && [ "${KBP_PATH[i]}" = "${1%/*}" ]; then wait "${KBP_PID[i]}" 2>/dev/null; v=$(awk -F'\t' -v p="$1" '$2 == p {print $1; exit}' "$BODY.du.$i" 2>/dev/null)
+    else continue; fi
+    case "$v" in ''|*[!0-9]*) ;; *) KB=$v; return 0 ;; esac
+  done
+  KB=$(kb "$1")
+}
+kb_has(){ local i; for ((i = 0; i < KBP_N; i++)); do
+  [ "${KBP_PATH[i]}" = "$1" ] || { [ -n "${KBP_SUB[i]}" ] && [ "${KBP_PATH[i]}" = "${1%/*}" ]; } && return 0; done; return 1; }
+settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) and drops folders under clean_dir's 5 MB
+  local i j=0 a
+  for ((i = 0; i < C_N; i++)); do
+    if [ "${C_KB[i]}" = "?" ]; then
+      if [ "${C_KIND[i]}" = cmd ]; then kb_get "${C_MDIR[i]}"; else kb_get "${C_PATHS[i]}"; fi
+      C_KB[i]=$KB; [ "${C_KIND[i]}" = empty ] && [ "$KB" -lt 5120 ] && continue
+    fi
+    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do eval "${a}[j]=\${${a}[i]}"; done; fi
+    j=$((j + 1))
+  done
+  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do unset "${a}[i]"; done; done
+  C_N=$j
+}
 cover(){ COVERED="$COVERED$1"$'\n'; }
 cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
@@ -66,7 +105,7 @@ cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — ki
 }
 cand_more(){ # label level kb paths open-dirs — adds to the candidate with this label and level; false if there is none
   local i; for ((i = 0; i < C_N; i++)); do
-    [ "${C_LBL[i]}" = "$1" ] && [ "${C_LVL[i]}" = "$2" ] && [ "${C_KIND[i]}" = empty ] || continue
+    [ "${C_LBL[i]}" = "$1" ] && [ "${C_LVL[i]}" = "$2" ] && [ "${C_KIND[i]}" = empty ] && [ "${C_KB[i]}" != "?" ] || continue
     C_KB[i]=$((C_KB[i] + $3)); C_PATHS[i]="${C_PATHS[i]}"$'\n'"$4"; C_OPEN[i]="${C_OPEN[i]}${C_OPEN[i]:+$'\n'}$5"; cover "$4"; return 0
   done; return 1
 }
@@ -84,10 +123,12 @@ busy_pat(){ # a name from the tables → the pgrep -f pattern of what uses that 
   esac
 }
 running(){ [ -n "$1" ] && pgrep -f "$1" >/dev/null 2>&1; }
-open_in(){ # folders, one per line: true if a process has a file open in one of them, or if lsof cannot tell
+open_in(){ # folders, one per line [a file with lsof's output, taken already]: true if a process has a file open in one of them, or if lsof cannot tell
   [ -n "$1" ] || return 1
-  local s d; s=$(lsof -n -P -Fn -u "$(id -u)" 2>/dev/null); [ -n "$s" ] || return 0
-  while IFS= read -r d; do [ -n "$d" ] && printf '%s\n' "$s" | grep -qF "n$d/" && return 0; done <<EOF2
+  local f=${2:-$BODY.du.lsof} d
+  [ -n "$2" ] || lsof -n -P -Fn -u "$(id -u)" >"$f" 2>/dev/null
+  [ -s "$f" ] || return 0
+  while IFS= read -r d; do [ -n "$d" ] && grep -qF "n$d/" "$f" && return 0; done <<EOF2
 $1
 EOF2
   return 1
@@ -96,12 +137,14 @@ EOF2
 # --- registering helpers (the old call sites stay as they were)
 clean_dir(){ # id label path [proc] — empty a folder that rebuilds itself
   local p=$3 s proc; proc=$(busy_pat "$4")
+  task_allowed "$1" || return 0
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
-  s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0
+  if kb_has "$p"; then s="?"; else s=$(kb "$p"); [ "$s" -lt 5120 ] && return 0; fi   # ?: sized by settle, its du runs meanwhile
   cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" empty "$p" "$proc"
 }
 clean_old(){ # id label dir days [type] — entries older than N days
   local p=$3 days=$4 type=${5:-d} old s
+  task_allowed "$1" || return 0
   [ -d "$p" ] && [ ! -L "$p" ] && safe_path "$p" || return 0
   old=$(find "$p" -mindepth 1 -maxdepth 1 -type "$type" -mtime +"$days" 2>/dev/null)
   [ -z "$old" ] && return 0
@@ -109,8 +152,9 @@ clean_old(){ # id label dir days [type] — entries older than N days
   CL_KEY="old|$p" cand "$1" "${CL_LVL:-1}" "$(_f '%s (%s items, older than %s days)' "$(_ "$2")" "$(cnt "$old")" "$days")" "$s" rm "$old"
 }
 measure_cmd(){ # id label dir key — a tool's own clean command; the dir is measured before and after
-  [ -e "$3" ] || return 0
-  cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$(kb "$3")" cmd "$4" "" "$3"
+  task_allowed "$1" && [ -e "$3" ] || return 0
+  local s="?"; kb_has "$3" || s=$(kb "$3")
+  cand "$1" "${CL_LVL:-1}" "$(_ "$2")" "$s" cmd "$4" "" "$3"
 }
 
 # --- running
@@ -150,6 +194,7 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
 }
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p
+  KBP_N=0
   if running "${C_PROC[i]}" || open_in "${C_OPEN[i]}"; then
     info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
     SKIPPED+=("$lbl ($(hum "${C_KB[i]}"))"); return 0
@@ -182,12 +227,22 @@ EOF2
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
 lvl_col(){ case "$1" in 1) printf '%s' "$G" ;; 2) printf '%s' "$Y" ;; *) printf '%s' "$R" ;; esac; }
+mark_busy(){ # check: what is in use right now is said in the list and left out of the totals; exec_cand asks again before it cleans
+  local i s="$BODY.du.busy"; : >"$s"
+  for ((i = 0; i < C_N; i++)); do [ -n "${C_OPEN[i]}" ] && { lsof -n -P -Fn -u "$(id -u)" >"$s" 2>/dev/null; break; }; done
+  for ((i = 0; i < C_N; i++)); do
+    C_BUSY[i]=0
+    # lsof that cannot tell makes the cleanup skip it, but the list does not call it in use
+    if running "${C_PROC[i]}" || { [ -s "$s" ] && open_in "${C_OPEN[i]}" "$s"; }; then C_BUSY[i]=1; fi
+  done
+}
 visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag
   for ((i = 0; i < C_N; i++)); do
     visible "$i" || continue
     n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"
+    [ "${C_BUSY[i]:-0}" = 1 ] && tag="$tag $(_ '(in use now — skipped until it is closed)')"
     flush
     printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
     md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"

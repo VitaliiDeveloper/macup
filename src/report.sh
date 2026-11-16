@@ -1,10 +1,10 @@
 # ================================================================ SIZES (never deleted)
 if task check.sizes; then
   section "Not touched by macup"
-  s=$(kb "$DEV/Xcode/Archives")
+  kb_get "$DEV/Xcode/Archives"; s=$KB
   if [ "$s" -gt 5242880 ]; then warn 'Xcode Archives: %s — delete old builds in Xcode → Organizer (keep ones you need to symbolicate crashes)' "$(hum "$s")"
   elif [ "$s" -gt 0 ]; then info 'Xcode Archives: %s' "$(hum "$s")"; fi
-  s=$(kb "$DEV/CoreSimulator/Devices"); [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
+  kb_get "$DEV/CoreSimulator/Devices"; s=$KB; [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
   s=$(kb "$HOME/.pub-cache");          [ "$s" -gt 0 ] && info 'Flutter pub-cache: %s (full reset: dart pub cache clean)' "$(hum "$s")"
   s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)")
   [ "$s" -ge 102400 ] && info 'Codex chat history: %s (not a cache; delete old chats in Codex itself)' "$(hum "$s")"
@@ -12,7 +12,7 @@ if task check.sizes; then
   [ "$s" -ge 102400 ] && info 'AI models (Hugging Face, Ollama, LM Studio): %s' "$(hum "$s")"
   s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")
   [ "$s" -ge 102400 ] && info 'Android SDK and emulators: %s (Android Studio → SDK Manager, Device Manager)' "$(hum "$s")"
-  s=$(kb "$HOME/Library/Caches");      [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
+  kb_get "$HOME/Library/Caches"; s=$KB; [ "$s" -gt 0 ] && info 'App caches (~/Library/Caches): %s — macOS trims these itself when space is low' "$(hum "$s")"
   # backups of iPhones and iPads made in Finder; Docker Desktop's disk image only grows (du counts what it really takes)
   s=$(kb "$HOME/Library/Application Support/MobileSync/Backup")
   [ "$s" -ge 102400 ] && info 'iPhone and iPad backups: %s (Finder → your device → Manage Backups)' "$(hum "$s")"

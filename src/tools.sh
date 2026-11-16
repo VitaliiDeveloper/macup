@@ -96,7 +96,8 @@ for d in dirs.values():
             name = rest[0]
         elif os.access(args[0], os.X_OK): continue
         else: name = os.path.basename(args[0])
-        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else "-"
+        uv = re.search(r"/uv/tools/([^/]+)/", os.path.realpath(p) + " " + args[0])
+        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else f"uv tool install --reinstall {uv.group(1)}" if uv else "-"
         groups.setdefault((name, hint), set()).add(e.name)
 print(n)
 for (name, hint), names in sorted(groups.items()):

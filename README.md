@@ -61,7 +61,8 @@ Run `macup tasks` for the full list with task ids.
 
 - macOS. The installer refuses other systems. The tests run on macOS 15 and 26, on Apple silicon and Intel. macOS 12 and later should work; older systems are not tested, and some checks are skipped there.
 - `/bin/bash` 3.2 and `curl`. Both ship with macOS.
-- Optional: `python3`, from the Xcode Command Line Tools. Some tasks use it to read JSON: npm globals, agent skills, Claude Code plugins, simulators, the commands check, and finding app caches by folder layout. Without it, those tasks are skipped.
+- Optional: `python3`, from the Xcode Command Line Tools. Some tasks use it to read JSON and property lists: npm globals, agent skills, Claude Code plugins, simulators, the commands check, apps that fall behind, expired provisioning profiles, signing certificates, and finding app caches by folder layout. Without it, those tasks are skipped.
+- Optional: `git`, also from the Command Line Tools. Stale build folders are offered only when git can tell that it tracks no file in them.
 - Optional: the tools macup updates (Homebrew, `mas`, Claude Code, npm, …). Missing ones are skipped.
 
 ## Installation
@@ -240,7 +241,7 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 - **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table in `src/core.sh`. `--skip`, `--only`, `skip` and `enable` all use these ids.
 - **Cleaners as data:** tables at the top of `src/cleaners.sh` (`CACHE_DIRS`, `TOOL_CACHES`, `ELECTRON_APPS`, `BROWSERS`). A new cache is usually one line.
 - **Two-phase cleanup:** cleaners first register candidates with a size and level, then the chosen ones run. Every path is checked against an allow-list again right before it is deleted.
-- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
+- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
 - **CI (GitHub Actions):** ShellCheck on Ubuntu; a bash 3.2 syntax check, the tests, an install and smoke runs on macOS 15 and 26, Apple silicon and Intel.
 
 Development:

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.1 — 2026-11-19
+
+Fixes:
+
+- **"pnpm globals: update failed" without global pnpm packages.** pnpm refuses `pnpm update -g` while its global bin folder (`~/Library/pnpm/bin`) is not on `PATH`, even when there is nothing to update. The step now runs only when `pnpm ls -g` lists packages.
+
 ## 2.8.0 — 2026-11-15
 
 Fixes:

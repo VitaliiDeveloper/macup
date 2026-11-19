@@ -38,6 +38,12 @@ New:
 - **Checks:** signing certificates of your code-signing identities that expire within 30 days (a certificate renewed in Xcode no longer warns for the old one, and one without a private key is ignored), a GitHub CLI login that no longer works, apps in `/Applications` that crashed 3 or more times in a week (counted by the time in the report, `Retired/` included; macOS system processes are one count, not a list), Remote Login, Screen Sharing and Remote Management that are on, folders of yours in `PATH` that do not exist.
 - **For other programs (a GUI):** `--json` now carries every line of the run (`items`) and every item that can be cleaned (`cleanable`, each with a stable `key`); `macup clean --pick key,…` cleans exactly those. `cleanable` also has the small items the terminal list hides (`"hidden": true`), so they can be picked too, and says which are in use right now (`"busy": true`). `macup tasks --json` and `macup history --json` print the lists. `--enable id,…` turns an opt-in task on for one run. See "For scripts and other programs" in the README.
 
+## 2.8.1 — 2026-11-19
+
+Fixes:
+
+- **"pnpm globals: update failed" without global pnpm packages.** pnpm refuses `pnpm update -g` while its global bin folder (`~/Library/pnpm/bin`) is not on `PATH`, even when there is nothing to update. The step now runs only when `pnpm ls -g` lists packages.
+
 ## 2.8.0 — 2026-11-15
 
 Fixes:

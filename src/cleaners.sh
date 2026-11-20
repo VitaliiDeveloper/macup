@@ -452,8 +452,8 @@ if task_allowed clean.app_caches; then
     [ "$s" -lt 102400 ] && break
     b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
     case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
-    printf '%s' "$COVERED" | grep -qxF "$e" && continue
-    printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    printf '%s' "$COVERED" | grep -xF -- "$e" >/dev/null && continue   # no grep -q: with pipefail an early exit reads as "not covered"
+    printf '%s' "$COVERED" | grep -F -- "$e/" >/dev/null && continue
     # not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
     [ -n "$(find "$e" -maxdepth 3 -name pyvenv.cfg -print 2>/dev/null | head -1)" ] && continue
     printf '%s\t%s\n' "$s" "$e"

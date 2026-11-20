@@ -2761,7 +2761,7 @@ apps_teams(){ # codesign is slow: only once there is a suspect
   local id t p
   APPS=$(printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && printf '%s|%s|%s\n' "$id" "$(team_of "$p")" "$p"; done)
 }
-LO_SHARED=" uk.co uk.org au.com jp.co nz.co br.com cn.com io.github com.github io.gitlab com.gitlab org.gitlab net.sourceforge com.googlecode app.netlify "
+LO_SHARED=" uk.co uk.org au.com jp.co nz.co br.com cn.com io.github io.gitlab com.gitlab org.gitlab net.sourceforge com.googlecode app.netlify com.electron "
 vendor_of(){ # first two id components; three under a shared prefix (io.github.<owner>), where two would mean many publishers
   local v; v=$(lc "$1" | awk -F. 'NF >= 2 && $1 != "" && $2 != "" {print $1 "." $2}')
   case "$LO_SHARED" in *" $v "*) lc "$1" | awk -F. 'NF >= 3 && $3 != "" {print $1 "." $2 "." $3}' ;; *) echo "$v" ;; esac
@@ -2783,7 +2783,7 @@ in_owner_place(){ # program label — places an app keeps its own helpers; /opt/
 cap(){ printf '%s' "$1" | awk '{print toupper(substr($0, 1, 1)) substr($0, 2)}'; }
 lo_add(){ # plist label program reason sys vendor name
   O_PLIST[O_N]=$1; O_LABEL[O_N]=$2; O_PROG[O_N]=$3; O_REASON[O_N]=$4; O_SYS[O_N]=$5; O_VENDOR[O_N]=$6
-  O_NAME[O_N]=${7:-$(cap "${6#*.}")}; O_DIR[O_N]=""
+  O_NAME[O_N]=${7:-$(cap "${6##*.}")}; O_DIR[O_N]=""
   O_N=$((O_N + 1))
 }
 leftovers_scan(){
@@ -2837,12 +2837,16 @@ lo_dir(){ # program → its own folder one level below the vendor's (…/Applica
 }
 O_ALLOW=""; C_LOP=()
 outer(){ # paths → the same set without paths inside another one of them
-  printf '%s\n' "$1" | sed '/^$/d' | LC_ALL=C sort -u | awk 'k != "" && index($0, k "/") == 1 {next} {print; k = $0}'
+  printf '%s\n' "$1" | sed '/^$/d' | LC_ALL=C sort -u | awk -F/ '
+    { a = ""; inside = 0; for (j = 2; j < NF; j++) { a = a "/" $j; if (a in K) { inside = 1; break } } }
+    !inside { K[$0] = 1; print }'
 }
-lo_total(){ # size of every leftover entry together, each folder once
+LO_TOTAL=""
+lo_total(){ # size of every leftover entry together, each folder once; measured once
   local i all=""
+  [ -n "$LO_TOTAL" ] && { echo "$LO_TOTAL"; return; }
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) all="$all${C_LOP[i]}"$'\n' ;; esac; done
-  kbl "$(outer "$all")"
+  LO_TOTAL=$(kbl "$(outer "$all")"); echo "$LO_TOTAL"
 }
 to_trash(){ # path [sudo] — the only way leftovers leave: into the Trash, under a free name, and only paths found by the scan
   local p=$1 b t i=2
@@ -2966,11 +2970,12 @@ apple_names(){ # Apple's own app and folder names, so ~/Library/Mail or Applicat
 by_name(){ # dir name → entries of dir whose name matches, ignoring case, unless an installed app keeps files there
   local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && ! held "$e" && echo "$e"; done
 }
-held(){ # folder — true when a name inside it is an installed app's bundle id or app name
-  local ids e
+held(){ # folder — true when a name inside it is an installed app's bundle id or app name, or when it cannot all be read
+  local ids l
   ids=$(printf '%s\n' "$APPS" | cut -d'|' -f1 | sed '/^$/d')
+  l=$(find "$1" -maxdepth 3 2>/dev/null) || return 0
   [ -n "$ids" ] || return 1
-  find "$1" -maxdepth 3 2>/dev/null | sed 1d | while IFS= read -r e; do lc "${e##*/}"; echo; done | LO_IDS="$ids" LO_NM="$LO_NAMES" awk '
+  printf '%s\n' "$l" | sed 1d | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]' | LO_IDS="$ids" LO_NM="$LO_NAMES" awk '
     BEGIN { n = split(ENVIRON["LO_IDS"], I, "\n"); m = split(ENVIRON["LO_NM"], A, "\n"); for (j = 1; j <= m; j++) if (A[j] != "") N[A[j]] = 1 }
     f { next }
     { if ($0 in N) { f = 1; next } for (j = 1; j <= n; j++) if (I[j] != "" && index($0, I[j])) { f = 1; next } }
@@ -2984,10 +2989,12 @@ data_paths(){ # vendor
       n=$(lc "${e##*/}"); case "$n" in "$v".*) echo "$e"; id=${n%.plist}; id=${id%.savedstate}; id=${id%.binarycookies}; ids="$ids$id"$'\n' ;; esac
     done
   done
-  for id in $(printf '%s' "$ids" | sort -u); do
-    [ "$(printf '%s' "$id" | awk -F. '{print NF}')" -ge 3 ] && name_ok "${id##*.}" && by_name "$L/Application Support" "${id##*.}"
-  done
-  n=${v#*.}
+  while IFS= read -r id; do
+    [ -n "$id" ] && [ "$(printf '%s' "$id" | awk -F. '{print NF}')" -ge 3 ] && name_ok "${id##*.}" && by_name "$L/Application Support" "${id##*.}"
+  done <<EOF2
+$(printf '%s' "$ids" | sort -u)
+EOF2
+  n=${v##*.}
   if name_ok "$n"; then by_name "$L/Application Support" "$n"; by_name "$L" "$n"; fi
   if lo_interactive; then
     for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && echo "$e"; done
@@ -3027,7 +3034,7 @@ run_odata(){ # n
   local n=$1 s e
   apps_scan
   if vendor_installed "${D_VENDOR[n]}" || open_in "${D_PATHS[n]}"; then info '%s: still in use, skipped' "${D_NAME[n]} · $(_ 'data of a deleted app')"; return 2; fi
-  s=$(kbl "${D_PATHS[n]}")
+  s=$(kbl "$(outer "${D_PATHS[n]}")")
   while IFS= read -r e; do [ -n "$e" ] && { to_trash "$e" || return 1; }; done <<EOF2
 ${D_PATHS[n]}
 EOF2
@@ -3048,7 +3055,8 @@ btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
   f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
   sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
   while kill -0 "$p" 2>/dev/null && [ "$t" -lt 50 ]; do sleep 0.2; t=$((t + 1)); done
-  kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+  if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
+  wait "$p" 2>/dev/null
   cat "$f"; rm -f "$f"
 }
 # ---------------------------------------------------------------- what macup cleans
@@ -3505,8 +3513,8 @@ if task_allowed clean.app_caches; then
     [ "$s" -lt 102400 ] && break
     b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
     case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
-    printf '%s' "$COVERED" | grep -qxF "$e" && continue
-    printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    printf '%s' "$COVERED" | grep -xF -- "$e" >/dev/null && continue   # no grep -q: with pipefail an early exit reads as "not covered"
+    printf '%s' "$COVERED" | grep -F -- "$e/" >/dev/null && continue
     # not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
     [ -n "$(find "$e" -maxdepth 3 -name pyvenv.cfg -print 2>/dev/null | head -1)" ] && continue
     printf '%s\t%s\n' "$s" "$e"

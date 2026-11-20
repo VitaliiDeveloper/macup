@@ -14,6 +14,8 @@ FAKE
 cat >"$W/bin/lsof" <<'FAKE'
 #!/bin/bash
 printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
+[ -n "$FAKE_LSOF_PAD" ] && jot -w 'n/private/var/folders/xx/pad%d' "$FAKE_LSOF_PAD"
+exit 0
 FAKE
 # codesign answers from FAKE_SIGN lines "path-prefix|TEAM|Name"; anything else is unsigned
 cat >"$W/bin/codesign" <<'FAKE'
@@ -116,7 +118,7 @@ until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev
 pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
   local H=$1 out="$1.out"
   (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") \
-    | script -q /dev/null env FAKE_OPEN="${FAKE_OPEN:-}" FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
+    | script -q /dev/null env FAKE_OPEN="${FAKE_OPEN:-}" FAKE_LSOF_PAD="${FAKE_LSOF_PAD:-}" FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
       "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
@@ -290,5 +292,20 @@ H="$W/mp"; leftovers_home "$H"; prog "$H/Library/Application Support/FooTool/x/y
 empty_plist "$H/Library/Preferences/io.github.foo.plist"; empty_plist "$H/Library/Preferences/io.github.bar.plist"
 lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
 grep -q 'io.github.foo.plist' "$r" && ! grep -q 'io.github.bar.plist' "$r" && pass "minor: a shared hosting prefix (io.github) is not one vendor" || { fail "minor: io.github swept"; grep -n 'io.github' "$r"; }
+
+# --- second review
+H="$W/ob"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''; nd=$(nm "$H.out" 'data of a deleted app')
+data_home "$H"; FAKE_LSOF_PAD=40000 FAKE_OPEN="$H/Library/Application Support/Comet/Default/History" PK_ONLY=clean.orphan_data pk "$H" "$nd" y
+[ -d "$H/Library/Application Support/Comet" ] && pass "review2: an open file is seen in a real-sized lsof listing" || fail "review2: open file missed in a big lsof listing"
+H="$W/hu"; data_home "$H"; app "$H/Apps/Writer.app" com.example.writer; echo s >"$H/Library/Application Support/Comet/com.example.writer.state"
+mkdir -p "$H/Library/Application Support/Comet/Locked"; chmod 000 "$H/Library/Application Support/Comet/Locked"
+lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; chmod 755 "$H/Library/Application Support/Comet/Locked"; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/Comet`' "$r" && pass "review2: an unreadable subfolder does not hide an installed app's files" || fail "review2: held failed open on an unreadable subfolder"
+H="$W/ws"; data_home "$H"; empty_plist "$H/Library/Preferences/ai.perplexity.my app.plist"; mkdir -p "$H/Library/Application Support/My"; echo x >"$H/Library/Application Support/My/x"
+lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/My`' "$r" && grep -q 'ai.perplexity.my app.plist' "$r" && pass "review2: an id with a space is one id" || fail "review2: id split on a space"
+H="$W/gn"; leftovers_home "$H"; prog "$H/Library/Application Support/FooTool/x/y" 1; agent "$H/Library/LaunchAgents/io.github.foo.agent.plist" io.github.foo.agent "$H/Library/Application Support/FooTool/x/y"
+lo "$H" check --only check.startup --no-color </dev/null >"$H.out" 2>&1
+grep -q 'Foo · io.github.foo.agent' "$H.out" && pass "review2: a three-part vendor is named by its owner" || { fail "review2: vendor name"; grep 'io.github' "$H.out"; }
 
 [ $F = 0 ] || exit 1

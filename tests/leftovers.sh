@@ -262,4 +262,20 @@ H="$W/op"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''; nd=$(nm "$H.
 data_home "$H"; FAKE_OPEN="$H/Library/Application Support/Comet/Default/History" PK_ONLY=clean.orphan_data pk "$H" "$nd" y
 [ -d "$H/Library/Application Support/Comet" ] && tr -d '\r' <"$H.out" | grep -qE 'skipped while the app is open|still in use' && pass "review: data in use is skipped" || { fail "review: data in use moved"; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head -5; }
 
+# --- totals count a folder once, even when two entries contain it
+H="$W/tt"; data_home "$H"; PK_ONLY=clean.orphan_agents,clean.orphan_data pk "$H" '' ''
+o=$(tr -d '\r' <"$H.out")
+ht=$(printf '%s\n' "$o" | sed -n 's/.*Leftovers of deleted apps — found [0-9]*, total \(.*\)$/\1/p')
+dz=$(printf '%s\n' "$o" | grep 'data of a deleted app' | awk '{print $3, $4}')
+pm=$(printf '%s\n' "$o" | sed -n 's/.*More with a higher level or by picking: ~\(.*\)$/\1/p')
+[ -n "$dz" ] && [ "$ht" = "$dz" ] && [ "$pm" = "$dz" ] && pass "totals: a folder inside two entries is counted once" || fail "totals: heading '$ht', more '$pm', data entry '$dz'"
+
+# --- a folder named like the deleted app but holding an installed app's files stays
+H="$W/hd"; data_home "$H"; app "$H/Apps/Writer.app" com.example.writer
+echo s >"$H/Library/Application Support/Comet/Default/com.example.writer.state"
+mkdir -p "$H/Library/Perplexity/Writer"
+lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/Comet`' "$r" && ! grep -q '~/Library/Perplexity`' "$r" && grep -q 'Preferences/ai.perplexity.comet.plist' "$r" \
+  && pass "data: a folder that holds an installed app's files stays" || { fail "data: shared folder offered"; sed -n '/What can be cleaned/,$p' "$r" | head -20; }
+
 [ $F = 0 ] || exit 1

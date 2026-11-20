@@ -87,10 +87,10 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
       if [ "${C_KIND[i]}" = cmd ]; then kb_get "${C_MDIR[i]}"; else kb_get "${C_PATHS[i]}"; fi
       C_KB[i]=$KB; [ "${C_KIND[i]}" = empty ] && [ "$KB" -lt 5120 ] && continue
     fi
-    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO; do eval "${a}[j]=\${${a}[i]}"; done; fi
+    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO C_LOP; do eval "${a}[j]=\${${a}[i]}"; done; fi
     j=$((j + 1))
   done
-  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO; do unset "${a}[i]"; done; done
+  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO C_LOP; do unset "${a}[i]"; done; done
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }
@@ -245,12 +245,12 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
 }
 visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
-  local i n=0 tag head=0 ln lc=0 lkb=0
-  for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && { lc=$((lc + 1)); lkb=$((lkb + C_KB[i])); } ;; esac; done
+  local i n=0 tag head=0 ln lc=0
+  for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done
   for ((i = 0; i < C_N; i++)); do
     visible "$i" || continue
     case "${C_TASK[i]}" in clean.orphan_*)
-      if [ "$head" = 0 ]; then head=1; flush; echo; ln=$(_f 'Leftovers of deleted apps — found %s, total %s' "$lc" "$(hum "$lkb")")
+      if [ "$head" = 0 ]; then head=1; flush; echo; ln=$(_f 'Leftovers of deleted apps — found %s, total %s' "$lc" "$(hum "$(lo_total)")")
         printf '%s  %s%s%s\n' "$CL" "$B" "$ln" "$N"; md ""; md "**$ln**"; fi ;;
     esac
     n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"

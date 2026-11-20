@@ -33,7 +33,7 @@ in_owner_place(){ # program label — places an app keeps its own helpers; /opt/
   case "$1" in
     */*.app/*|"$HOME/Library/Application Support/"*|"$LO_SYS/Application Support/"*) return 0 ;;
     "$HOME/Library/"*) n=${1#"$HOME/Library/"}; n=$(lc "${n%%/*}")
-                       printf '%s\n' "$(lc "$2")" | tr '.' '\n' | grep -qxF "$n" ;;
+                       printf '%s\n' "$(lc "$2")" | tr '.' '\n' | grep -xF "$n" >/dev/null ;;
     *) return 1 ;;
   esac
 }
@@ -88,13 +88,21 @@ lo_dir(){ # program → its own folder one level below the vendor's (…/Applica
     return
   done
 }
-O_ALLOW=""
+O_ALLOW=""; C_LOP=()
+outer(){ # paths → the same set without paths inside another one of them
+  printf '%s\n' "$1" | sed '/^$/d' | LC_ALL=C sort -u | awk 'k != "" && index($0, k "/") == 1 {next} {print; k = $0}'
+}
+lo_total(){ # size of every leftover entry together, each folder once
+  local i all=""
+  for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) all="$all${C_LOP[i]}"$'\n' ;; esac; done
+  kbl "$(outer "$all")"
+}
 to_trash(){ # path [sudo] — the only way leftovers leave: into the Trash, under a free name, and only paths found by the scan
   local p=$1 b t i=2
   case "$p" in ""|*/../*|*/..) echo "macup refused to move: $p" >>"$RAW"; return 1 ;; esac
   [ -L "$p" ] && { echo "macup refused a symlink: $p" >>"$RAW"; return 1; }
   [ -e "$p" ] || return 0
-  printf '%s\n' "$O_ALLOW" | grep -qxF -- "$p" || { echo "macup refused to move: $p" >>"$RAW"; return 1; }
+  printf '%s\n' "$O_ALLOW" | grep -xF -- "$p" >/dev/null || { echo "macup refused to move: $p" >>"$RAW"; return 1; }
   mkdir -p "$HOME/.Trash"; b=$(basename "$p"); t="$HOME/.Trash/$b"
   while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$b $i"; i=$((i + 1)); done
   if [ -n "$2" ]; then sudo mv "$p" "$t" 2>>"$RAW" && sudo chown -R "$(id -u)" "$t" 2>>"$RAW"
@@ -165,13 +173,14 @@ leftovers_cands(){
     s=0; [ -n "$d" ] && { O_ALLOW="$O_ALLOW$d"$'\n'"$(dirname "$d")"$'\n'; s=$(kb "$d"); }
     CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")$([ "${O_SYS[i]}" = 1 ] && echo ' 🔑')" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i"; echo "@$(tildify "${O_PLIST[i]}")"; [ -n "$d" ] && echo "@$(tildify "$d")")"
     [ "${O_SYS[i]}" = 1 ] && C_SUDO[C_N - 1]=1
+    C_LOP[C_N - 1]="${O_PLIST[i]}${d:+$'\n'$d}"
   done
 }
 run_orph(){ # n
   local n=$1 l=${O_LABEL[$1]} d=${O_DIR[$1]} s=0 p h su
   if ! orph_still "$n"; then info '%s: still in use, skipped' "${O_NAME[n]} · $(lo_kind "$n")"; return 2; fi
   su=""; [ "${O_SYS[n]}" = 1 ] && su=sudo
-  if [ "${O_REASON[n]}" != empty ] && printf '%s' "$l" | grep -qE '^[A-Za-z0-9._-]+$' && launchctl print "$(lo_domain "$n")/$l" >/dev/null 2>&1; then
+  if [ "${O_REASON[n]}" != empty ] && printf '%s' "$l" | grep -E '^[A-Za-z0-9._-]+$' >/dev/null && launchctl print "$(lo_domain "$n")/$l" >/dev/null 2>&1; then
     $su launchctl bootout "$(lo_domain "$n")/$l" 2>>"$RAW"
   fi
   [ -n "$d" ] && s=$(kb "$d")
@@ -194,8 +203,8 @@ app_names(){ printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id"
 name_ok(){ # name — a folder named like this may belong to the deleted app, not to another app or to macOS
   [ -n "$1" ] || return 1
   case "$LO_GENERIC" in *" $1 "*) return 1 ;; esac
-  printf '%s\n' "$LO_NAMES" | grep -qxF -- "$1" && return 1
-  ! printf '%s\n' "$LO_APPLE" | grep -qxF -- "$1"
+  printf '%s\n' "$LO_NAMES" | grep -xF -- "$1" >/dev/null && return 1   # never grep -q on a pipe here: with pipefail an early exit reads as "no"
+  ! printf '%s\n' "$LO_APPLE" | grep -xF -- "$1" >/dev/null
 }
 apple_names(){ # Apple's own app and folder names, so ~/Library/Mail or Application Support/AddressBook are never taken
   local e
@@ -203,8 +212,18 @@ apple_names(){ # Apple's own app and folder names, so ~/Library/Mail or Applicat
   for e in "$HOME/Library/Preferences"/com.apple.*; do [ -e "$e" ] && { e=$(lc "${e##*/com.apple.}"); echo "${e%%.*}"; }; done
   printf '%s\n' $LO_LIBRARY
 }
-by_name(){ # dir name → entries of dir whose name matches, ignoring case
-  local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && echo "$e"; done
+by_name(){ # dir name → entries of dir whose name matches, ignoring case, unless an installed app keeps files there
+  local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && ! held "$e" && echo "$e"; done
+}
+held(){ # folder — true when a name inside it is an installed app's bundle id or app name
+  local ids
+  ids=$(printf '%s\n' "$APPS" | cut -d'|' -f1 | sed '/^$/d')
+  [ -n "$ids" ] || return 1
+  find "$1" -maxdepth 3 2>/dev/null | sed 1d | while IFS= read -r e; do lc "${e##*/}"; echo; done | LO_IDS="$ids" LO_NM="$LO_NAMES" awk '
+    BEGIN { n = split(ENVIRON["LO_IDS"], I, "\n"); m = split(ENVIRON["LO_NM"], A, "\n"); for (j = 1; j <= m; j++) if (A[j] != "") N[A[j]] = 1 }
+    f { next }
+    { if ($0 in N) { f = 1; next } for (j = 1; j <= n; j++) if (I[j] != "" && index($0, I[j])) { f = 1; next } }
+    END { exit !f }'
 }
 data_paths(){ # vendor
   local v=$1 L="$HOME/Library" d e n id ids="" t i
@@ -238,15 +257,16 @@ data_cands(){
     p=$(data_paths "$v" | awk '!seen[$0]++'); [ -n "$p" ] || continue
     D_VENDOR[D_N]=$v; D_NAME[D_N]=$n; D_PATHS[D_N]=$p
     O_ALLOW="$O_ALLOW$p"$'\n'
-    s=$(kbl "$p")
+    s=$(kbl "$(outer "$p")")
     note=$(_f 'What: settings, history, saved passwords and cookies of %s.' "$n"; echo
       _f 'Why: no app from %s is installed anymore.' "$n"; echo
-      printf '%s\n' "$p" | while IFS= read -r e; do find "$e" -maxdepth 4 \( -name 'Login Data' -o -name History -o -name Cookies \) 2>/dev/null; done | grep -q . \
+      [ -n "$(printf '%s\n' "$p" | while IFS= read -r e; do find "$e" -maxdepth 4 \( -name 'Login Data' -o -name History -o -name Cookies \) 2>/dev/null; done | head -1)" ] \
         && { _ 'Note: move your passwords to another browser first if you need them.'; echo; }
-      printf '%s\n' "$p" | grep -q '/Containers/\|/Group Containers/' && { _ 'Note: macOS may ask once for access.'; echo; }
+      printf '%s\n' "$p" | grep '/Containers/\|/Group Containers/' >/dev/null && { _ 'Note: macOS may ask once for access.'; echo; }
       _ 'Safe: yes, it goes to the Trash.'; echo
       printf '%s\n' "$p" | while IFS= read -r e; do echo "@$(tildify "$e")"; done)
     CL_MANUAL=1 cand clean.orphan_data 3 "⚠ $n · $(_ 'data of a deleted app')" "$s" cmd "odata:$D_N" "" "" "" "$note"
+    C_LOP[C_N - 1]=$p
     D_N=$((D_N + 1))
   done <<EOF2
 $vs

@@ -470,8 +470,10 @@ settle
 [ "$DRY" = 1 ] && mark_busy
 for ((i = 0; i < C_N; i++)); do
   visible "$i" && [ "${C_BUSY[i]:-0}" = 0 ] || continue
+  case "${C_TASK[i]}" in clean.orphan_*) continue ;; esac   # counted together below: their entries can share a folder
   if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
+POT_MORE=$((POT_MORE + $(lo_total)))
 if CLEAN && [ -n "$PICK" ]; then
   # --pick: the keys a check gave, chosen by a person in another program; that choice is the confirmation
   section "Cleanup"

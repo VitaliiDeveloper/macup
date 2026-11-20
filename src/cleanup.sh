@@ -187,6 +187,7 @@ run_key(){ local out r=0
     simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
+    odata:*)   run_odata "${1#odata:}"; return ;;
     docker)    out=$({ docker builder prune -f || exit 1; docker image prune -f; } 2>&1) || r=1; echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}'); return $r ;;
   esac
@@ -258,7 +259,7 @@ list_cands(){ # numbered list of what can be cleaned
     printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
     md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"
     [ -n "${C_INFO[i]}" ] && printf '%s\n' "${C_INFO[i]}" | while IFS= read -r ln; do
-      [ -n "$ln" ] && { printf '%s        %s%s%s\n' "$CL" "$D" "$ln" "$N"; md "    - $ln"; }; done
+      case "$ln" in "") ;; @*) md "    - \`${ln#@}\`" ;; *) printf '%s        %s%s%s\n' "$CL" "$D" "$ln" "$N"; md "    - $ln" ;; esac; done
   done
 }
 vis_index(){ # visible number → index

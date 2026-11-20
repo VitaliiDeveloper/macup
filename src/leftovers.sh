@@ -133,16 +133,18 @@ lo_info(){ # n → What / Why / Safe lines
   _ 'Safe: yes, it goes to the Trash.'; echo
 }
 leftovers_cands(){
-  task_allowed clean.orphan_agents || return 0
+  task_allowed clean.orphan_agents || task_allowed clean.orphan_data || return 0
   leftovers_scan
   local i d s
+  task_allowed clean.orphan_data && data_cands
+  task_allowed clean.orphan_agents || return 0
   for ((i = 0; i < O_N; i++)); do
     [ "${O_SYS[i]}" = 0 ] || continue
     case "${O_REASON[i]}" in empty|missing|gone) ;; *) continue ;; esac
     d=""; [ -n "${O_PROG[i]}" ] && d=$(lo_dir "${O_PROG[i]}"); O_DIR[i]=$d
     O_ALLOW="$O_ALLOW${O_PLIST[i]}"$'\n'
     s=0; [ -n "$d" ] && { O_ALLOW="$O_ALLOW$d"$'\n'"$(dirname "$d")"$'\n'; s=$(kb "$d"); }
-    CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i")"
+    CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i"; echo "@$(tildify "${O_PLIST[i]}")"; [ -n "$d" ] && echo "@$(tildify "$d")")"
   done
 }
 run_orph(){ # n
@@ -157,5 +159,76 @@ run_orph(){ # n
     to_trash "$d" || return 1
     p=$(dirname "$d"); [ -d "$p" ] && [ -z "$(ls -A "$p" 2>/dev/null)" ] && to_trash "$p"
   fi
+  KEY_FREED=$s
+}
+
+# --- data of a deleted app: only for vendors whose agent was found orphaned, so SDK ids and test bundles are never guessed at
+D_N=0; D_VENDOR=(); D_NAME=(); D_PATHS=()
+LO_GENERIC=" app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
+LO_TTY=0; [ -t 0 ] && [ -t 1 ] && [ "$QUIET" = 0 ] && LO_TTY=1   # decided here: helpers run in $(…), where stdout is never a terminal
+lo_interactive(){ [ "$LO_TTY" = 1 ]; }
+app_names(){ printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && { echo "${id##*.}"; p=${p##*/}; lc "${p%.app}"; echo; }; done; }
+name_ok(){ # name — a folder named like this may belong to the deleted app
+  [ -n "$1" ] || return 1
+  case "$LO_GENERIC" in *" $1 "*) return 1 ;; esac
+  ! printf '%s\n' "$LO_NAMES" | grep -qxF -- "$1"
+}
+by_name(){ # dir name → entries of dir whose name matches, ignoring case
+  local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && echo "$e"; done
+}
+data_paths(){ # vendor
+  local v=$1 L="$HOME/Library" d e n id ids="" t i
+  for d in Preferences Caches HTTPStorages "Saved Application State" WebKit Logs; do
+    for e in "$L/$d"/*; do
+      [ -e "$e" ] && [ ! -L "$e" ] || continue
+      n=$(lc "${e##*/}"); case "$n" in "$v".*) echo "$e"; id=${n%.plist}; id=${id%.savedstate}; id=${id%.binarycookies}; ids="$ids$id"$'\n' ;; esac
+    done
+  done
+  for id in $(printf '%s' "$ids" | sort -u); do
+    [ "$(printf '%s' "$id" | awk -F. '{print NF}')" -ge 3 ] && name_ok "${id##*.}" && by_name "$L/Application Support" "${id##*.}"
+  done
+  n=${v#*.}
+  if name_ok "$n"; then by_name "$L/Application Support" "$n"; by_name "$L" "$n"; fi
+  if lo_interactive; then
+    for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && echo "$e"; done
+    for ((i = 0; i < O_N; i++)); do
+      [ "${O_VENDOR[i]}" = "$v" ] && [ -e "${O_PROG[i]}" ] || continue
+      t=$(team_of "${O_PROG[i]}"); [ -n "$t" ] || continue
+      for e in "$L/Group Containers/$t".*; do [ -e "$e" ] && [ ! -L "$e" ] && echo "$e"; done
+    done
+  fi
+}
+data_cands(){
+  local i v vs p s note
+  LO_NAMES=$(app_names | sed '/^$/d' | sort -u)
+  vs=$(for ((i = 0; i < O_N; i++)); do [ "${O_REASON[i]}" != broken ] && [ -n "${O_VENDOR[i]}" ] && echo "${O_VENDOR[i]}|${O_NAME[i]}"; done | sort -u -t'|' -k1,1)
+  while IFS='|' read -r v n; do
+    [ -n "$v" ] || continue
+    vendor_installed "$v" && continue
+    p=$(data_paths "$v" | awk '!seen[$0]++'); [ -n "$p" ] || continue
+    D_VENDOR[D_N]=$v; D_NAME[D_N]=$n; D_PATHS[D_N]=$p
+    O_ALLOW="$O_ALLOW$p"$'\n'
+    s=$(kbl "$p")
+    note=$(_f 'What: settings, history, saved passwords and cookies of %s.' "$n"; echo
+      _f 'Why: no app from %s is installed anymore.' "$n"; echo
+      printf '%s\n' "$p" | while IFS= read -r e; do find "$e" -maxdepth 4 \( -name 'Login Data' -o -name History -o -name Cookies \) 2>/dev/null; done | grep -q . \
+        && { _ 'Note: move your passwords to another browser first if you need them.'; echo; }
+      printf '%s\n' "$p" | grep -q '/Containers/\|/Group Containers/' && { _ 'Note: macOS may ask once for access.'; echo; }
+      _ 'Safe: yes, it goes to the Trash.'; echo
+      printf '%s\n' "$p" | while IFS= read -r e; do echo "@$(tildify "$e")"; done)
+    CL_MANUAL=1 cand clean.orphan_data 3 "⚠ $n · $(_ 'data of a deleted app')" "$s" cmd "odata:$D_N" "" "" "" "$note"
+    D_N=$((D_N + 1))
+  done <<EOF2
+$vs
+EOF2
+}
+run_odata(){ # n
+  local n=$1 s e
+  apps_scan
+  if vendor_installed "${D_VENDOR[n]}"; then info '%s: still in use, skipped' "${D_NAME[n]} · $(_ 'data of a deleted app')"; return 2; fi
+  s=$(kbl "${D_PATHS[n]}")
+  while IFS= read -r e; do [ -n "$e" ] && { to_trash "$e" || return 1; }; done <<EOF2
+${D_PATHS[n]}
+EOF2
   KEY_FREED=$s
 }

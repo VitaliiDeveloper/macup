@@ -98,7 +98,7 @@ pk(){ # dir answer confirm [command run before answering] — interactive check 
     | script -q /dev/null env FAKE_LOADED="${FAKE_LOADED:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
-      "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only clean.orphan_agents --no-color >"$out" 2>&1
+      "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
 }
 nm(){ tr -d '\r' <"$1" | grep -E "^ +[0-9]+ .*$2" | head -1 | awk '{print $1}'; }
 AS="Library/Application Support"
@@ -131,5 +131,29 @@ leftovers_home "$H"; pk "$H" "$nu" y "app '$H/Apps/Comet.app' ai.perplexity.come
 
 leftovers_home "$H"; lo "$H" clean --level aggressive --only clean.orphan_agents --no-color </dev/null >/dev/null 2>&1
 [ -f "$H/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] && [ -z "$(ls -A "$H/.Trash")" ] && pass "orphan_agents: nothing without a pick" || fail "orphan_agents: moved without a pick"
+
+# --- clean.orphan_data: data of a vendor whose agent was orphaned
+data_home(){ # dir
+  local H=$1 L="$1/Library"; leftovers_home "$H"
+  mkdir -p "$L/Preferences" "$L/HTTPStorages/ai.perplexity.CometUpdater" "$L/Application Support/Comet/Default" "$L/Perplexity" \
+    "$L/Containers/ai.perplexity.mac.Notif" "$L/Group Containers/group.ai.perplexity.app" "$L/Application Support/Downloader"
+  for f in ai.perplexity.comet ai.perplexity.downloader com.segment.analytics com.other.app; do empty_plist "$L/Preferences/$f.plist"; done
+  echo h >"$L/Application Support/Comet/Default/History"; prog "$L/Application Support/Comet/Default/Cache" 4096
+  echo x >"$L/Perplexity/x"; echo x >"$L/Containers/ai.perplexity.mac.Notif/x"; echo x >"$L/Group Containers/group.ai.perplexity.app/x"
+  echo mine >"$L/Application Support/Downloader/x"; app "$H/Apps/Downloader.app" local.vitalii.downloader
+}
+H="$W/da"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''
+nd=$(nm "$H.out" 'Perplexity AI · data of a deleted app')
+o=$(tr -d '\r' <"$H.out")
+printf '%s\n' "$o" | grep -q '⚠ Perplexity AI · data of a deleted app' && printf '%s\n' "$o" | grep -q 'saved passwords' && printf '%s\n' "$o" | grep -q 'macOS may ask once' \
+  && ! printf '%s\n' "$o" | grep -q 'Other ·' && pass "orphan_data: one warned entry per orphaned vendor, none for others" || { fail "orphan_data: list"; printf '%s\n' "$o" | sed -n '/What can be cleaned/,$p' | head -20; }
+data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" "$nd" y; T="$H/.Trash"
+[ -f "$T/ai.perplexity.comet.plist" ] && [ -f "$T/ai.perplexity.downloader.plist" ] && [ -d "$T/ai.perplexity.CometUpdater" ] && [ -d "$T/Comet" ] && [ -d "$T/Perplexity" ] \
+  && [ -d "$T/ai.perplexity.mac.Notif" ] && [ -d "$T/group.ai.perplexity.app" ] \
+  && pass "orphan_data: prefs, profile, vendor folders and containers in the Trash" || { fail "orphan_data: move"; ls "$T"; }
+[ -f "$H/Library/Application Support/Downloader/x" ] && [ -f "$H/Library/Preferences/com.segment.analytics.plist" ] && [ -f "$H/Library/Preferences/com.other.app.plist" ] \
+  && pass "orphan_data: another app's folder of the same name and other vendors stay" || fail "orphan_data: took too much"
+data_home "$H"; lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+grep -q 'Application Support/Comet' "$r" && ! grep -q 'Containers' "$r" && pass "orphan_data: unattended runs list paths in the report, never containers" || { fail "orphan_data: unattended"; grep -n 'Comet\|Containers' "$r" | head; }
 
 [ $F = 0 ] || exit 1

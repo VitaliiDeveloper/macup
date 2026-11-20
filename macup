@@ -122,7 +122,9 @@ clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only whe
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
 clean.stale_artifacts|off|Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in)
 clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
-clean.trash|off|Empty the Trash (opt-in)'
+clean.trash|off|Empty the Trash (opt-in)
+clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
+clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)'
 
 # ---------------------------------------------------------------- config
 conf(){ # key default
@@ -957,7 +959,6 @@ Trash: %s — empty it || Кошик: %s — очисти його
 Trash: %s || Кошик: %s
 Startup items || Автозапуск
 Third-party background services: %s (full list in the report) || Фонові служби сторонніх програм: %s (повний список у звіті)
-Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps) || Осиротілі елементи автозапуску: %s посилаються на програми, яких уже немає (імовірно, залишки видалених програм)
 Login items: System Settings → General → Login Items & Extensions || Об'єкти входу: Системні параметри → Загальні → Об'єкти входу
 Deep scan || Глибока перевірка
 Measuring your home folder (can take a few minutes) || Рахую розміри домашньої теки (кілька хвилин)
@@ -1204,6 +1205,13 @@ Remove them all: macup reports clean · open the folder: macup reports open || �
 Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep) || Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску) — щось заповнює диск (спробуй: macup check --deep)
 Free space: %s since %s (%s of it is swap, freed on restart) || Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску)
 brew doctor: %s warnings (details in the report) || brew doctor: %s попереджень (подробиці у звіті)
+%s cannot be read (not a valid plist) || %s неможливо прочитати (некоректний plist)
+app is not installed || застосунок не встановлено
+its program is gone || його програму видалено
+empty file || порожній файл
+Leftovers of deleted apps: %s (macup check lets you pick them) || Залишки видалених застосунків: %s (macup check дає їх вибрати)
+Background programs of deleted apps and their folders (only when you pick them) || Фонові програми видалених застосунків і їхні теки (лише якщо ви їх виберете)
+Data of deleted apps: settings, history, saved passwords (only when you pick them) || Дані видалених застосунків: налаштування, історія, збережені паролі (лише якщо ви їх виберете)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1394,7 +1402,6 @@ Trash: %s — empty it || Корзина: %s — очистите её
 Trash: %s || Корзина: %s
 Startup items || Автозапуск
 Third-party background services: %s (full list in the report) || Фоновые службы сторонних приложений: %s (полный список в отчёте)
-Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps) || Осиротевшие элементы автозапуска: %s ссылаются на программы, которых уже нет (вероятно, остатки удалённых приложений)
 Login items: System Settings → General → Login Items & Extensions || Объекты входа: Системные настройки → Основные → Объекты входа
 Deep scan || Глубокая проверка
 Measuring your home folder (can take a few minutes) || Считаю размеры домашней папки (несколько минут)
@@ -1641,6 +1648,13 @@ Remove them all: macup reports clean · open the folder: macup reports open || �
 Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep) || Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки) — что-то заполняет диск (попробуйте: macup check --deep)
 Free space: %s since %s (%s of it is swap, freed on restart) || Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки)
 brew doctor: %s warnings (details in the report) || brew doctor: %s предупреждений (подробности в отчёте)
+%s cannot be read (not a valid plist) || %s невозможно прочитать (некорректный plist)
+app is not installed || приложение не установлено
+its program is gone || его программа удалена
+empty file || пустой файл
+Leftovers of deleted apps: %s (macup check lets you pick them) || Остатки удалённых приложений: %s (macup check даёт их выбрать)
+Background programs of deleted apps and their folders (only when you pick them) || Фоновые программы удалённых приложений и их папки (только если вы их выберете)
+Data of deleted apps: settings, history, saved passwords (only when you pick them) || Данные удалённых приложений: настройки, история, сохранённые пароли (только если вы их выберете)
 EOF
   ;;
   esac
@@ -2667,6 +2681,84 @@ pick(){ # reads a choice, prints the chosen indexes one per line
   done | sort -un
 }
 
+# ================================================================ LEFTOVERS of deleted apps
+# An updater lives outside its app (Application Support), so deleting the app leaves it registered and its program
+# intact. The owner is found by signing team, then by bundle-id vendor; a vendor that does not match is a miss, not a removal.
+LO_APPS="${MACUP_APPS:-/Applications:$HOME/Applications}"
+LO_SYS="${MACUP_SYSLIB:-/Library}"
+APPS=""; APPS_TEAMS=0; O_N=0; O_SCANNED=0
+O_PLIST=(); O_LABEL=(); O_PROG=(); O_REASON=(); O_SYS=(); O_VENDOR=(); O_NAME=(); O_DIR=()
+
+lc(){ printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+apps_scan(){ # APPS: one line per installed app — bundle id (lowercase) | team id (filled by apps_teams) | path
+  local r a id
+  APPS=$(printf '%s\n' "$LO_APPS" | tr ':' '\n' | while IFS= read -r r; do
+      [ -d "$r" ] && find "$r" -maxdepth 3 -type d -name '*.app' -prune 2>/dev/null
+    done | while IFS= read -r a; do
+      id=$(plutil -extract CFBundleIdentifier raw -o - "$a/Contents/Info.plist" 2>/dev/null) || continue
+      printf '%s||%s\n' "$(lc "$id")" "$a"
+    done)
+  APPS_TEAMS=0
+}
+apps_teams(){ # codesign is slow: only once there is a suspect
+  [ "$APPS_TEAMS" = 1 ] && return; APPS_TEAMS=1
+  local id t p
+  APPS=$(printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && printf '%s|%s|%s\n' "$id" "$(team_of "$p")" "$p"; done)
+}
+vendor_of(){ lc "$1" | awk -F. 'NF >= 2 && $1 != "" && $2 != "" {print $1 "." $2}'; }
+vendor_installed(){ [ -n "$1" ] && printf '%s\n' "$APPS" | awk -F'|' -v v="$1" '$1 == v || index($1, v ".") == 1 {f = 1} END {exit !f}'; }
+team_installed(){ [ -n "$1" ] || return 1; apps_teams; printf '%s\n' "$APPS" | awk -F'|' -v t="$1" '$2 == t {f = 1} END {exit !f}'; }
+team_of(){ codesign -dv --verbose=2 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p' | grep -v '^not set$' | head -1; }
+signer_of(){ codesign -dv --verbose=2 "$1" 2>&1 | sed -n 's/^Authority=Developer ID Application: \(.*\) ([A-Z0-9]*)$/\1/p' | head -1 | sed -E 's/,? (Inc\.?|LLC|Ltd\.?)$//'; }
+assoc_ids(){ plutil -extract AssociatedBundleIdentifiers json -o - "$1" 2>/dev/null | tr -d '[]"' | tr ',' '\n' | sed '/^$/d'; }
+in_owner_place(){ # program label — places an app keeps its own helpers; /opt/homebrew, ~/.local, scripts are never judged by owner
+  local n
+  case "$1" in
+    */*.app/*|"$HOME/Library/Application Support/"*|"$LO_SYS/Application Support/"*) return 0 ;;
+    "$HOME/Library/"*) n=${1#"$HOME/Library/"}; n=$(lc "${n%%/*}")
+                       printf '%s\n' "$(lc "$2")" | tr '.' '\n' | grep -qxF "$n" ;;
+    *) return 1 ;;
+  esac
+}
+cap(){ printf '%s' "$1" | awk '{print toupper(substr($0, 1, 1)) substr($0, 2)}'; }
+lo_add(){ # plist label program reason sys vendor name
+  O_PLIST[O_N]=$1; O_LABEL[O_N]=$2; O_PROG[O_N]=$3; O_REASON[O_N]=$4; O_SYS[O_N]=$5; O_VENDOR[O_N]=$6
+  O_NAME[O_N]=${7:-$(cap "${6#*.}")}; O_DIR[O_N]=""
+  O_N=$((O_N + 1))
+}
+leftovers_scan(){
+  [ "$O_SCANNED" = 1 ] && return; O_SCANNED=1
+  local f b sys label prog id v ids team owned i j
+  apps_scan
+  for f in "$HOME/Library/LaunchAgents"/*.plist "$LO_SYS/LaunchAgents"/*.plist "$LO_SYS/LaunchDaemons"/*.plist; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    b=$(basename "$f" .plist); case "$b" in com.apple.*|"$SCHED_LABEL") continue ;; esac
+    sys=0; case "$f" in "$LO_SYS"/*) sys=1 ;; esac
+    if ! plutil -lint "$f" >/dev/null 2>&1; then lo_add "$f" "" "" broken "$sys" "$(vendor_of "$b")"; continue; fi
+    label=$(plutil -extract Label raw -o - "$f" 2>/dev/null)
+    case "$label" in com.apple.*|"$SCHED_LABEL") continue ;; esac
+    prog=$(plutil -extract Program raw -o - "$f" 2>/dev/null || plutil -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null)
+    if [ -z "$label" ] && [ -z "$prog" ]; then
+      [ "$(plutil -convert json -o - "$f" 2>/dev/null)" = "{}" ] || continue
+      ls -lO "$f" 2>/dev/null | grep -q uchg && continue   # locked empty file: some tools block an updater this way
+      lo_add "$f" "" "" empty "$sys" "$(vendor_of "$b")"; continue
+    fi
+    ids=$(assoc_ids "$f"); v=$(vendor_of "$(printf '%s\n' "$ids" | head -1)"); [ -z "$v" ] && v=$(vendor_of "${label:-$b}")
+    case "$prog" in /*) ;; *) continue ;; esac
+    if [ ! -e "$prog" ]; then lo_add "$f" "$label" "$prog" missing "$sys" "$v" "$(signer_of "$prog")"; continue; fi
+    in_owner_place "$prog" "$label" || continue
+    team=$(team_of "$prog"); team_installed "$team" && continue
+    owned=0
+    for id in $ids $label; do vendor_installed "$(vendor_of "$id")" && { owned=1; break; }; done
+    [ "$owned" = 1 ] && continue
+    lo_add "$f" "$label" "$prog" gone "$sys" "$v" "$(signer_of "$prog")"
+  done
+  for ((i = 0; i < O_N; i++)); do   # an empty plist has no signer: name it like its vendor's other items
+    for ((j = 0; j < O_N; j++)); do
+      [ "${O_VENDOR[j]}" = "${O_VENDOR[i]}" ] && [ -n "${O_PROG[j]}" ] && [ -e "${O_PROG[j]}" ] && { O_NAME[i]=${O_NAME[j]}; break; }
+    done
+  done
+}
 # ---------------------------------------------------------------- what macup cleans
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
 
@@ -3214,19 +3306,28 @@ fi
 # ================================================================ STARTUP
 if task check.startup; then
   section "Startup items"
-  AG=""; ORPH=""
-  for f in "$HOME"/Library/LaunchAgents/*.plist /Library/LaunchAgents/*.plist /Library/LaunchDaemons/*.plist; do
+  leftovers_scan
+  AG=""
+  for f in "$HOME"/Library/LaunchAgents/*.plist "$LO_SYS"/LaunchAgents/*.plist "$LO_SYS"/LaunchDaemons/*.plist; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .plist); case "$b" in com.apple.*) continue ;; esac
     AG="$AG$b"$'\n'
-    prog=$(plutil -extract Program raw -o - "$f" 2>/dev/null || plutil -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null)
-    case "$prog" in /*) [ -e "$prog" ] || ORPH="$ORPH$(tildify "$f") → $(tildify "$prog")"$'\n' ;; esac
   done
   info 'Third-party background services: %s (full list in the report)' "$(cnt "$AG")"
   printf '%s' "$AG" | while IFS= read -r l; do [ -n "$l" ] && mdonly "$l"; done
-  if [ -n "$ORPH" ]; then
-    warn 'Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps)' "$(cnt "$ORPH")"
-    lines "$ORPH"
+  LO=""
+  for ((i = 0; i < O_N; i++)); do
+    case "${O_REASON[i]}" in
+      broken)  info '%s cannot be read (not a valid plist)' "$(tildify "${O_PLIST[i]}")"; continue ;;
+      gone)    r=$(_ 'app is not installed') ;;
+      missing) r=$(_ 'its program is gone') ;;
+      empty)   r=$(_ 'empty file') ;;
+    esac
+    LO="$LO${O_NAME[i]} · ${O_LABEL[i]:-$(basename "${O_PLIST[i]}" .plist)} — $r"$'\n'
+  done
+  if [ -n "$LO" ]; then
+    warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"
+    lines "$LO"
   fi
   info 'Login items: System Settings → General → Login Items & Extensions'
 fi

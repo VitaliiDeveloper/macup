@@ -57,19 +57,28 @@ fi
 # ================================================================ STARTUP
 if task check.startup; then
   section "Startup items"
-  AG=""; ORPH=""
-  for f in "$HOME"/Library/LaunchAgents/*.plist /Library/LaunchAgents/*.plist /Library/LaunchDaemons/*.plist; do
+  leftovers_scan
+  AG=""
+  for f in "$HOME"/Library/LaunchAgents/*.plist "$LO_SYS"/LaunchAgents/*.plist "$LO_SYS"/LaunchDaemons/*.plist; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .plist); case "$b" in com.apple.*) continue ;; esac
     AG="$AG$b"$'\n'
-    prog=$(plutil -extract Program raw -o - "$f" 2>/dev/null || plutil -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null)
-    case "$prog" in /*) [ -e "$prog" ] || ORPH="$ORPH$(tildify "$f") → $(tildify "$prog")"$'\n' ;; esac
   done
   info 'Third-party background services: %s (full list in the report)' "$(cnt "$AG")"
   printf '%s' "$AG" | while IFS= read -r l; do [ -n "$l" ] && mdonly "$l"; done
-  if [ -n "$ORPH" ]; then
-    warn 'Orphaned launch items: %s point to programs that no longer exist (likely leftovers of deleted apps)' "$(cnt "$ORPH")"
-    lines "$ORPH"
+  LO=""
+  for ((i = 0; i < O_N; i++)); do
+    case "${O_REASON[i]}" in
+      broken)  info '%s cannot be read (not a valid plist)' "$(tildify "${O_PLIST[i]}")"; continue ;;
+      gone)    r=$(_ 'app is not installed') ;;
+      missing) r=$(_ 'its program is gone') ;;
+      empty)   r=$(_ 'empty file') ;;
+    esac
+    LO="$LO${O_NAME[i]} · ${O_LABEL[i]:-$(basename "${O_PLIST[i]}" .plist)} — $r"$'\n'
+  done
+  if [ -n "$LO" ]; then
+    warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"
+    lines "$LO"
   fi
   info 'Login items: System Settings → General → Login Items & Extensions'
 fi

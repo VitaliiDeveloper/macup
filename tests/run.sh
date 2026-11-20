@@ -757,5 +757,7 @@ grep -q 'PATH names folders that do not exist: ~/no/such/dir ' "$W/misc.out" && 
 if [ "$(id -u)" = 0 ]; then
   env HOME="$H" SUDO_USER=me /bin/bash "$M" check --only check.system </dev/null >"$W/misc.out" 2>&1; [ $? = 1 ] && grep -q 'does not need sudo' "$W/misc.out" && pass "sudo macup refuses to run" || fail "sudo macup ran"
 fi
+# --- leftovers of deleted apps
+tests/leftovers.sh || F=1
 
 echo; [ $F = 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

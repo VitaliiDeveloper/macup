@@ -463,6 +463,8 @@ if task_allowed clean.app_caches; then
   done < "$BODY.caches"; rm -f "$BODY.caches"
 fi
 
+leftovers_cands
+
 # what a plain `macup all` would free, and what more is there
 settle
 [ "$DRY" = 1 ] && mark_busy

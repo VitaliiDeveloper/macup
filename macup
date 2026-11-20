@@ -1212,6 +1212,19 @@ empty file || порожній файл
 Leftovers of deleted apps: %s (macup check lets you pick them) || Залишки видалених застосунків: %s (macup check дає їх вибрати)
 Background programs of deleted apps and their folders (only when you pick them) || Фонові програми видалених застосунків і їхні теки (лише якщо ви їх виберете)
 Data of deleted apps: settings, history, saved passwords (only when you pick them) || Дані видалених застосунків: налаштування, історія, збережені паролі (лише якщо ви їх виберете)
+Leftovers of deleted apps — found %s, total %s || Залишки видалених застосунків — знайдено %s, разом %s
+empty startup file || порожній файл автозапуску
+update program || програма оновлення
+background program || фонова програма
+What: a startup file with nothing in it. || Що це: файл автозапуску, у якому нічого немає.
+What: a background program that checked for updates every hour. || Що це: фонова програма, яка щогодини перевіряла оновлення.
+What: a background program that checks for updates. || Що це: фонова програма, яка перевіряє оновлення.
+What: a background program that starts with your Mac. || Що це: фонова програма, яка запускається разом з Маком.
+Why: no app from %s is installed anymore. || Чому: жодного застосунку %s більше не встановлено.
+Why: its program was deleted. || Чому: її програму видалено.
+Why: the file is empty and does nothing. || Чому: файл порожній і нічого не робить.
+Safe: yes, it goes to the Trash. || Безпечно: так, усе піде в Кошик.
+%s: still in use, skipped || %s: досі використовується, пропущено
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1655,6 +1668,19 @@ empty file || пустой файл
 Leftovers of deleted apps: %s (macup check lets you pick them) || Остатки удалённых приложений: %s (macup check даёт их выбрать)
 Background programs of deleted apps and their folders (only when you pick them) || Фоновые программы удалённых приложений и их папки (только если вы их выберете)
 Data of deleted apps: settings, history, saved passwords (only when you pick them) || Данные удалённых приложений: настройки, история, сохранённые пароли (только если вы их выберете)
+Leftovers of deleted apps — found %s, total %s || Остатки удалённых приложений — найдено %s, всего %s
+empty startup file || пустой файл автозапуска
+update program || программа обновления
+background program || фоновая программа
+What: a startup file with nothing in it. || Что это: файл автозапуска, в котором ничего нет.
+What: a background program that checked for updates every hour. || Что это: фоновая программа, которая каждый час проверяла обновления.
+What: a background program that checks for updates. || Что это: фоновая программа, которая проверяет обновления.
+What: a background program that starts with your Mac. || Что это: фоновая программа, которая запускается вместе с Маком.
+Why: no app from %s is installed anymore. || Почему: ни одного приложения %s больше не установлено.
+Why: its program was deleted. || Почему: её программа удалена.
+Why: the file is empty and does nothing. || Почему: файл пустой и ничего не делает.
+Safe: yes, it goes to the Trash. || Безопасно: да, всё уйдёт в Корзину.
+%s: still in use, skipped || %s: всё ещё используется, пропущено
 EOF
   ;;
   esac
@@ -2416,7 +2442,7 @@ fi
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
+C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
 artifact_ok(){ # path → true when it is a build folder with its build file next to it
@@ -2497,16 +2523,16 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
       if [ "${C_KIND[i]}" = cmd ]; then kb_get "${C_MDIR[i]}"; else kb_get "${C_PATHS[i]}"; fi
       C_KB[i]=$KB; [ "${C_KIND[i]}" = empty ] && [ "$KB" -lt 5120 ] && continue
     fi
-    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do eval "${a}[j]=\${${a}[i]}"; done; fi
+    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do eval "${a}[j]=\${${a}[i]}"; done; fi
     j=$((j + 1))
   done
-  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do unset "${a}[i]"; done; done
+  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do unset "${a}[i]"; done; done
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
-  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
+  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9; C_INFO[C_N]=${10}
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
   # the same item gets the same key on the next run: CL_KEY names the ones whose paths change from day to day (old logs)
   C_KEY[C_N]="$1:$(printf '%s' "${CL_KEY:-$5|$6}" | cksum | cut -d' ' -f1)"
@@ -2654,14 +2680,21 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
 }
 visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
-  local i n=0 tag
+  local i n=0 tag head=0 ln lc=0 lkb=0
+  for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && { lc=$((lc + 1)); lkb=$((lkb + C_KB[i])); } ;; esac; done
   for ((i = 0; i < C_N; i++)); do
     visible "$i" || continue
+    case "${C_TASK[i]}" in clean.orphan_*)
+      if [ "$head" = 0 ]; then head=1; flush; echo; ln=$(_f 'Leftovers of deleted apps — found %s, total %s' "$lc" "$(hum "$lkb")")
+        printf '%s  %s%s%s\n' "$CL" "$B" "$ln" "$N"; md ""; md "**$ln**"; fi ;;
+    esac
     n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"
     [ "${C_BUSY[i]:-0}" = 1 ] && tag="$tag $(_ '(in use now — skipped until it is closed)')"
     flush
     printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
     md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"
+    [ -n "${C_INFO[i]}" ] && printf '%s\n' "${C_INFO[i]}" | while IFS= read -r ln; do
+      [ -n "$ln" ] && { printf '%s        %s%s%s\n' "$CL" "$D" "$ln" "$N"; md "    - $ln"; }; done
   done
 }
 vis_index(){ # visible number → index
@@ -2758,6 +2791,89 @@ leftovers_scan(){
       [ "${O_VENDOR[j]}" = "${O_VENDOR[i]}" ] && [ -n "${O_PROG[j]}" ] && [ -e "${O_PROG[j]}" ] && { O_NAME[i]=${O_NAME[j]}; break; }
     done
   done
+}
+
+lo_dir(){ # program → its own folder one level below the vendor's (…/Application Support/Perplexity/CometUpdater); empty when there is none
+  local p=$1 base rest v sub
+  for base in "$HOME/Library/Application Support" "$LO_SYS/Application Support" "$HOME/Library"; do
+    case "$p" in "$base"/*/*/*) ;; *) continue ;; esac
+    rest=${p#"$base"/}; v=${rest%%/*}; rest=${rest#*/}; sub=${rest%%/*}
+    [ -d "$base/$v/$sub" ] && [ ! -L "$base/$v/$sub" ] && [ ! -L "$base/$v" ] && echo "$base/$v/$sub"
+    return
+  done
+}
+O_ALLOW=""
+to_trash(){ # path [sudo] — the only way leftovers leave: into the Trash, under a free name, and only paths found by the scan
+  local p=$1 b t i=2
+  case "$p" in ""|*/../*|*/..) echo "macup refused to move: $p" >>"$RAW"; return 1 ;; esac
+  [ -L "$p" ] && { echo "macup refused a symlink: $p" >>"$RAW"; return 1; }
+  [ -e "$p" ] || return 0
+  printf '%s\n' "$O_ALLOW" | grep -qxF -- "$p" || { echo "macup refused to move: $p" >>"$RAW"; return 1; }
+  mkdir -p "$HOME/.Trash"; b=$(basename "$p"); t="$HOME/.Trash/$b"
+  while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$b $i"; i=$((i + 1)); done
+  if [ -n "$2" ]; then sudo mv "$p" "$t" 2>>"$RAW" && sudo chown -R "$(id -u)" "$t" 2>>"$RAW"
+  else mv "$p" "$t" 2>>"$RAW"; fi
+}
+re_esc(){ printf '%s' "$1" | sed 's/[][\.*^$+?(){}|/]/\\&/g'; }
+orph_still(){ # n — re-checked right before moving: an app may have come back or the program may be running
+  local n=$1 f=${O_PLIST[$1]} id owned=0
+  [ -e "$f" ] || return 1
+  [ -n "${O_PROG[n]}" ] && running "$(re_esc "${O_PROG[n]}")" && return 1
+  case "${O_REASON[n]}" in
+    empty)   [ "$(plutil -convert json -o - "$f" 2>/dev/null)" = "{}" ] ;;
+    missing) [ ! -e "${O_PROG[n]}" ] ;;
+    gone)    apps_scan; team_installed "$(team_of "${O_PROG[n]}")" && return 1
+             for id in $(assoc_ids "$f") ${O_LABEL[n]}; do vendor_installed "$(vendor_of "$id")" && owned=1; done
+             [ "$owned" = 0 ] ;;
+    *)       return 1 ;;
+  esac
+}
+lo_kind(){ # n → short name of what it is
+  case "${O_REASON[$1]}" in empty) _ 'empty startup file'; return ;; esac
+  case "$(lc "${O_LABEL[$1]} ${O_PROG[$1]}")" in *update*|*keystone*) _ 'update program' ;; *) _ 'background program' ;; esac
+}
+lo_info(){ # n → What / Why / Safe lines
+  local n=$1 every
+  if [ "${O_REASON[n]}" = empty ]; then _ 'What: a startup file with nothing in it.'; echo
+  else
+    every=$(plutil -extract StartInterval raw -o - "${O_PLIST[n]}" 2>/dev/null)
+    case "$(lo_kind "$n")" in "$(_ 'update program')")
+      if [ "$every" = 3600 ]; then _ 'What: a background program that checked for updates every hour.'; else _ 'What: a background program that checks for updates.'; fi ;;
+      *) _ 'What: a background program that starts with your Mac.' ;; esac; echo
+  fi
+  case "${O_REASON[n]}" in
+    gone)    _f 'Why: no app from %s is installed anymore.' "${O_NAME[n]}" ;;
+    missing) _ 'Why: its program was deleted.' ;;
+    empty)   _ 'Why: the file is empty and does nothing.' ;;
+  esac; echo
+  _ 'Safe: yes, it goes to the Trash.'; echo
+}
+leftovers_cands(){
+  task_allowed clean.orphan_agents || return 0
+  leftovers_scan
+  local i d s
+  for ((i = 0; i < O_N; i++)); do
+    [ "${O_SYS[i]}" = 0 ] || continue
+    case "${O_REASON[i]}" in empty|missing|gone) ;; *) continue ;; esac
+    d=""; [ -n "${O_PROG[i]}" ] && d=$(lo_dir "${O_PROG[i]}"); O_DIR[i]=$d
+    O_ALLOW="$O_ALLOW${O_PLIST[i]}"$'\n'
+    s=0; [ -n "$d" ] && { O_ALLOW="$O_ALLOW$d"$'\n'"$(dirname "$d")"$'\n'; s=$(kb "$d"); }
+    CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i")"
+  done
+}
+run_orph(){ # n
+  local n=$1 l=${O_LABEL[$1]} d=${O_DIR[$1]} s=0 p
+  if ! orph_still "$n"; then info '%s: still in use, skipped' "${O_NAME[n]} · $(lo_kind "$n")"; return 2; fi
+  if [ "${O_REASON[n]}" != empty ] && printf '%s' "$l" | grep -qE '^[A-Za-z0-9._-]+$' && launchctl print "gui/$(id -u)/$l" >/dev/null 2>&1; then
+    launchctl bootout "gui/$(id -u)/$l" 2>>"$RAW"
+  fi
+  [ -n "$d" ] && s=$(kb "$d")
+  to_trash "${O_PLIST[n]}" || return 1
+  if [ -n "$d" ]; then
+    to_trash "$d" || return 1
+    p=$(dirname "$d"); [ -d "$p" ] && [ -z "$(ls -A "$p" 2>/dev/null)" ] && to_trash "$p"
+  fi
+  KEY_FREED=$s
 }
 # ---------------------------------------------------------------- what macup cleans
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
@@ -3223,6 +3339,8 @@ if task_allowed clean.app_caches; then
     cand clean.app_caches 3 "$(_f 'App cache: %s' "${e##*/}")" "$s" empty "$e"
   done < "$BODY.caches"; rm -f "$BODY.caches"
 fi
+
+leftovers_cands
 
 # what a plain `macup all` would free, and what more is there
 settle

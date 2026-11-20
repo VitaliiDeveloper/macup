@@ -6,7 +6,7 @@
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=()
+C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
 artifact_ok(){ # path → true when it is a build folder with its build file next to it
@@ -87,16 +87,16 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
       if [ "${C_KIND[i]}" = cmd ]; then kb_get "${C_MDIR[i]}"; else kb_get "${C_PATHS[i]}"; fi
       C_KB[i]=$KB; [ "${C_KIND[i]}" = empty ] && [ "$KB" -lt 5120 ] && continue
     fi
-    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do eval "${a}[j]=\${${a}[i]}"; done; fi
+    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do eval "${a}[j]=\${${a}[i]}"; done; fi
     j=$((j + 1))
   done
-  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY; do unset "${a}[i]"; done; done
+  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do unset "${a}[i]"; done; done
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | cmd (key)
   task_allowed "$1" || return 0
-  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9
+  C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9; C_INFO[C_N]=${10}
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
   # the same item gets the same key on the next run: CL_KEY names the ones whose paths change from day to day (old logs)
   C_KEY[C_N]="$1:$(printf '%s' "${CL_KEY:-$5|$6}" | cksum | cut -d' ' -f1)"
@@ -244,14 +244,21 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
 }
 visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
 list_cands(){ # numbered list of what can be cleaned
-  local i n=0 tag
+  local i n=0 tag head=0 ln lc=0 lkb=0
+  for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && { lc=$((lc + 1)); lkb=$((lkb + C_KB[i])); } ;; esac; done
   for ((i = 0; i < C_N; i++)); do
     visible "$i" || continue
+    case "${C_TASK[i]}" in clean.orphan_*)
+      if [ "$head" = 0 ]; then head=1; flush; echo; ln=$(_f 'Leftovers of deleted apps — found %s, total %s' "$lc" "$(hum "$lkb")")
+        printf '%s  %s%s%s\n' "$CL" "$B" "$ln" "$N"; md ""; md "**$ln**"; fi ;;
+    esac
     n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"
     [ "${C_BUSY[i]:-0}" = 1 ] && tag="$tag $(_ '(in use now — skipped until it is closed)')"
     flush
     printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
     md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"
+    [ -n "${C_INFO[i]}" ] && printf '%s\n' "${C_INFO[i]}" | while IFS= read -r ln; do
+      [ -n "$ln" ] && { printf '%s        %s%s%s\n' "$CL" "$D" "$ln" "$N"; md "    - $ln"; }; done
   done
 }
 vis_index(){ # visible number → index

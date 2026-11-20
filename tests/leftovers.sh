@@ -90,4 +90,46 @@ printf '%s\n' "$o" | grep -q 'broken.plist.*cannot be read' || { fail "leftovers
 printf '%s\n' "$o" | grep -qE 'line [0-9]+:|command not found|unbound' && { fail "leftovers: errors in output"; bad=1; }
 [ $bad = 0 ] && pass "leftovers: report flags exactly the orphans" || printf '%s\n' "$o" | tail -25
 
+# --- clean.orphan_agents: picked leftovers go to the Trash, with their own folder
+until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev/null && return; sleep 0.5; i=$((i + 1)); done; }
+pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
+  local H=$1 out="$1.out"
+  (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") \
+    | script -q /dev/null env FAKE_LOADED="${FAKE_LOADED:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
+      "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
+      "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
+      "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only clean.orphan_agents --no-color >"$out" 2>&1
+}
+nm(){ tr -d '\r' <"$1" | grep -E "^ +[0-9]+ .*$2" | head -1 | awk '{print $1}'; }
+AS="Library/Application Support"
+H="$W/pa"; leftovers_home "$H"; pk "$H" '' ''
+o=$(tr -d '\r' <"$H.out")
+printf '%s\n' "$o" | grep -q 'Leftovers of deleted apps — found' && printf '%s\n' "$o" | grep -q 'What:' && printf '%s\n' "$o" | grep -q 'Why:' \
+  && ! printf '%s\n' "$o" | grep -q 'Application Support' && pass "orphan_agents: entries explain what and why, without paths" || { fail "orphan_agents: list"; printf '%s\n' "$o" | sed -n '/What can be cleaned/,$p' | head -30; }
+nu=$(nm "$H.out" 'Perplexity AI · update program'); ne=$(nm "$H.out" 'Perplexity AI · empty startup file')
+
+leftovers_home "$H"; FAKE_LOADED=ai.perplexity.CometUpdater.wake pk "$H" "$nu" y
+[ -f "$H/.Trash/ai.perplexity.CometUpdater.wake.plist" ] && [ -d "$H/.Trash/CometUpdater" ] && [ ! -e "$H/$AS/Perplexity" ] && [ ! -e "$H/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] \
+  && pass "orphan_agents: plist and updater folder in the Trash, emptied vendor folder too" || { fail "orphan_agents: move"; ls -R "$H/.Trash" | head; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head; }
+grep -q "bootout gui/$(id -u)/ai.perplexity.CometUpdater.wake" "$H/launchctl.log" 2>/dev/null && pass "orphan_agents: a loaded agent is booted out" || fail "orphan_agents: no bootout"
+
+leftovers_home "$H"; mkdir -p "$H/$AS/Perplexity/Other Product"; echo keep >"$H/$AS/Perplexity/Other Product/data"
+pk "$H" "$nu" y
+[ -d "$H/.Trash/CometUpdater" ] && [ -f "$H/$AS/Perplexity/Other Product/data" ] && ! grep -q bootout "$H/launchctl.log" 2>/dev/null \
+  && pass "orphan_agents: a vendor folder with another product stays; nothing booted out when not loaded" || fail "orphan_agents: shared vendor folder"
+
+leftovers_home "$H"; pk "$H" "$ne" y
+[ -f "$H/.Trash/ai.perplexity.keystone.agent.plist" ] && ! grep -q 'bootout' "$H/launchctl.log" 2>/dev/null && pass "orphan_agents: an empty plist goes to the Trash" || fail "orphan_agents: empty plist"
+
+leftovers_home "$H"; mkdir -p "$H/.Trash/CometUpdater"; echo old >"$H/.Trash/CometUpdater/old"
+pk "$H" "$nu" y
+[ -f "$H/.Trash/CometUpdater/old" ] && [ -d "$H/.Trash/CometUpdater 2/Current" ] && pass "orphan_agents: a name taken in the Trash is never overwritten" || { fail "orphan_agents: Trash collision"; ls "$H/.Trash"; }
+
+leftovers_home "$H"; pk "$H" "$nu" y "app '$H/Apps/Comet.app' ai.perplexity.comet"
+[ -f "$H/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] && [ -d "$H/$AS/Perplexity/CometUpdater" ] && tr -d '\r' <"$H.out" | grep -q 'still in use, skipped' \
+  && pass "orphan_agents: an app installed again before the pick keeps its agent" || { fail "orphan_agents: re-check"; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head; }
+
+leftovers_home "$H"; lo "$H" clean --level aggressive --only clean.orphan_agents --no-color </dev/null >/dev/null 2>&1
+[ -f "$H/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] && [ -z "$(ls -A "$H/.Trash")" ] && pass "orphan_agents: nothing without a pick" || fail "orphan_agents: moved without a pick"
+
 [ $F = 0 ] || exit 1

@@ -2742,7 +2742,7 @@ pick(){ # reads a choice, prints the chosen indexes one per line
 # intact. The owner is found by signing team, then by bundle-id vendor; a vendor that does not match is a miss, not a removal.
 LO_APPS="${MACUP_APPS:-/Applications:$HOME/Applications}"
 LO_SYS="${MACUP_SYSLIB:-/Library}"
-APPS=""; APPS_TEAMS=0; O_N=0; O_SCANNED=0
+APPS=""; APPS_TEAMS=0; O_N=0; O_SCANNED=0; LO_RESCANNED=0
 O_PLIST=(); O_LABEL=(); O_PROG=(); O_REASON=(); O_SYS=(); O_VENDOR=(); O_NAME=(); O_DIR=()
 
 lc(){ printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
@@ -2801,12 +2801,13 @@ leftovers_scan(){
     fi
     ids=$(assoc_ids "$f"); v=$(vendor_of "$(printf '%s\n' "$ids" | head -1)"); [ -z "$v" ] && v=$(vendor_of "${label:-$b}")
     case "$prog" in /*) ;; *) continue ;; esac
+    [ -n "$v" ] || continue   # a label like "mybackup" names no vendor: never judged
     if [ ! -e "$prog" ]; then lo_add "$f" "$label" "$prog" missing "$sys" "$v" "$(signer_of "$prog")"; continue; fi
     in_owner_place "$prog" "$label" || continue
-    team=$(team_of "$prog"); team_installed "$team" && continue
     owned=0
     for id in $ids $label; do vendor_installed "$(vendor_of "$id")" && { owned=1; break; }; done
     [ "$owned" = 1 ] && continue
+    team=$(team_of "$prog"); team_installed "$team" && continue
     lo_add "$f" "$label" "$prog" gone "$sys" "$v" "$(signer_of "$prog")"
   done
   for ((i = 0; i < O_N; i++)); do   # an empty plist has no signer: name it like its vendor's other items
@@ -2819,7 +2820,8 @@ leftovers_scan(){
 lo_dir(){ # program → its own folder one level below the vendor's (…/Application Support/Perplexity/CometUpdater); empty when there is none
   local p=$1 base rest v sub
   for base in "$HOME/Library/Application Support" "$LO_SYS/Application Support" "$HOME/Library"; do
-    case "$p" in "$base"/*/*/*) ;; *) continue ;; esac
+    case "$p" in "$base"/*) ;; *) continue ;; esac
+    case "$p" in "$base"/*/*/*) ;; *) return ;; esac   # right in the vendor folder: that folder may hold other data
     rest=${p#"$base"/}; v=${rest%%/*}; rest=${rest#*/}; sub=${rest%%/*}
     [ -d "$base/$v/$sub" ] && [ ! -L "$base/$v/$sub" ] && [ ! -L "$base/$v" ] && echo "$base/$v/$sub"
     return
@@ -2845,7 +2847,7 @@ orph_still(){ # n — re-checked right before moving: an app may have come back 
   case "${O_REASON[n]}" in
     empty)   [ "$(plutil -convert json -o - "$f" 2>/dev/null)" = "{}" ] ;;
     missing) [ ! -e "${O_PROG[n]}" ] ;;
-    gone)    apps_scan; team_installed "$(team_of "${O_PROG[n]}")" && return 1
+    gone)    [ "$LO_RESCANNED" = 1 ] || { apps_scan; LO_RESCANNED=1; }; team_installed "$(team_of "${O_PROG[n]}")" && return 1
              for id in $(assoc_ids "$f") ${O_LABEL[n]}; do vendor_installed "$(vendor_of "$id")" && owned=1; done
              [ "$owned" = 0 ] ;;
     *)       return 1 ;;
@@ -2897,7 +2899,7 @@ leftovers_cands(){
   for ((i = 0; i < O_N; i++)); do
     if [ "${O_SYS[i]}" = 1 ]; then lo_interactive && lo_sys_ok "$i" || continue; fi
     case "${O_REASON[i]}" in empty|missing|gone) ;; *) continue ;; esac
-    d=""; [ -n "${O_PROG[i]}" ] && d=$(lo_dir "${O_PROG[i]}"); O_DIR[i]=$d
+    d=""; [ "${O_REASON[i]}" = gone ] && d=$(lo_dir "${O_PROG[i]}"); O_DIR[i]=$d   # a missing program proves nothing about its folder
     O_ALLOW="$O_ALLOW${O_PLIST[i]}"$'\n'"$(lo_helper "$i")"$'\n'
     s=0; [ -n "$d" ] && { O_ALLOW="$O_ALLOW$d"$'\n'"$(dirname "$d")"$'\n'; s=$(kb "$d"); }
     CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")$([ "${O_SYS[i]}" = 1 ] && echo ' 🔑')" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i"; echo "@$(tildify "${O_PLIST[i]}")"; [ -n "$d" ] && echo "@$(tildify "$d")")"
@@ -2923,14 +2925,22 @@ run_orph(){ # n
 
 # --- data of a deleted app: only for vendors whose agent was found orphaned, so SDK ids and test bundles are never guessed at
 D_N=0; D_VENDOR=(); D_NAME=(); D_PATHS=()
+LO_LIBRARY="accounts assistants audio autosave biome caches calendars colorsync colors compositions containers contacts cookies developer favorites fileprovider fonts frontboard gamekit homekit intents keyboard keychains logs mail maps messages metadata news passes photos preferences printers reminders safari scripts services sharing shortcuts sounds spelling spotlight suggestions translation trial weather webkit"
 LO_GENERIC=" app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
 LO_TTY=0; [ -t 0 ] && [ -t 1 ] && [ "$QUIET" = 0 ] && LO_TTY=1   # decided here: helpers run in $(…), where stdout is never a terminal
 lo_interactive(){ [ "$LO_TTY" = 1 ]; }
 app_names(){ printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && { echo "${id##*.}"; p=${p##*/}; lc "${p%.app}"; echo; }; done; }
-name_ok(){ # name — a folder named like this may belong to the deleted app
+name_ok(){ # name — a folder named like this may belong to the deleted app, not to another app or to macOS
   [ -n "$1" ] || return 1
   case "$LO_GENERIC" in *" $1 "*) return 1 ;; esac
-  ! printf '%s\n' "$LO_NAMES" | grep -qxF -- "$1"
+  printf '%s\n' "$LO_NAMES" | grep -qxF -- "$1" && return 1
+  ! printf '%s\n' "$LO_APPLE" | grep -qxF -- "$1"
+}
+apple_names(){ # Apple's own app and folder names, so ~/Library/Mail or Application Support/AddressBook are never taken
+  local e
+  for e in /System/Applications/*.app /System/Applications/Utilities/*.app /System/Library/CoreServices/*.app; do [ -e "$e" ] && { e=${e##*/}; lc "${e%.app}"; echo; }; done
+  for e in "$HOME/Library/Preferences"/com.apple.*; do [ -e "$e" ] && { e=$(lc "${e##*/com.apple.}"); echo "${e%%.*}"; }; done
+  printf '%s\n' $LO_LIBRARY
 }
 by_name(){ # dir name → entries of dir whose name matches, ignoring case
   local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && echo "$e"; done
@@ -2959,7 +2969,7 @@ data_paths(){ # vendor
 }
 data_cands(){
   local i v vs p s note
-  LO_NAMES=$(app_names | sed '/^$/d' | sort -u)
+  LO_NAMES=$(app_names | sed '/^$/d' | sort -u); LO_APPLE=$(apple_names | sed '/^$/d' | sort -u)
   vs=$(for ((i = 0; i < O_N; i++)); do [ "${O_REASON[i]}" != broken ] && [ -n "${O_VENDOR[i]}" ] && echo "${O_VENDOR[i]}|${O_NAME[i]}"; done | sort -u -t'|' -k1,1)
   while IFS='|' read -r v n; do
     [ -n "$v" ] || continue
@@ -2984,7 +2994,7 @@ EOF2
 run_odata(){ # n
   local n=$1 s e
   apps_scan
-  if vendor_installed "${D_VENDOR[n]}"; then info '%s: still in use, skipped' "${D_NAME[n]} · $(_ 'data of a deleted app')"; return 2; fi
+  if vendor_installed "${D_VENDOR[n]}" || open_in "${D_PATHS[n]}"; then info '%s: still in use, skipped' "${D_NAME[n]} · $(_ 'data of a deleted app')"; return 2; fi
   s=$(kbl "${D_PATHS[n]}")
   while IFS= read -r e; do [ -n "$e" ] && { to_trash "$e" || return 1; }; done <<EOF2
 ${D_PATHS[n]}

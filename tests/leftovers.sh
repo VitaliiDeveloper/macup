@@ -13,12 +13,12 @@ cat >"$W/bin/pgrep" <<'FAKE'
 FAKE
 cat >"$W/bin/lsof" <<'FAKE'
 #!/bin/bash
-printf 'p1\nn/\n'
+printf 'p1\nn/\n'; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
 FAKE
 # codesign answers from FAKE_SIGN lines "path-prefix|TEAM|Name"; anything else is unsigned
 cat >"$W/bin/codesign" <<'FAKE'
 #!/bin/bash
-p="${!#}"
+p="${!#}"; echo "$p" >>"$HOME/codesign.log"
 while IFS='|' read -r pre team name; do
   [ -n "$pre" ] || continue
   case "$p" in "$pre"*) echo "Authority=Developer ID Application: $name ($team)" >&2; echo "TeamIdentifier=$team" >&2; exit 0 ;; esac
@@ -116,7 +116,7 @@ until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev
 pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
   local H=$1 out="$1.out"
   (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") \
-    | script -q /dev/null env FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
+    | script -q /dev/null env FAKE_OPEN="${FAKE_OPEN:-}" FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
       "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
@@ -236,5 +236,30 @@ FAKE_BTM="$H.btm" lo "$H" check --only check.startup --no-color </dev/null >"$H.
 ! grep -q 'Ghost' "$H.out" && pass "btm: unattended runs never ask sfltool" || fail "btm: unattended run read BTM"
 t0=$SECONDS; FAKE_BTM_HANG=1 bt
 [ $((SECONDS - t0)) -lt 40 ] && ! grep -q 'point to deleted apps' "$H.out" && pass "btm: a hanging sfltool is given up on" || fail "btm: hang ($((SECONDS - t0))s)"
+
+# --- review findings: a folder is never taken by mistake
+rv_home(){ # dir
+  local H=$1 AS="$1/Library/Application Support" LA="$1/Library/LaunchAgents"; data_home "$H"
+  prog "$AS/Flat/updater" 1; mkdir -p "$AS/Flat/Profile"; echo mine >"$AS/Flat/Profile/data"; agent "$LA/com.flat.updater.plist" com.flat.updater "$AS/Flat/updater"
+  agent "$LA/com.valvesoftware.steamold.plist" com.valvesoftware.steamold "$AS/Steam/SteamApps/gone-binary"
+  prog "$AS/MailRu/upd/u" 1; agent "$LA/ru.mail.updater.plist" ru.mail.updater "$AS/MailRu/upd/u"
+  mkdir -p "$H/Library/Mail"; echo mail >"$H/Library/Mail/x"; empty_plist "$H/Library/Preferences/com.apple.mail.plist"
+  prog "$AS/Zedco/a/b" 1; agent "$LA/com.zedco.agent.plist" com.zedco.agent "$AS/Zedco/a/b"; empty_plist "$H/Library/Preferences/com.zedco.AddressBook.plist"
+  mkdir -p "$AS/AddressBook"; echo card >"$AS/AddressBook/x"; empty_plist "$H/Library/Preferences/com.apple.AddressBook.plist"
+  prog "$AS/MyScripts/bin/run" 1; agent "$LA/mybackup.plist" mybackup "$AS/MyScripts/bin/run"
+}
+H="$W/rv"; rv_home "$H"; PK_ONLY=clean.orphan_agents,clean.orphan_data,check.startup pk "$H" '' ''
+nf=$(nm "$H.out" 'Flat · update program'); ns=$(nm "$H.out" 'Valvesoftware ·'); r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'mybackup —' "$r" && pass "review: a label without a vendor is never an orphan" || fail "review: mybackup flagged"
+! grep -q '~/Library/Mail`' "$r" && ! grep -q 'Application Support/AddressBook' "$r" && pass "review: data never takes folders of Apple's apps" || { fail "review: Apple folder offered"; grep -n 'Mail\\|AddressBook' "$r"; }
+rv_home "$H"; PK_ONLY=clean.orphan_agents,clean.orphan_data,check.startup pk "$H" "$nf,$ns" y
+[ -f "$H/.Trash/com.flat.updater.plist" ] && [ -f "$H/Library/Application Support/Flat/Profile/data" ] && pass "review: a program right in the vendor folder takes only its plist" || { fail "review: vendor folder taken"; ls "$H/.Trash"; }
+[ -f "$H/.Trash/com.valvesoftware.steamold.plist" ] && [ -f "$H/Library/Application Support/Steam/SteamApps/steamclean" ] && pass "review: a missing program takes only its plist" || { fail "review: missing took a folder"; ls "$H/.Trash"; }
+H="$W/cs"; leftovers_home "$H"; for f in "$H"/Library/LaunchAgents/*; do case "$f" in *steamclean*) ;; *) chflags nouchg "$f"; rm -f "$f" ;; esac; done
+env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$H/Library/Application Support/Steam|MXGJJ98X76|Valve Corporation" /bin/bash "$M" check --only check.startup --no-color </dev/null >/dev/null 2>&1
+! grep -q "$H/Apps" "$H/codesign.log" 2>/dev/null && pass "review: no codesign of every app when the vendor alone settles it" || fail "review: codesign ran on apps"
+H="$W/op"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''; nd=$(nm "$H.out" 'data of a deleted app')
+data_home "$H"; FAKE_OPEN="$H/Library/Application Support/Comet/Default/History" PK_ONLY=clean.orphan_data pk "$H" "$nd" y
+[ -d "$H/Library/Application Support/Comet" ] && tr -d '\r' <"$H.out" | grep -qE 'skipped while the app is open|still in use' && pass "review: data in use is skipped" || { fail "review: data in use moved"; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head -5; }
 
 [ $F = 0 ] || exit 1

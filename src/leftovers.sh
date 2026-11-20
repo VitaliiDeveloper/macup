@@ -118,7 +118,13 @@ to_trash(){ # path [sudo] — the only way leftovers leave: into the Trash, unde
   mkdir -p "$HOME/.Trash"; b=$(basename "$p"); t="$HOME/.Trash/$b"
   while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$b $i"; i=$((i + 1)); done
   if [ -n "$2" ]; then sudo mv "$p" "$t" 2>>"$RAW" && sudo chown -R "$(id -u)" "$t" 2>>"$RAW"
-  else mv "$p" "$t" 2>>"$RAW"; fi
+  elif ! mv "$p" "$t" 2>>"$RAW"; then
+    case "$p" in "$HOME/Library/Containers/"*|"$HOME/Library/Group Containers/"*) ;; *) return 1 ;; esac
+    [ -d "$p" ] || return 1
+    # macOS keeps the container folder itself; what is inside can go
+    mkdir -p "$t" && find "$p" -mindepth 1 -maxdepth 1 -exec mv {} "$t/" \; 2>>"$RAW"
+    [ -z "$(ls -A "$p" 2>/dev/null)" ]
+  fi
 }
 re_esc(){ printf '%s' "$1" | sed 's/[][\.*^$+?(){}|/]/\\&/g'; }
 orph_still(){ # n — re-checked right before moving: an app may have come back or the program may be running
@@ -292,14 +298,16 @@ $vs
 EOF2
 }
 run_odata(){ # n
-  local n=$1 s e
+  local n=$1 s e bad
   apps_scan
   if vendor_installed "${D_VENDOR[n]}" || open_in "${D_PATHS[n]}"; then info '%s: still in use, skipped' "${D_NAME[n]} · $(_ 'data of a deleted app')"; return 2; fi
-  s=$(kbl "$(outer "${D_PATHS[n]}")")
-  while IFS= read -r e; do [ -n "$e" ] && { to_trash "$e" || return 1; }; done <<EOF2
+  s=$(kbl "$(outer "${D_PATHS[n]}")"); bad=0
+  while IFS= read -r e; do [ -n "$e" ] && { to_trash "$e" || bad=1; }; done <<EOF2
 ${D_PATHS[n]}
 EOF2
-  KEY_FREED=$s
+  KEY_FREED=$((s - $(kbl "$(outer "${D_PATHS[n]}")")))
+  [ "$bad" = 1 ] && warn '%s: some files could not be moved (see log)' "${D_NAME[n]} · $(_ 'data of a deleted app')"
+  return 0
 }
 
 btm_stale(){ # names of this user's Background Task Management records whose app is gone; the format is undocumented, so no match means nothing

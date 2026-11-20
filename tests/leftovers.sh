@@ -309,4 +309,11 @@ H="$W/gn"; leftovers_home "$H"; prog "$H/Library/Application Support/FooTool/x/y
 lo "$H" check --only check.startup --no-color </dev/null >"$H.out" 2>&1
 grep -q 'Foo · io.github.foo.agent' "$H.out" && pass "review2: a three-part vendor is named by its owner" || { fail "review2: vendor name"; grep 'io.github' "$H.out"; }
 
+# --- macOS keeps a container folder itself: its contents go, the rest of the pick too
+H="$W/cn"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''; nd=$(nm "$H.out" 'data of a deleted app')
+data_home "$H"; chmod 555 "$H/Library/Containers"
+PK_ONLY=clean.orphan_data pk "$H" "$nd" y; chmod 755 "$H/Library/Containers"
+[ -f "$H/.Trash/ai.perplexity.mac.Notif/x" ] && [ -d "$H/Library/Containers/ai.perplexity.mac.Notif" ] && [ -d "$H/.Trash/Comet" ] && [ -d "$H/.Trash/group.ai.perplexity.app" ] \
+  && pass "containers: a folder macOS keeps is emptied into the Trash, the rest still moves" || { fail "containers: refused folder"; ls "$H/.Trash"; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head -5; }
+
 [ $F = 0 ] || exit 1

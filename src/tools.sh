@@ -16,7 +16,7 @@ if task check.brew_doctor && have brew; then
   DOC=$(tl 240 brew doctor 2>&1); DOCRC=$?; echo "$DOC" >>"$RAW"
   ND=$(printf '%s\n' "$DOC" | grep -c '^Warning:')
   if [ "$DOCRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'brew doctor' 240
-  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
+  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the report)' "$ND"; else ok 'brew doctor: all good'; fi
 fi
 if task check.xcode; then
   if XP=$(xcode-select -p 2>/dev/null) && [ -d "$XP" ]; then
@@ -148,7 +148,7 @@ pems = re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", su
 soon, newest = 30 * 86400, {}
 def x(pem, *a): return subprocess.run(["openssl", "x509", "-noout", *a], input=pem, capture_output=True, text=True)
 for pem in pems:
-    m = re.search(r"CN\s*=\s*([^,/\n]+)", x(pem, "-subject").stdout)
+    m = re.search(r"^\s*commonName\s*=\s*(.+)$", x(pem, "-subject", "-nameopt", "multiline").stdout, re.M)   # one field per line: a comma in the name stays
     name = m.group(1).strip() if m else ""
     if name not in names or x(pem, "-checkend", "0").returncode != 0: continue   # already expired: it signs nothing, Keychain Access shows it
     end = datetime.datetime.strptime(x(pem, "-enddate").stdout.strip().split("=")[1], "%b %d %H:%M:%S %Y %Z")

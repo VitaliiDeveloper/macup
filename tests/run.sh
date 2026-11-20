@@ -715,11 +715,11 @@ if command -v openssl >/dev/null; then
   H="$W/crt"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
   mk(){ openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days "$2" -subj "/CN=$1/O=Test" 2>/dev/null; }
   { mk 'Apple Development: Soon Gone (AAAA111111)' 10; mk 'Apple Distribution: Long Lived (BBBB222222)' 300; mk 'Some Web Server' 5
-    mk 'Apple Development: Renewed (CCCC333333)' 10; mk 'Apple Development: Renewed (CCCC333333)' 300; mk 'Apple Development: No Key (DDDD444444)' 5; } >"$H/certs.pem"
-  printf '  1) 0000000000000000000000000000000000000001 "Apple Development: Soon Gone (AAAA111111)"\n  2) 0000000000000000000000000000000000000002 "Apple Distribution: Long Lived (BBBB222222)"\n  3) 0000000000000000000000000000000000000003 "Apple Development: Renewed (CCCC333333)"\n     3 valid identities found\n' >"$H/identities.txt"
+    mk 'Apple Development: Renewed (CCCC333333)' 10; mk 'Apple Development: Renewed (CCCC333333)' 300; mk 'Apple Development: No Key (DDDD444444)' 5; mk 'Developer ID Application: Acme, Inc. (EEEE555555)' 10; } >"$H/certs.pem"
+  printf '  1) 0000000000000000000000000000000000000001 "Apple Development: Soon Gone (AAAA111111)"\n  2) 0000000000000000000000000000000000000002 "Apple Distribution: Long Lived (BBBB222222)"\n  3) 0000000000000000000000000000000000000003 "Apple Development: Renewed (CCCC333333)"\n  4) 0000000000000000000000000000000000000004 "Developer ID Application: Acme, Inc. (EEEE555555)"\n     4 valid identities found\n' >"$H/identities.txt"
   printf '#!/bin/bash\ncase "$1" in find-identity) cat "$HOME/identities.txt" ;; find-certificate) cat "$HOME/certs.pem" ;; esac\n' >"$H/.local/bin/security"; chmod +x "$H/.local/bin/security"
   env HOME="$H" /bin/bash "$M" check --only check.certs --no-color </dev/null >"$W/crt.out" 2>&1
-  grep -q 'Signing certificates that expire within 30 days: 1 ' "$W/crt.out" && grep -q 'Apple Development: Soon Gone' "$W/crt.out" && ! grep -qE 'Long Lived|Web Server|Renewed|No Key' "$W/crt.out" \
+  grep -q 'Signing certificates that expire within 30 days: 2 ' "$W/crt.out" && grep -q 'Apple Development: Soon Gone' "$W/crt.out" && grep -q 'Acme, Inc.' "$W/crt.out" && ! grep -qE 'Long Lived|Web Server|Renewed|No Key' "$W/crt.out" \
     && pass "signing certificates: only an identity whose newest certificate expires soon is named" || { fail "signing certificates"; cat "$W/crt.out"; }
 fi
 

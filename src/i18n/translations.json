@@ -583,10 +583,6 @@
     "uk": "MCP-сервери Claude Code: %s з %s не працюють",
     "ru": "MCP-серверы Claude Code: %s из %s не работают"
   },
-  "brew doctor: %s warnings (details in the log)": {
-    "uk": "brew doctor: попереджень: %s (деталі в лозі)",
-    "ru": "brew doctor: предупреждений: %s (подробности в логе)"
-  },
   "brew doctor: all good": {
     "uk": "brew doctor: без зауважень",
     "ru": "brew doctor: без замечаний"
@@ -1734,5 +1730,9 @@
   "Free space: %s since %s (%s of it is swap, freed on restart)": {
     "uk": "Вільне місце: %s від %s (з них %s — swap, звільниться після перезапуску)",
     "ru": "Свободное место: %s с %s (из них %s — swap, освободится после перезагрузки)"
+  },
+  "brew doctor: %s warnings (details in the report)": {
+    "uk": "brew doctor: %s попереджень (подробиці у звіті)",
+    "ru": "brew doctor: %s предупреждений (подробности в отчёте)"
   }
 }

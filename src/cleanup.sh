@@ -71,8 +71,8 @@ kb_bg(){ # path [sub] — sub: also each folder inside it, in the same walk
 kb_get(){ # path → KB; call it outside $( ): only this shell can wait for its background jobs
   local i v; KB=""
   for ((i = 0; i < KBP_N; i++)); do
-    if [ "${KBP_PATH[i]}" = "$1" ]; then wait "${KBP_PID[i]}" 2>/dev/null; v=$(tail -1 "$BODY.du.$i" 2>/dev/null | awk '{print $1}')
-    elif [ -n "${KBP_SUB[i]}" ] && [ "${KBP_PATH[i]}" = "${1%/*}" ]; then wait "${KBP_PID[i]}" 2>/dev/null; v=$(awk -F'\t' -v p="$1" '$2 == p {print $1; exit}' "$BODY.du.$i" 2>/dev/null)
+    if [ "${KBP_PATH[i]}" = "$1" ]; then [ -n "${KBP_PID[i]}" ] && wait "${KBP_PID[i]}" 2>/dev/null; KBP_PID[i]=""; v=$(tail -1 "$BODY.du.$i" 2>/dev/null | awk '{print $1}')
+    elif [ -n "${KBP_SUB[i]}" ] && [ "${KBP_PATH[i]}" = "${1%/*}" ]; then [ -n "${KBP_PID[i]}" ] && wait "${KBP_PID[i]}" 2>/dev/null; KBP_PID[i]=""; v=$(awk -F'\t' -v p="$1" '$2 == p {print $1; exit}' "$BODY.du.$i" 2>/dev/null)
     else continue; fi
     case "$v" in ''|*[!0-9]*) ;; *) KB=$v; return 0 ;; esac
   done

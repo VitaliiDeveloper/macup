@@ -22,7 +22,7 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 - **Health and security checks:** disk space and SMART, memory, CPU, battery, FileVault, Firewall, SIP, Gatekeeper, Time Machine, Remote Login and Screen Sharing, launch agents, Claude Code MCP servers, `brew doctor`, commands that cannot start, a GitHub CLI login that stopped working, signing certificates about to expire, apps that keep crashing, core dumps, folders in `PATH` that do not exist.
 - **Reports and trends:** every run saves a Markdown report. `macup history` shows free space, swap and battery across runs.
 - **For scripts and other programs:** `--quiet` prints only the summary, `--json` prints the whole result as JSON, `--pick` cleans exactly the items you name, and the exit status is 3 when a step failed.
-- **Tidy with its own files:** macup keeps its reports for 30 days and never more than 60 runs, and removes its leftover temp files.
+- **Tidy with its own files:** macup keeps its reports for 30 days and never more than 20 runs, and removes its leftover temp files.
 - **Optional schedule:** `macup schedule weekly` runs a check on its own and shows a notification when something needs a look. Off unless you turn it on.
 - **Interface in English, Ukrainian and Russian.**
 - **No dependencies:** a single Bash file that runs on the bash 3.2 that ships with macOS.
@@ -44,7 +44,7 @@ Run `macup tasks` for the full list with task ids.
 ### Safety
 
 - **Nothing changes without a command.** Only `all`, `update`, `clean`, the menu, or your pick after a check change anything.
-- **`macup check` installs and deletes nothing** on your Mac. It tidies only macup's own old reports. It does go online: it refreshes Homebrew's package list, asks npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
+- **`macup check` installs and deletes nothing** on your Mac. It tidies only macup's own old reports. It does go online: it asks Homebrew, npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
 - **`clean` and `all` stop at `safe`** unless you set `--level` or `clean_level`.
 - **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed.
 - **Pinned versions stay.** Versions named in `.nvmrc`, `.tool-versions`, `.python-version`, `package.json` (`volta`, `engines`), virtualenvs and similar files are kept. A pin without the patch (`20.5`) keeps the newest `20.5.x`.

@@ -106,7 +106,7 @@ tidy_own(){
   ls -r "$LOGDIR"/macup_*.md 2>/dev/null | tail -n +"$KEEP_RUNS" | while IFS= read -r f; do rm -f "$f" "${f%.md}.log"; done
   trim(){ [ -f "$1" ] && [ "$(wc -l <"$1")" -gt $(($2 * 2)) ] && tail -n "$2" "$1" >"$1.tmp" && cat "$1.tmp" >"$1"; rm -f "$1.tmp"; }
   trim "$HISTORY" 500; trim "$LOGDIR/schedule.log" 200
-  find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) -mtime +1 -delete 2>/dev/null
+  find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f -user "$(id -u)" \( -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]' -o -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9].*' -o -name 'macup-lang.??????' -o -name 'macup-rc.??????' \) ! -name macup.sha256 -mtime +1 -delete 2>/dev/null
 }
 tidy_own
 STAMP=$(date +%Y-%m-%d_%H-%M-%S)
@@ -115,8 +115,8 @@ REPORT="$LOGDIR/macup_$STAMP.md"
 BODY=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
 # what the commands print; it goes to the bottom of the report, so one run leaves one file
 RAW="$BODY.raw"
-# the cleaners keep lists in $BODY.rt and $BODY.caches while they run, background du results and lsof's output in $BODY.du.* (only their own du jobs are stopped: without job control `jobs -p` can name the caller's process group); tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
-cleanup_body(){ [ -n "$BODY" ] || return 0; local j; for j in ${KBP_PID[@]+"${KBP_PID[@]}"}; do kill "$j" 2>/dev/null; done; rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$BODY".du.* "$RAW"; }
+# the cleaners keep lists in $BODY.rt and $BODY.caches while they run, background du results and lsof's output in $BODY.du.* (only their own du jobs still running are stopped: a finished job's PID may belong to another process by then); tl keeps $BODY.pid and $BODY.to; --json keeps $BODY.det
+cleanup_body(){ [ -n "$BODY" ] || return 0; local j; for j in ${KBP_PID[@]+"${KBP_PID[@]}"}; do case " $(jobs -p | tr '\n' ' ') " in *" $j "*) kill "$j" 2>/dev/null ;; esac; done; rm -f "$BODY" "$BODY.rt" "$BODY.caches" "$BODY.pid" "$BODY.to" "$BODY.det" "$BODY".du.* "$RAW"; }
 raw_section(){ # ~~~~ and not backticks: brew prints backtick fences of its own
   [ -s "$RAW" ] || return 0
   printf '\n## %s\n\n~~~~\n' "$(_ 'Command output')"; nocolor <"$RAW" | tr -d '\r'; printf '~~~~\n'

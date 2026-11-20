@@ -280,7 +280,7 @@ uninstall(){ # macup, older copies, settings, history, reports, the schedule, th
     if [ -z "$others" ]; then rcs+=("$rc"); lines+=("$l")
     else left="$left$(_f 'Kept: the PATH line in %s, because %s also has %s' "$(tildify "$rc")" "$(tildify "$dir")" "$others")"$'\n'; fi
   done
-  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' \) \
+  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]' -o -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9].*' -o -name 'macup-lang.??????' \) ! -name macup.sha256 \
     ! -name "$(basename "${LANGFILE:-none}")" 2>/dev/null)
 
   _ 'macup uninstall removes:'; echo

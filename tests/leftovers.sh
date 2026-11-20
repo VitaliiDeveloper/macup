@@ -316,6 +316,11 @@ PK_ONLY=clean.orphan_data pk "$H" "$nd" y; chmod 755 "$H/Library/Containers"
 [ -f "$H/.Trash/ai.perplexity.mac.Notif/x" ] && [ -d "$H/Library/Containers/ai.perplexity.mac.Notif" ] && [ -d "$H/.Trash/Comet" ] && [ -d "$H/.Trash/group.ai.perplexity.app" ] \
   && pass "containers: a folder macOS keeps is emptied into the Trash, the rest still moves" || { fail "containers: refused folder"; ls "$H/.Trash"; tr -d '\r' <"$H.out" | sed -n '/Cleanup/,$p' | head -5; }
 
+# --- a dev build's container belongs to clean.dev_containers, never offered twice
+H="$W/dv"; data_home "$H"; printf 'language = en\ndev_container_prefixes = ai.perplexity.mac\n' >"$H/.config/macup/config"
+PK_ONLY=clean.orphan_data pk "$H" '' ''; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+grep -q 'Group Containers/group.ai.perplexity.app' "$r" && ! grep -q 'Containers/ai.perplexity.mac.Notif' "$r" && pass "dev containers: a dev build's container is not also app data" || { fail "dev containers: offered twice"; grep -n Containers "$r"; }
+
 # --- plutil on macOS 15 prints "Could not extract value" to stdout for a missing key: never read as a value
 mkdir -p "$W/bin15"; cat >"$W/bin15/plutil" <<'FAKE'
 #!/bin/bash

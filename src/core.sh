@@ -124,7 +124,8 @@ clean.stale_artifacts|off|Build folders in projects untouched for stale_project_
 clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
 clean.trash|off|Empty the Trash (opt-in)
 clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
-clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)'
+clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)
+clean.dev_containers|off|Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)'
 
 # ---------------------------------------------------------------- config
 conf(){ # key default
@@ -153,6 +154,7 @@ load_conf(){
   STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
   [ -n "${MACUP_STEP_SECS:-}" ] && STEP_SECS=$(num "$MACUP_STEP_SECS" "$STEP_SECS")   # seconds, for the tests
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
+  DEV_PREFIXES=$(conf dev_container_prefixes "")
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
 task_default(){ printf '%s\n' "$TASKS" | awk -F'|' -v id="$1" '$1==id{print $2}'; }

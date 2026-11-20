@@ -269,7 +269,7 @@ EOF2
   n=${v##*.}
   if name_ok "$n"; then by_name "$L/Application Support" "$n"; by_name "$L" "$n"; fi
   if lo_interactive; then
-    for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && echo "$e"; done
+    for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && ! dev_container "$e" && echo "$e"; done   # dev builds' containers are clean.dev_containers' own
     for ((i = 0; i < O_N; i++)); do
       [ "${O_VENDOR[i]}" = "$v" ] && [ -e "${O_PROG[i]}" ] || continue
       t=$(team_of "${O_PROG[i]}"); [ -n "$t" ] || continue
@@ -332,4 +332,20 @@ btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
   if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
   wait "$p" 2>/dev/null
   cat "$f"; rm -f "$f"
+}
+
+run_devc(){ # container — what is inside goes to ~/.Trash/<bundle id>; re-checked: still a dev container, no app, nothing open
+  local c=$1 n=${1##*/} t i=2 s e bad=0
+  dev_container "$c" && [ -d "$c" ] && [ ! -L "$c" ] || { echo "macup refused container: $c" >>"$RAW"; return 1; }
+  if app_for "$n" || open_in "$c"; then info '%s: still in use, skipped' "$n"; return 2; fi
+  s=$(kb "$c"); t="$HOME/.Trash/$n"
+  while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$n $i"; i=$((i + 1)); done
+  mkdir -p "$t" || return 1
+  for e in "$c"/* "$c"/.[!.]* "$c"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    case "${e##*/}" in .com.apple.containermanagerd.metadata.plist) continue ;; esac
+    mv "$e" "$t/" 2>>"$RAW" || bad=1
+  done
+  KEY_FREED=$((s - $(kb "$c")))
+  return "$bad"
 }

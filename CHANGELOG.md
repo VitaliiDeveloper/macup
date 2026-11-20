@@ -4,6 +4,7 @@
 
 Fixes:
 
+- **A removal that macOS refuses is a failure.** It was reported as cleaned when `rm` could not delete the files.
 - **Deno's cleanup keeps `location_data`.** `clean.deno` emptied the whole of `~/Library/Caches/deno`, and Deno keeps `localStorage` and the default `Deno.openKv()` databases there, in `location_data`. That folder now stays; the caches next to it are cleaned as before.
 - **A mistyped task id is said.** `macup check --only chek.disk` ran no task and reported that nothing needs attention. An unknown id in `--only`, `--skip` or `--enable` now stops the run with exit status 2; one in the config's `skip` or `enable` is a warning.
 - **`sudo macup` refuses to run.** Its reports, history and config became root's, and the next plain run could not write them. macup also does not start without `HOME`: its paths pointed at the system's `/Library`.
@@ -29,6 +30,7 @@ macup's own files:
 
 New:
 
+- **Containers of dev builds whose app is gone** (`clean.dev_containers`, opt-in). List your bundle ids in `dev_container_prefixes`; `macup check` lists each container in `~/Library/Containers` that no installed app owns, with its size and last change; what is inside goes to the Trash only when you pick it and say yes (macOS keeps the empty folder). Apple's containers, open ones, extensions and helpers of a live app (`dev.app.share`, `dev.app-LaunchAtLoginHelper`) and anything outside the prefixes are never offered. A container the terminal cannot read is said, and the yes before deleting says that app data goes.
 - **Leftovers of deleted apps.** An app dragged to the Trash often leaves its updater running, its folders and its data; `check.startup` only noticed an agent whose program was gone, so an updater kept in Application Support looked alive (Perplexity's Comet updater still ran every hour, with 330 MB beside it and an 800 MB profile). macup now finds an agent's owner by its signing team and bundle id, and `macup check` lists background programs, app data and system services of deleted apps in plain words. The ones you pick go to the Trash (`clean.orphan_agents`, `clean.orphan_data`); system services ask for your Mac password once. Login items that point to deleted apps are reported too.
 - **Cleaners:** expired provisioning profiles, npm and Gradle daemon logs older than 30 days (safe); the npx cache (skipped while anything started with `npx` runs, MCP servers included), the Go module cache, Cargo's git downloads, old Cypress versions, older Node versions in fnm and Volta (standard).
 - **Stale build folders** (`clean.stale_artifacts`, opt-in): `Pods`, `.build`, `.dart_tool`, `.next`, Rust and Maven `target`, Gradle `build` in projects untouched for `stale_project_days`. Only next to the file that builds them again, never when git tracks files in them, never when they were built recently.

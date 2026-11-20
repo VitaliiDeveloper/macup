@@ -2,12 +2,18 @@ name: CI
 
 on:
   push:
+    branches: [main]   # a release tag points at a commit main already ran
   pull_request:
   schedule:
     - cron: "17 6 * * 1"   # weekly, to catch macOS runner changes
 
 permissions:
   contents: read
+
+# a new push replaces the run still going for the same branch or PR
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -24,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-15-intel, macos-latest]   # two macOS versions, Apple silicon and Intel
+        os: [macos-26, macos-15]   # the current macOS and the one before, Apple silicon
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:

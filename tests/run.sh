@@ -333,6 +333,55 @@ if [ "$(id -u)" != 0 ]; then
   grep -q 'Trash: cannot be read' "$W/fda.out" && pass "unreadable Trash is said" || { fail "unreadable Trash"; cat "$W/fda.out"; }
 fi
 
+# --- dev containers (opt-in): only containers named by dev_container_prefixes whose app Spotlight cannot find; a fake mdfind knows FAKE_APPS
+cat >"$W/bin/mdfind" <<'FAKE'
+#!/bin/bash
+id=$(printf '%s' "$*" | sed -n "s/.*== '\([^']*\)'.*/\1/p")
+[ -n "$FAKE_NO_SPOTLIGHT" ] && exit 0
+case " com.apple.finder $FAKE_APPS " in *" $id "*) echo "/Applications/$id.app" ;; esac
+FAKE
+chmod +x "$W/bin/mdfind"
+dch(){ # config → a fake home with containers: of a live app, its extension, gone ones, other names
+  H="$W/dc"; rm -rf "$H"; mkdir -p "$H/.config/macup"; printf 'language = en\n%s\n' "$1" >"$H/.config/macup/config"
+  for c in dev.acme.app dev.acme.app.share dev.acme.app-LoginHelper dev.acme.shots dev.acme.demo dev.acme.open dev.acmetool com.other.gone com.apple.Notes; do mkdir -p "$H/Library/Containers/$c/Data"; dd if=/dev/zero of="$H/Library/Containers/$c/Data/blob" bs=1024 count=64 2>/dev/null; echo m >"$H/Library/Containers/$c/.com.apple.containermanagerd.metadata.plist"; done
+  mkdir -p "$H/Library/Containers/dev.acme.shell"; echo m >"$H/Library/Containers/dev.acme.shell/.com.apple.containermanagerd.metadata.plist"   # emptied before: macOS keeps the folder and the marker
+  (cd "$H" && find . -type f | sort) >"$H.b"
+}
+dcgone(){ (cd "$W/dc" && find . -type f | sort) | comm -23 "$W/dc.b" - | grep -v 'macup/'; }
+export FAKE_APPS='dev.acme.app'
+dcrun(){ FAKE_OPEN="$W/dc/Library/Containers/dev.acme.open/Data/blob" env HOME="$W/dc" /bin/bash "$M" "$@" --no-color </dev/null >"$W/dc.out" 2>&1; }
+dcpick(){ # answer confirm — an interactive check
+  (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "$2"; until_done "$W/dc.out") | FAKE_OPEN="$W/dc/Library/Containers/dev.acme.open/Data/blob" script -q /dev/null env HOME="$W/dc" /bin/bash "$M" check --no-color --only clean.dev_containers >"$W/dc.out" 2>&1
+}
+P='dev_container_prefixes = dev.acme, com.apple'
+dch "$P
+enable = clean.dev_containers"; dcrun clean --level aggressive --only clean.dev_containers
+[ -z "$(dcgone)" ] && pass "dev containers: never deleted without a pick, even when enabled" || { fail "dev containers: auto"; dcgone; }
+dch "$P"; dcrun check --only clean.dev_containers
+! grep -q 'gone: ' "$W/dc.out" && pass "dev containers: unattended runs never read or offer containers" || { fail "dev containers: unattended"; cat "$W/dc.out"; }
+dch "$P"; dcpick '' ''; o=$(tr -d '\r' <"$W/dc.out")
+echo "$o" | grep -q 'gone: dev.acme.shots (changed [0-9-]*).*only if you pick it' && echo "$o" | grep -q 'gone: dev.acme.demo' && echo "$o" | grep -q 'dev.acme.open: .*skipped' \
+  && ! echo "$o" | grep -qE 'gone: (dev.acme.app|dev.acme.shell|dev.acmetool|com\.)' && [ -z "$(dcgone)" ] \
+  && pass "dev containers: one pick-only item per gone container; live app, its extension, open ones, emptied ones, Apple's and other names are not offered" || { fail "dev containers: check"; echo "$o"; }
+dch "$P"; dcpick '' ''; n=$(tr -d '\r' <"$W/dc.out" | grep -E '^ +[0-9]+ .*gone: dev.acme.shots' | awk '{print $1}')
+dch "$P"; dcpick "$n" y
+[ "$(dcgone)" = "./Library/Containers/dev.acme.shots/Data/blob" ] && [ -f "$W/dc/.Trash/dev.acme.shots/Data/blob" ] && grep -q 'hold app data' "$W/dc.out" && pass "dev containers: a pick and a yes, after a warning about app data, move that container's contents to the Trash; the folder and the macOS marker stay" || { fail "dev containers: pick"; dcgone; tr -d '\r' <"$W/dc.out" | tail -20; }
+if [ "$(id -u)" != 0 ]; then
+  dch "$P"; chmod 500 "$W/dc/Library/Containers/dev.acme.shots"; dcpick "$n" y; chmod 700 "$W/dc/Library/Containers/dev.acme.shots"
+  tr -d '\r' <"$W/dc.out" | grep -q 'dev.acme.shots.*failed' && ! grep -q 'dev.acme.shots.*cleaned\|dev.acme.shots.*freed' "$W/dc.out" && pass "dev containers: a move macOS refuses is a failure, not cleaned" || { fail "dev containers: refused removal"; tr -d '\r' <"$W/dc.out" | tail -15; }
+fi
+if [ "$(id -u)" != 0 ]; then
+  dch "$P"; chmod 000 "$W/dc/Library/Containers/dev.acme.shots"; dcpick '' ''; chmod 700 "$W/dc/Library/Containers/dev.acme.shots"
+  grep -q 'dev.acme.shots: cannot be read' "$W/dc.out" && pass "dev containers: an unreadable container is said, not skipped silently" || { fail "dev containers: unreadable"; cat "$W/dc.out"; }
+fi
+dch "$P"; mkdir -p "$W/dc/Library/Containers/dev.acme.o'q"; echo x >"$W/dc/Library/Containers/dev.acme.o'q/f"; dcpick '' ''
+! grep -q "o'q" "$W/dc.out" && pass "dev containers: a name that is not a bundle id is never offered" || { fail "dev containers: odd name"; cat "$W/dc.out"; }
+dch ''; dcpick '' ''
+! grep -q 'dev build' "$W/dc.out" && pass "dev containers: nothing without prefixes" || { fail "dev containers: no prefixes"; cat "$W/dc.out"; }
+dch "$P"; FAKE_NO_SPOTLIGHT=1 dcpick '' ''
+grep -q 'Spotlight does not answer' "$W/dc.out" && ! grep -q 'gone: ' "$W/dc.out" && pass "dev containers: nothing offered when Spotlight is off" || { fail "dev containers: Spotlight off"; cat "$W/dc.out"; }
+unset FAKE_APPS
+
 # --- system checks read the output of macOS tools: fakes with real samples, so a format change shows up here
 SB="$W/sbin"; mkdir -p "$SB"; H="$W/sys"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
 sys(){ env HOME="$H" PATH="$SB:$PATH" /bin/bash "$M" check --no-color "$@" </dev/null 2>&1; }

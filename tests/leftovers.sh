@@ -278,4 +278,17 @@ lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=
 ! grep -q 'Application Support/Comet`' "$r" && ! grep -q '~/Library/Perplexity`' "$r" && grep -q 'Preferences/ai.perplexity.comet.plist' "$r" \
   && pass "data: a folder that holds an installed app's files stays" || { fail "data: shared folder offered"; sed -n '/What can be cleaned/,$p' "$r" | head -20; }
 
+# --- deferred minors
+H="$W/mh"; leftovers_home "$H"; mkdir -p "$H/SysLib/PrivilegedHelperTools"; echo bin >"$H/SysLib/PrivilegedHelperTools/com.gone.thing"
+pk "$H" '' ''; ng=$(nm "$H.out" 'Gone ·'); leftovers_home "$H"; mkdir -p "$H/SysLib/PrivilegedHelperTools"; echo bin >"$H/SysLib/PrivilegedHelperTools/com.gone.thing"
+pk "$H" "$ng" y
+[ -f "$H/.Trash/com.gone.thing.plist" ] && [ -f "$H/SysLib/PrivilegedHelperTools/com.gone.thing" ] && [ ! -e "$H/sudo.log" ] && pass "minor: a user agent never takes a system helper" || { fail "minor: user agent took a helper"; ls "$H/.Trash"; }
+H="$W/mr"; leftovers_home "$H"; chmod 000 "$H/Library/LaunchAgents/com.me.script.plist"
+lo "$H" check --only check.startup --no-color </dev/null >"$H.out" 2>&1; chmod 644 "$H/Library/LaunchAgents/com.me.script.plist"
+! grep -q 'com.me.script.plist cannot be read (not a valid plist)' "$H.out" && grep -q 'broken.plist cannot be read' "$H.out" && pass "minor: a plist we may not read is not called invalid" || fail "minor: unreadable plist called invalid"
+H="$W/mp"; leftovers_home "$H"; prog "$H/Library/Application Support/FooTool/x/y" 1; agent "$H/Library/LaunchAgents/io.github.foo.agent.plist" io.github.foo.agent "$H/Library/Application Support/FooTool/x/y"
+empty_plist "$H/Library/Preferences/io.github.foo.plist"; empty_plist "$H/Library/Preferences/io.github.bar.plist"
+lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
+grep -q 'io.github.foo.plist' "$r" && ! grep -q 'io.github.bar.plist' "$r" && pass "minor: a shared hosting prefix (io.github) is not one vendor" || { fail "minor: io.github swept"; grep -n 'io.github' "$r"; }
+
 [ $F = 0 ] || exit 1

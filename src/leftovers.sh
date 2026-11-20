@@ -22,7 +22,11 @@ apps_teams(){ # codesign is slow: only once there is a suspect
   local id t p
   APPS=$(printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && printf '%s|%s|%s\n' "$id" "$(team_of "$p")" "$p"; done)
 }
-vendor_of(){ lc "$1" | awk -F. 'NF >= 2 && $1 != "" && $2 != "" {print $1 "." $2}'; }
+LO_SHARED=" uk.co uk.org au.com jp.co nz.co br.com cn.com io.github com.github io.gitlab com.gitlab org.gitlab net.sourceforge com.googlecode app.netlify "
+vendor_of(){ # first two id components; three under a shared prefix (io.github.<owner>), where two would mean many publishers
+  local v; v=$(lc "$1" | awk -F. 'NF >= 2 && $1 != "" && $2 != "" {print $1 "." $2}')
+  case "$LO_SHARED" in *" $v "*) lc "$1" | awk -F. 'NF >= 3 && $3 != "" {print $1 "." $2 "." $3}' ;; *) echo "$v" ;; esac
+}
 vendor_installed(){ [ -n "$1" ] && printf '%s\n' "$APPS" | awk -F'|' -v v="$1" '$1 == v || index($1, v ".") == 1 {f = 1} END {exit !f}'; }
 team_installed(){ [ -n "$1" ] || return 1; apps_teams; printf '%s\n' "$APPS" | awk -F'|' -v t="$1" '$2 == t {f = 1} END {exit !f}'; }
 team_of(){ codesign -dv --verbose=2 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p' | grep -v '^not set$' | head -1; }
@@ -51,6 +55,7 @@ leftovers_scan(){
     [ -f "$f" ] && [ ! -L "$f" ] || continue
     b=$(basename "$f" .plist); case "$b" in com.apple.*|"$SCHED_LABEL") continue ;; esac
     sys=0; case "$f" in "$LO_SYS"/*) sys=1 ;; esac
+    [ -r "$f" ] || continue   # root-only: macup cannot judge it, which is not the same as broken
     if ! plutil -lint "$f" >/dev/null 2>&1; then lo_add "$f" "" "" broken "$sys" "$(vendor_of "$b")"; continue; fi
     label=$(plutil -extract Label raw -o - "$f" 2>/dev/null)
     case "$label" in com.apple.*|"$SCHED_LABEL") continue ;; esac
@@ -66,7 +71,10 @@ leftovers_scan(){
     if [ ! -e "$prog" ]; then lo_add "$f" "$label" "$prog" missing "$sys" "$v" "$(signer_of "$prog")"; continue; fi
     in_owner_place "$prog" "$label" || continue
     owned=0
-    for id in $ids $label; do vendor_installed "$(vendor_of "$id")" && { owned=1; break; }; done
+    while IFS= read -r id; do [ -n "$id" ] && vendor_installed "$(vendor_of "$id")" && owned=1; done <<EOF2
+$ids
+$label
+EOF2
     [ "$owned" = 1 ] && continue
     team=$(team_of "$prog"); team_installed "$team" && continue
     lo_add "$f" "$label" "$prog" gone "$sys" "$v" "$(signer_of "$prog")"
@@ -117,7 +125,10 @@ orph_still(){ # n — re-checked right before moving: an app may have come back 
     empty)   [ "$(plutil -convert json -o - "$f" 2>/dev/null)" = "{}" ] ;;
     missing) [ ! -e "${O_PROG[n]}" ] ;;
     gone)    [ "$LO_RESCANNED" = 1 ] || { apps_scan; LO_RESCANNED=1; }; team_installed "$(team_of "${O_PROG[n]}")" && return 1
-             for id in $(assoc_ids "$f") ${O_LABEL[n]}; do vendor_installed "$(vendor_of "$id")" && owned=1; done
+             while IFS= read -r id; do [ -n "$id" ] && vendor_installed "$(vendor_of "$id")" && owned=1; done <<EOF2
+$(assoc_ids "$f")
+${O_LABEL[n]}
+EOF2
              [ "$owned" = 0 ] ;;
     *)       return 1 ;;
   esac
@@ -146,7 +157,7 @@ lo_info(){ # n → What / Why / Safe lines
   [ "${O_SYS[n]}" = 1 ] && { _ 'Needs your Mac password (asked once for all such items).'; echo; }
 }
 lo_domain(){ case "${O_PLIST[$1]}" in */LaunchDaemons/*) echo system ;; *) echo "gui/$(id -u)" ;; esac; }
-lo_helper(){ local h="$LO_SYS/PrivilegedHelperTools/${O_LABEL[$1]}"; [ -n "${O_LABEL[$1]}" ] && [ -f "$h" ] && [ ! -L "$h" ] && echo "$h"; }
+lo_helper(){ local h="$LO_SYS/PrivilegedHelperTools/${O_LABEL[$1]}"; [ "${O_SYS[$1]}" = 1 ] && [ -n "${O_LABEL[$1]}" ] && [ -f "$h" ] && [ ! -L "$h" ] && echo "$h"; }
 sudo_cmds(){ # n → what removing a system item runs
   local n=$1 h
   [ -n "${O_LABEL[n]}" ] && echo "sudo launchctl bootout $(lo_domain "$n")/${O_LABEL[n]}"
@@ -199,7 +210,7 @@ LO_LIBRARY="accounts assistants audio autosave biome caches calendars colorsync 
 LO_GENERIC=" app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
 LO_TTY=0; [ -t 0 ] && [ -t 1 ] && [ "$QUIET" = 0 ] && LO_TTY=1   # decided here: helpers run in $(…), where stdout is never a terminal
 lo_interactive(){ [ "$LO_TTY" = 1 ]; }
-app_names(){ printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && { echo "${id##*.}"; p=${p##*/}; lc "${p%.app}"; echo; }; done; }
+app_names(){ local id t p; printf '%s\n' "$APPS" | while IFS='|' read -r id t p; do [ -n "$id" ] && { echo "${id##*.}"; p=${p##*/}; lc "${p%.app}"; echo; }; done; }
 name_ok(){ # name — a folder named like this may belong to the deleted app, not to another app or to macOS
   [ -n "$1" ] || return 1
   case "$LO_GENERIC" in *" $1 "*) return 1 ;; esac
@@ -216,7 +227,7 @@ by_name(){ # dir name → entries of dir whose name matches, ignoring case, unle
   local e; for e in "$1"/*; do [ -e "$e" ] && [ ! -L "$e" ] && [ "$(lc "${e##*/}")" = "$2" ] && ! held "$e" && echo "$e"; done
 }
 held(){ # folder — true when a name inside it is an installed app's bundle id or app name
-  local ids
+  local ids e
   ids=$(printf '%s\n' "$APPS" | cut -d'|' -f1 | sed '/^$/d')
   [ -n "$ids" ] || return 1
   find "$1" -maxdepth 3 2>/dev/null | sed 1d | while IFS= read -r e; do lc "${e##*/}"; echo; done | LO_IDS="$ids" LO_NM="$LO_NAMES" awk '
@@ -248,7 +259,7 @@ data_paths(){ # vendor
   fi
 }
 data_cands(){
-  local i v vs p s note
+  local i v vs p s note n
   LO_NAMES=$(app_names | sed '/^$/d' | sort -u); LO_APPLE=$(apple_names | sed '/^$/d' | sort -u)
   vs=$(for ((i = 0; i < O_N; i++)); do [ "${O_REASON[i]}" != broken ] && [ -n "${O_VENDOR[i]}" ] && echo "${O_VENDOR[i]}|${O_NAME[i]}"; done | sort -u -t'|' -k1,1)
   while IFS='|' read -r v n; do
@@ -293,10 +304,10 @@ btm_stale(){ # names of this user's Background Task Management records whose app
   while IFS='|' read -r n p; do [ -e "$p" ] || echo "$n"; done | sort -u
 }
 btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
-  local f p
+  local f p t=0
   f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
   sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
-  ( sleep 10; kill "$p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
-  wait "$p" 2>/dev/null
+  while kill -0 "$p" 2>/dev/null && [ "$t" -lt 50 ]; do sleep 0.2; t=$((t + 1)); done
+  kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
   cat "$f"; rm -f "$f"
 }

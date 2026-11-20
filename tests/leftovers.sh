@@ -118,7 +118,7 @@ printf '%s\n' "$o" | grep -qE 'line [0-9]+:|command not found|unbound' && { fail
 until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev/null && return; sleep 0.5; i=$((i + 1)); done; }
 pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
   local H=$1 out="$1.out"
-  (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") \
+  (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") 2>/dev/null \
     | script -q /dev/null env FAKE_OPEN="${FAKE_OPEN:-}" FAKE_LSOF_PAD="${FAKE_LSOF_PAD:-}" FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
@@ -320,5 +320,20 @@ PK_ONLY=clean.orphan_data pk "$H" "$nd" y; chmod 755 "$H/Library/Containers"
 H="$W/dv"; data_home "$H"; printf 'language = en\ndev_container_prefixes = ai.perplexity.mac\n' >"$H/.config/macup/config"
 PK_ONLY=clean.orphan_data pk "$H" '' ''; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
 grep -q 'Group Containers/group.ai.perplexity.app' "$r" && ! grep -q 'Containers/ai.perplexity.mac.Notif' "$r" && pass "dev containers: a dev build's container is not also app data" || { fail "dev containers: offered twice"; grep -n Containers "$r"; }
+
+# --- plutil on macOS 15 prints "Could not extract value" to stdout for a missing key: never read as a value
+mkdir -p "$W/bin15"; cat >"$W/bin15/plutil" <<'FAKE'
+#!/bin/bash
+if [ "$1" = -extract ]; then
+  out=$(/usr/bin/plutil "$@" 2>&1) && { printf '%s' "$out"; exit 0; }
+  echo "${!#}: Could not extract value, error: No value at that key path or invalid key path: $2"; exit 1
+fi
+exec /usr/bin/plutil "$@"
+FAKE
+chmod +x "$W/bin15/plutil"
+H="$W/p15"; leftovers_home "$H"; PATH="$W/bin15:$PATH" lo "$H" check --only check.startup --no-color </dev/null >"$H.out" 2>&1
+sec=$(sed -n '/Leftovers of deleted apps/,$p' "$H.out")
+printf '%s\n' "$sec" | grep -q 'ai.perplexity.CometUpdater.wake — app is not installed' && ! printf '%s\n' "$sec" | grep -qE 'Could not extract|steamclean|homebrew.mxcl.redis|com.me.script' \
+  && pass "macOS 15 plutil: a missing key is not a value" || { fail "macOS 15 plutil"; printf '%s\n' "$sec" | head -12; }
 
 [ $F = 0 ] || exit 1

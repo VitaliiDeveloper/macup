@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [main]   # a release tag points at a commit main already ran
   pull_request:
   schedule:
     - cron: "17 6 * * 1"   # weekly, to catch macOS runner changes

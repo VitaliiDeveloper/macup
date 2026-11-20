@@ -2913,8 +2913,7 @@ leftovers_cands(){
   task_allowed clean.orphan_agents || task_allowed clean.orphan_data || return 0
   leftovers_scan
   local i d s
-  task_allowed clean.orphan_data && data_cands
-  task_allowed clean.orphan_agents || return 0
+  task_allowed clean.orphan_agents &&
   for ((i = 0; i < O_N; i++)); do
     if [ "${O_SYS[i]}" = 1 ]; then lo_interactive && lo_sys_ok "$i" || continue; fi
     case "${O_REASON[i]}" in empty|missing|gone) ;; *) continue ;; esac
@@ -2925,6 +2924,8 @@ leftovers_cands(){
     [ "${O_SYS[i]}" = 1 ] && C_SUDO[C_N - 1]=1
     C_LOP[C_N - 1]="${O_PLIST[i]}${d:+$'\n'$d}"
   done
+  task_allowed clean.orphan_data && data_cands
+  return 0
 }
 run_orph(){ # n
   local n=$1 l=${O_LABEL[$1]} d=${O_DIR[$1]} s=0 p h su

@@ -252,3 +252,21 @@ ${D_PATHS[n]}
 EOF2
   KEY_FREED=$s
 }
+
+btm_stale(){ # names of this user's Background Task Management records whose app is gone; the format is undocumented, so no match means nothing
+  lo_interactive && have sfltool || return 0   # it can wait on a system prompt: never in unattended runs
+  btm_dump | awk -v u="$(id -u)" -v h="$HOME" '
+    /Records for UID/ { on = ($4 == u); next }
+    !on { next }
+    /^ *Name: / { n = $0; sub(/^ *Name: /, "", n); next }
+    /^ *URL: \// { p = $0; sub(/^ *URL: /, "", p); if (index(p, "/Users/" u "/") == 1) p = h substr(p, length("/Users/" u) + 1); print n "|" p }' |
+  while IFS='|' read -r n p; do [ -e "$p" ] || echo "$n"; done | sort -u
+}
+btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
+  local f p
+  f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
+  sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
+  ( sleep 10; kill "$p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+  wait "$p" 2>/dev/null
+  cat "$f"; rm -f "$f"
+}

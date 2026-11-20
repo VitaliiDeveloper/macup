@@ -2740,7 +2740,7 @@ leftovers_scan(){
     prog=$(plutil -extract Program raw -o - "$f" 2>/dev/null || plutil -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null)
     if [ -z "$label" ] && [ -z "$prog" ]; then
       [ "$(plutil -convert json -o - "$f" 2>/dev/null)" = "{}" ] || continue
-      ls -lO "$f" 2>/dev/null | grep -q uchg && continue   # locked empty file: some tools block an updater this way
+      case ",$(stat -f %Sf "$f" 2>/dev/null)," in *,uchg,*) continue ;; esac   # locked empty file: some tools block an updater this way
       lo_add "$f" "" "" empty "$sys" "$(vendor_of "$b")"; continue
     fi
     ids=$(assoc_ids "$f"); v=$(vendor_of "$(printf '%s\n' "$ids" | head -1)"); [ -z "$v" ] && v=$(vendor_of "${label:-$b}")

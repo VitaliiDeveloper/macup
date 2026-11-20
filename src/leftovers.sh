@@ -114,11 +114,13 @@ orph_still(){ # n — re-checked right before moving: an app may have come back 
 }
 lo_kind(){ # n → short name of what it is
   case "${O_REASON[$1]}" in empty) _ 'empty startup file'; return ;; esac
+  [ "${O_SYS[$1]}" = 1 ] && { _ 'system service'; return; }
   case "$(lc "${O_LABEL[$1]} ${O_PROG[$1]}")" in *update*|*keystone*) _ 'update program' ;; *) _ 'background program' ;; esac
 }
 lo_info(){ # n → What / Why / Safe lines
   local n=$1 every
   if [ "${O_REASON[n]}" = empty ]; then _ 'What: a startup file with nothing in it.'; echo
+  elif [ "${O_SYS[n]}" = 1 ]; then _ 'What: a service that starts for every user of this Mac.'; echo
   else
     every=$(plutil -extract StartInterval raw -o - "${O_PLIST[n]}" 2>/dev/null)
     case "$(lo_kind "$n")" in "$(_ 'update program')")
@@ -131,6 +133,21 @@ lo_info(){ # n → What / Why / Safe lines
     empty)   _ 'Why: the file is empty and does nothing.' ;;
   esac; echo
   _ 'Safe: yes, it goes to the Trash.'; echo
+  [ "${O_SYS[n]}" = 1 ] && { _ 'Needs your Mac password (asked once for all such items).'; echo; }
+}
+lo_domain(){ case "${O_PLIST[$1]}" in */LaunchDaemons/*) echo system ;; *) echo "gui/$(id -u)" ;; esac; }
+lo_helper(){ local h="$LO_SYS/PrivilegedHelperTools/${O_LABEL[$1]}"; [ -n "${O_LABEL[$1]}" ] && [ -f "$h" ] && [ ! -L "$h" ] && echo "$h"; }
+sudo_cmds(){ # n → what removing a system item runs
+  local n=$1 h
+  [ -n "${O_LABEL[n]}" ] && echo "sudo launchctl bootout $(lo_domain "$n")/${O_LABEL[n]}"
+  echo "sudo mv \"$(tildify "${O_PLIST[n]}")\" ~/.Trash/"
+  h=$(lo_helper "$n"); [ -n "$h" ] && echo "sudo mv \"$h\" ~/.Trash/"
+  [ -n "${O_DIR[n]}" ] && echo "sudo mv \"${O_DIR[n]}\" ~/.Trash/"
+  return 0
+}
+lo_sys_ok(){ # n — a system item is offered only on strong evidence: the program is gone, or its signing team owns no installed app
+  [ "${O_REASON[$1]}" = missing ] && return 0
+  [ "${O_REASON[$1]}" = gone ] && [ -n "$(team_of "${O_PROG[$1]}")" ]
 }
 leftovers_cands(){
   task_allowed clean.orphan_agents || task_allowed clean.orphan_data || return 0
@@ -139,25 +156,28 @@ leftovers_cands(){
   task_allowed clean.orphan_data && data_cands
   task_allowed clean.orphan_agents || return 0
   for ((i = 0; i < O_N; i++)); do
-    [ "${O_SYS[i]}" = 0 ] || continue
+    if [ "${O_SYS[i]}" = 1 ]; then lo_interactive && lo_sys_ok "$i" || continue; fi
     case "${O_REASON[i]}" in empty|missing|gone) ;; *) continue ;; esac
     d=""; [ -n "${O_PROG[i]}" ] && d=$(lo_dir "${O_PROG[i]}"); O_DIR[i]=$d
-    O_ALLOW="$O_ALLOW${O_PLIST[i]}"$'\n'
+    O_ALLOW="$O_ALLOW${O_PLIST[i]}"$'\n'"$(lo_helper "$i")"$'\n'
     s=0; [ -n "$d" ] && { O_ALLOW="$O_ALLOW$d"$'\n'"$(dirname "$d")"$'\n'; s=$(kb "$d"); }
-    CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i"; echo "@$(tildify "${O_PLIST[i]}")"; [ -n "$d" ] && echo "@$(tildify "$d")")"
+    CL_MANUAL=1 cand clean.orphan_agents 3 "${O_NAME[i]} · $(lo_kind "$i")$([ "${O_SYS[i]}" = 1 ] && echo ' 🔑')" "$s" cmd "orph:$i" "" "" "" "$(lo_info "$i"; echo "@$(tildify "${O_PLIST[i]}")"; [ -n "$d" ] && echo "@$(tildify "$d")")"
+    [ "${O_SYS[i]}" = 1 ] && C_SUDO[C_N - 1]=1
   done
 }
 run_orph(){ # n
-  local n=$1 l=${O_LABEL[$1]} d=${O_DIR[$1]} s=0 p
+  local n=$1 l=${O_LABEL[$1]} d=${O_DIR[$1]} s=0 p h su
   if ! orph_still "$n"; then info '%s: still in use, skipped' "${O_NAME[n]} · $(lo_kind "$n")"; return 2; fi
-  if [ "${O_REASON[n]}" != empty ] && printf '%s' "$l" | grep -qE '^[A-Za-z0-9._-]+$' && launchctl print "gui/$(id -u)/$l" >/dev/null 2>&1; then
-    launchctl bootout "gui/$(id -u)/$l" 2>>"$RAW"
+  su=""; [ "${O_SYS[n]}" = 1 ] && su=sudo
+  if [ "${O_REASON[n]}" != empty ] && printf '%s' "$l" | grep -qE '^[A-Za-z0-9._-]+$' && launchctl print "$(lo_domain "$n")/$l" >/dev/null 2>&1; then
+    $su launchctl bootout "$(lo_domain "$n")/$l" 2>>"$RAW"
   fi
   [ -n "$d" ] && s=$(kb "$d")
-  to_trash "${O_PLIST[n]}" || return 1
+  to_trash "${O_PLIST[n]}" $su || return 1
+  h=$(lo_helper "$n"); [ -n "$h" ] && { to_trash "$h" $su || return 1; }
   if [ -n "$d" ]; then
-    to_trash "$d" || return 1
-    p=$(dirname "$d"); [ -d "$p" ] && [ -z "$(ls -A "$p" 2>/dev/null)" ] && to_trash "$p"
+    to_trash "$d" $su || return 1
+    p=$(dirname "$d"); [ -d "$p" ] && [ -z "$(ls -A "$p" 2>/dev/null)" ] && to_trash "$p" $su
   fi
   KEY_FREED=$s
 }

@@ -6,7 +6,7 @@
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
 C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
-C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=()
+C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=(); C_SUDO=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
 artifact_ok(){ # path → true when it is a build folder with its build file next to it
@@ -87,10 +87,10 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
       if [ "${C_KIND[i]}" = cmd ]; then kb_get "${C_MDIR[i]}"; else kb_get "${C_PATHS[i]}"; fi
       C_KB[i]=$KB; [ "${C_KIND[i]}" = empty ] && [ "$KB" -lt 5120 ] && continue
     fi
-    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do eval "${a}[j]=\${${a}[i]}"; done; fi
+    if [ "$j" != "$i" ]; then for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO; do eval "${a}[j]=\${${a}[i]}"; done; fi
     j=$((j + 1))
   done
-  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO; do unset "${a}[i]"; done; done
+  for ((i = j; i < C_N; i++)); do for a in C_TASK C_LVL C_AUTO C_LBL C_KB C_KIND C_PATHS C_PROC C_MDIR C_OPEN C_KEY C_INFO C_SUDO; do unset "${a}[i]"; done; done
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }

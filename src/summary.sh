@@ -8,7 +8,17 @@ if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_A
       c=$(ask "$(_ 'This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ')")
       case "$c" in y|Y|т|Т|д|Д) ;; *) CHOSEN="" ;; esac
     fi
+    SU=""; for i in $CHOSEN; do [ "${C_SUDO[i]}" = 1 ] && SU="$SU $i"; done
+    if [ -n "$CHOSEN" ] && [ -n "$SU" ]; then
+      section "Cleanup"; info 'These steps need your Mac password:'
+      for i in $SU; do lines "$(sudo_cmds "${C_PATHS[i]#orph:}")"; done
+      if ! { printf '%s' "$CL"; sudo -v -p "  $(_ 'Mac password to remove system leftovers:') "; }; then
+        warn 'Password not accepted, system items skipped'
+        CHOSEN=$(for i in $CHOSEN; do [ "${C_SUDO[i]}" = 1 ] || echo "$i"; done)
+      fi
+    fi
     if [ -n "$CHOSEN" ]; then section "Cleanup"; for i in $CHOSEN; do exec_cand "$i"; done; fi
+    [ -n "$SU" ] && sudo -k
   fi
 fi
 

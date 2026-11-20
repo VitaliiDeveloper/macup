@@ -34,7 +34,22 @@ echo "$*" >>"$HOME/launchctl.log"
 if [ "$1" = print ]; then for l in ${FAKE_LOADED:-}; do case "$2" in */"$l") exit 0 ;; esac; done; exit 113; fi
 exit 0
 FAKE
-cat >"$W/bin/osascript" <<'FAKE'
+# sudo records what it was asked and runs the rest as this user; FAKE_SUDO_FAIL=1 is a wrong password
+cat >"$W/bin/sudo" <<'FAKE'
+#!/bin/bash
+echo "$*" >>"$HOME/sudo.log"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -v) [ -n "$FAKE_SUDO_FAIL" ] && exit 1; shift ;;
+    -k|-n) shift ;;
+    -p) shift 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -gt 0 ] && { [ "$1" = true ] && exit 0; exec "$@"; }
+exit 0
+FAKE
+cat >"$W/bin/osascript" <<'FAKE' 
 #!/bin/bash
 exit 0
 FAKE
@@ -95,7 +110,7 @@ until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev
 pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
   local H=$1 out="$1.out"
   (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") \
-    | script -q /dev/null env FAKE_LOADED="${FAKE_LOADED:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
+    | script -q /dev/null env FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
       "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
@@ -155,5 +170,25 @@ data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" "$nd" y; T="$H/.Trash"
   && pass "orphan_data: another app's folder of the same name and other vendors stay" || fail "orphan_data: took too much"
 data_home "$H"; lo "$H" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$H"/Library/Logs/macup/*.md | tail -1)
 grep -q 'Application Support/Comet' "$r" && ! grep -q 'Containers' "$r" && pass "orphan_data: unattended runs list paths in the report, never containers" || { fail "orphan_data: unattended"; grep -n 'Comet\|Containers' "$r" | head; }
+
+# --- system leftovers: one password for all picked ones; a vendor prefix alone never qualifies
+sys_home(){ # dir
+  local H=$1; leftovers_home "$H"; rm -f "$H/Library/LaunchAgents/com.gone.thing.plist"
+  agent "$H/SysLib/LaunchDaemons/com.gone.daemon.plist" com.gone.daemon "$H/SysLib/Gone/missing"
+  mkdir -p "$H/SysLib/PrivilegedHelperTools"; echo bin >"$H/SysLib/PrivilegedHelperTools/com.gone.daemon"
+  prog "$H/SysLib/Application Support/Prefix/bin/p" 1; agent "$H/SysLib/LaunchDaemons/com.prefix.only.plist" com.prefix.only "$H/SysLib/Application Support/Prefix/bin/p"
+}
+H="$W/sy"; sys_home "$H"; pk "$H" '' ''
+nsd=$(nm "$H.out" 'Gone · system service'); npo=$(nm "$H.out" 'Prefix'); nu=$(nm "$H.out" 'Perplexity AI · update program')
+[ -n "$nsd" ] && [ -z "$npo" ] && tr -d '\r' <"$H.out" | grep -q 'Needs your Mac password' && pass "system leftovers: offered only on strong evidence, marked as needing a password" || { fail "system leftovers: list"; tr -d '\r' <"$H.out" | sed -n '/What can be cleaned/,$p' | head -24; }
+sys_home "$H"; pk "$H" "$nsd" y
+[ "$(grep -c -- '^-v' "$H/sudo.log" 2>/dev/null)" = 1 ] && grep -q '^-k' "$H/sudo.log" && [ "$(tail -1 "$H/sudo.log")" = "-k" ] \
+  && [ -f "$H/.Trash/com.gone.daemon.plist" ] && [ -f "$H/.Trash/com.gone.daemon" ] && pass "system leftovers: one password, plist and helper in the Trash, sudo forgotten after" || { fail "system leftovers: move"; cat "$H/sudo.log"; ls "$H/.Trash"; }
+sys_home "$H"; FAKE_SUDO_FAIL=1 pk "$H" "$nsd,$nu" y
+[ -f "$H/SysLib/LaunchDaemons/com.gone.daemon.plist" ] && [ -f "$H/.Trash/ai.perplexity.CometUpdater.wake.plist" ] && tr -d '\r' <"$H.out" | grep -q 'Password not accepted, system items skipped' \
+  && pass "system leftovers: a wrong password skips only system items" || { fail "system leftovers: wrong password"; tr -d '\r' <"$H.out" | sed -n '/Clean now/,$p' | head; }
+sys_home "$H"; lo "$H" check --only check.startup,clean.orphan_agents --no-color </dev/null >"$H.out" 2>&1
+[ ! -e "$H/sudo.log" ] && grep -q 'sudo launchctl bootout system/com.gone.daemon' "$H.out" && grep -q 'sudo mv .*com.gone.daemon.plist' "$H.out" && grep -q 'com.prefix.only' "$H.out" \
+  && pass "system leftovers: unattended runs only print the commands" || { fail "system leftovers: unattended"; sed -n '/Startup/,/Login items/p' "$H.out"; }
 
 [ $F = 0 ] || exit 1

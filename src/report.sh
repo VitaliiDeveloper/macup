@@ -75,6 +75,7 @@ if task check.startup; then
       empty)   r=$(_ 'empty file') ;;
     esac
     LO="$LO${O_NAME[i]} · ${O_LABEL[i]:-$(basename "${O_PLIST[i]}" .plist)} — $r"$'\n'
+    [ "${O_SYS[i]}" = 1 ] && { ! lo_interactive || ! lo_sys_ok "$i"; } && LO="$LO$(sudo_cmds "$i" | sed 's/^/    /')"$'\n'
   done
   if [ -n "$LO" ]; then
     warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"

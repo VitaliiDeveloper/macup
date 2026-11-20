@@ -4,7 +4,7 @@
 
 One command to update, clean and check a developer's Mac.
 
-![macup check: system, security and update checks, then a numbered list of what can be cleaned](docs/images/check.svg)
+![macup check: a numbered list of what can be cleaned, leftovers of deleted apps explained in plain words, startup items, then the pick](docs/images/check.svg)
 
 ## Why
 
@@ -127,7 +127,7 @@ Start with `macup check`. It lists what can be cleaned, then lets you pick (the 
 
 Every run ends with a summary and saves a report to `~/Library/Logs/macup/`:
 
-![The end of macup all: cleanup results and the summary with updates, freed space and what needs attention](docs/images/summary.svg)
+![macup clean: what each cleaner freed, then the summary with freed space and free disk space](docs/images/summary.svg)
 
 Plain `macup` opens a menu:
 
@@ -262,7 +262,7 @@ Development:
 tests/run.sh
 ```
 
-Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`.
+Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`. `tools/screenshots.sh` makes the screenshots in `docs/images` from the macup in the checkout, run against a made-up Mac (fake home, sizes and free space), so nothing of your own Mac shows up.
 
 ## License
 

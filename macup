@@ -124,7 +124,8 @@ clean.stale_artifacts|off|Build folders in projects untouched for stale_project_
 clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
 clean.trash|off|Empty the Trash (opt-in)
 clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
-clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)'
+clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)
+clean.dev_containers|off|Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)'
 
 # ---------------------------------------------------------------- config
 conf(){ # key default
@@ -153,6 +154,7 @@ load_conf(){
   STEP_SECS=$(( $(num "$(conf step_timeout_minutes 60)" 60) * 60 ))
   [ -n "${MACUP_STEP_SECS:-}" ] && STEP_SECS=$(num "$MACUP_STEP_SECS" "$STEP_SECS")   # seconds, for the tests
   [ -z "$LEVEL" ] && { LEVEL=$(level_num "$(conf clean_level safe)"); [ -z "$LEVEL" ] && LEVEL=1; }
+  DEV_PREFIXES=$(conf dev_container_prefixes "")
   PROJECT_DIRS=$(conf project_dirs "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
 }
 task_default(){ printf '%s\n' "$TASKS" | awk -F'|' -v id="$1" '$1==id{print $2}'; }
@@ -490,6 +492,10 @@ stale_project_days = 90
 
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
+
+# Bundle ids of your own dev builds, e.g. dev.myapp, com.mycompany.myapp. Their containers in
+# ~/Library/Containers whose app is gone are offered by clean.dev_containers. Apple's are never offered.
+dev_container_prefixes =
 
 # Keep macup reports for this many days, and at most this many runs (one file per run; remove them all: macup reports clean)
 keep_reports_days = 30
@@ -1237,6 +1243,13 @@ Mac password to remove system leftovers: || Пароль Мака, щоб при
 Password not accepted, system items skipped || Пароль не прийнято, системні пункти пропущено
 Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Елементи входу, що ведуть на видалені застосунки: %s — вимкніть їх у Системних параметрах → Загальні → Елементи входу
 %s: some files could not be moved (see the report) || %s: деякі файли не вдалося перемістити (див. звіт)
+Looking for containers of dev builds || Шукаю контейнери тестових збірок
+Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнери збірок: Spotlight не відповідає, тож macup не може визначити, яких програм уже немає; нічого не запропоновано
+Container of a dev build whose app is gone: %s (changed %s) || Контейнер тестової збірки, чиєї програми вже немає: %s (змінено %s)
+Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them) || Контейнери в ~/Library/Containers з назвами з dev_container_prefixes, чиєї програми вже немає (лише коли вибереш)
+%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || %s: не вдається прочитати — дай терміналу Full Disk Access (System Settings → Privacy & Security)
+The picked containers hold app data (documents, settings, databases): it goes to the Trash. || Вибрані контейнери містять дані застосунків (документи, налаштування, бази даних): вони підуть у Кошик.
+%s: could not remove all of it (see the report) || %s: не все вдалося видалити (див. звіт)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1705,6 +1718,13 @@ Mac password to remove system leftovers: || Пароль Мака, чтобы у
 Password not accepted, system items skipped || Пароль не принят, системные пункты пропущены
 Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Объекты входа, ведущие на удалённые приложения: %s — выключите их в Системных настройках → Основные → Объекты входа
 %s: some files could not be moved (see the report) || %s: некоторые файлы не удалось переместить (см. отчёт)
+Looking for containers of dev builds || Ищу контейнеры тестовых сборок
+Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнеры сборок: Spotlight не отвечает, поэтому macup не может определить, каких приложений уже нет; ничего не предложено
+Container of a dev build whose app is gone: %s (changed %s) || Контейнер тестовой сборки, чьего приложения уже нет: %s (изменён %s)
+Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them) || Контейнеры в ~/Library/Containers с именами из dev_container_prefixes, чьего приложения уже нет (только когда выберете)
+%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || %s: не удаётся прочитать — дайте терминалу Full Disk Access (System Settings → Privacy & Security)
+The picked containers hold app data (documents, settings, databases): it goes to the Trash. || Выбранные контейнеры содержат данные приложений (документы, настройки, базы данных): они уйдут в Корзину.
+%s: could not remove all of it (see the report) || %s: удалить удалось не всё (см. отчёт)
 EOF
   ;;
   esac
@@ -2506,6 +2526,17 @@ project_roots(){ # the folders in project_dirs that exist; never the home folder
     [ -d "$d" ] && echo "$d"
   done
 }
+dev_prefixes(){ # dev_container_prefixes, one per line; a prefix needs a dot and never names Apple's own apps
+  echo "$DEV_PREFIXES" | tr ', ' '\n\n' | grep -E '^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' | grep -viE '^com\.apple(\.|$)'
+}
+dev_container(){ local n=${1##*/} p   # a folder right in ~/Library/Containers named by a prefix or below it
+  [ "$1" = "$HOME/Library/Containers/$n" ] || return 1
+  case "$n" in *[!A-Za-z0-9.-]*) return 1 ;; esac   # a bundle id; anything else would break the Spotlight query
+  case "$n" in [Cc][Oo][Mm].[Aa][Pp][Pp][Ll][Ee].*) return 1 ;; esac
+  while IFS= read -r p; do [ -n "$p" ] && case "$n" in "$p"|"$p".*) return 0 ;; esac; done <<EOF2
+$(dev_prefixes)
+EOF2
+  return 1; }
 in_projects(){ local r; while IFS= read -r r; do [ -n "$r" ] && case "$1" in "$r"/*) return 0 ;; esac; done <<EOF2
 $(project_roots)
 EOF2
@@ -2648,6 +2679,7 @@ run_key(){ local out r=0
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     orph:*)    run_orph "${1#orph:}"; return ;;
+    devc:*)    run_devc "${1#devc:}"; return ;;
     odata:*)   run_odata "${1#odata:}"; return ;;
     docker)    out=$({ docker builder prune -f || exit 1; docker image prune -f; } 2>&1) || r=1; echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}'); return $r ;;
@@ -2683,7 +2715,12 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
            # never "cleaned" for something macup would not touch
-           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi ;;
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi
+           # a removal that macOS refused (a locked file): a failure, never "cleaned"
+           while IFS= read -r p; do [ -n "$p" ] && [ -e "$p" ] && [ ! -L "$p" ] && safe_path "$p" && { err '%s: could not remove all of it (see the report)' "$lbl"; return 0; }; done <<EOF2
+${C_PATHS[i]}
+EOF2
+           ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
            run_key "${C_PATHS[i]}"; r=$?
            [ "$r" = 2 ] && return 0   # skipped; run_key said why
@@ -2706,7 +2743,7 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
     if running "${C_PROC[i]}" || { [ -s "$s" ] && open_in "${C_OPEN[i]}" "$s"; }; then C_BUSY[i]=1; fi
   done
 }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag head=0 ln lc=0
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done
@@ -3008,7 +3045,7 @@ EOF2
   n=${v##*.}
   if name_ok "$n"; then by_name "$L/Application Support" "$n"; by_name "$L" "$n"; fi
   if lo_interactive; then
-    for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && echo "$e"; done
+    for e in "$L/Containers/$v".* "$L/Group Containers/group.$v".*; do [ -e "$e" ] && [ ! -L "$e" ] && ! dev_container "$e" && echo "$e"; done   # dev builds' containers are clean.dev_containers' own
     for ((i = 0; i < O_N; i++)); do
       [ "${O_VENDOR[i]}" = "$v" ] && [ -e "${O_PROG[i]}" ] || continue
       t=$(team_of "${O_PROG[i]}"); [ -n "$t" ] || continue
@@ -3071,6 +3108,22 @@ btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
   if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
   wait "$p" 2>/dev/null
   cat "$f"; rm -f "$f"
+}
+
+run_devc(){ # container — what is inside goes to ~/.Trash/<bundle id>; re-checked: still a dev container, no app, nothing open
+  local c=$1 n=${1##*/} t i=2 s e bad=0
+  dev_container "$c" && [ -d "$c" ] && [ ! -L "$c" ] || { echo "macup refused container: $c" >>"$RAW"; return 1; }
+  if app_for "$n" || open_in "$c"; then info '%s: still in use, skipped' "$n"; return 2; fi
+  s=$(kb "$c"); t="$HOME/.Trash/$n"
+  while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$n $i"; i=$((i + 1)); done
+  mkdir -p "$t" || return 1
+  for e in "$c"/* "$c"/.[!.]* "$c"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    case "${e##*/}" in .com.apple.containermanagerd.metadata.plist) continue ;; esac
+    mv "$e" "$t/" 2>>"$RAW" || bad=1
+  done
+  KEY_FREED=$((s - $(kb "$c")))
+  return "$bad"
 }
 # ---------------------------------------------------------------- what macup cleans
 # To support another cache, add a line to one of these tables. Levels: 1 safe, 2 standard, 3 aggressive.
@@ -3321,6 +3374,34 @@ fi
 if task_allowed clean.trash; then
   if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then task clean.trash && warn 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
   else cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"; fi
+fi
+# a container holds the app's data, not a cache: only names you listed, never on its own (CL_MANUAL), one item per container.
+# macOS refuses to remove the container folder and its marker plist, so only what is inside goes, to the Trash.
+# Interactive only: reading other apps' containers can raise a privacy prompt, and only a person can pick them.
+# Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id has an app:
+# dev.app for dev.app.share, and for dev.app-LaunchAtLoginHelper
+app_for(){ local id=$1 up; while :; do
+  [ -n "$(mdfind "kMDItemCFBundleIdentifier == '$id'c" 2>/dev/null | head -1)" ] && return 0
+  up=${id%[.-]*}
+  { [ "$up" != "$id" ] && case "$up" in *.*) true ;; *) false ;; esac; } || return 1
+  id=$up
+done; }
+if task_allowed clean.dev_containers && lo_interactive && [ -n "$(dev_prefixes)" ]; then
+  step 'Looking for containers of dev builds'
+  if [ -z "$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.finder'" 2>/dev/null | head -1)" ]; then
+    info 'Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered'
+  else
+    lsof_snap "$BODY.du.devc"
+    for c in "$HOME/Library/Containers"/*; do
+      [ -d "$c" ] && [ ! -L "$c" ] && dev_container "$c" || continue
+      app_for "${c##*/}" && continue
+      if open_in "$c" "$BODY.du.devc"; then info '%s: %s — skipped while the app is open' "${c##*/}" "$(hum "$(kb "$c")")"; continue; fi
+      if ! ls "$c" >/dev/null 2>&1; then info '%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)' "${c##*/}"; continue; fi
+      items=$(find "$c" -mindepth 1 -maxdepth 1 ! -name .com.apple.containermanagerd.metadata.plist 2>/dev/null)
+      [ -n "$items" ] || continue   # emptied before: only the marker macOS keeps is left
+      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(stat -f %Sm -t %F "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
+    done
+  fi
 fi
 # --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
 # gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
@@ -3702,6 +3783,7 @@ if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_A
   CHOSEN=$(pick)
   if [ -n "$CHOSEN" ]; then
     RISKY=0; for i in $CHOSEN; do { [ "${C_LVL[i]}" = 3 ] || [ "${C_AUTO[i]}" = 0 ]; } && RISKY=1; done
+    for i in $CHOSEN; do [ "${C_TASK[i]}" = clean.dev_containers ] && { printf '%s\n' "$(_ 'The picked containers hold app data (documents, settings, databases): it goes to the Trash.')" >/dev/tty; break; }; done
     if [ "$RISKY" = 1 ]; then
       c=$(ask "$(_ 'This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ')")
       case "$c" in y|Y|т|Т|д|Д) ;; *) CHOSEN="" ;; esac

@@ -46,6 +46,17 @@ project_roots(){ # the folders in project_dirs that exist; never the home folder
     [ -d "$d" ] && echo "$d"
   done
 }
+dev_prefixes(){ # dev_container_prefixes, one per line; a prefix needs a dot and never names Apple's own apps
+  echo "$DEV_PREFIXES" | tr ', ' '\n\n' | grep -E '^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' | grep -viE '^com\.apple(\.|$)'
+}
+dev_container(){ local n=${1##*/} p   # a folder right in ~/Library/Containers named by a prefix or below it
+  [ "$1" = "$HOME/Library/Containers/$n" ] || return 1
+  case "$n" in *[!A-Za-z0-9.-]*) return 1 ;; esac   # a bundle id; anything else would break the Spotlight query
+  case "$n" in [Cc][Oo][Mm].[Aa][Pp][Pp][Ll][Ee].*) return 1 ;; esac
+  while IFS= read -r p; do [ -n "$p" ] && case "$n" in "$p"|"$p".*) return 0 ;; esac; done <<EOF2
+$(dev_prefixes)
+EOF2
+  return 1; }
 in_projects(){ local r; while IFS= read -r r; do [ -n "$r" ] && case "$1" in "$r"/*) return 0 ;; esac; done <<EOF2
 $(project_roots)
 EOF2
@@ -188,6 +199,7 @@ run_key(){ local out r=0
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
     orph:*)    run_orph "${1#orph:}"; return ;;
+    devc:*)    run_devc "${1#devc:}"; return ;;
     odata:*)   run_odata "${1#odata:}"; return ;;
     docker)    out=$({ docker builder prune -f || exit 1; docker image prune -f; } 2>&1) || r=1; echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}'); return $r ;;
@@ -223,7 +235,12 @@ ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
            # never "cleaned" for something macup would not touch
-           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi ;;
+           if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi
+           # a removal that macOS refused (a locked file): a failure, never "cleaned"
+           while IFS= read -r p; do [ -n "$p" ] && [ -e "$p" ] && [ ! -L "$p" ] && safe_path "$p" && { err '%s: could not remove all of it (see the report)' "$lbl"; return 0; }; done <<EOF2
+${C_PATHS[i]}
+EOF2
+           ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
            run_key "${C_PATHS[i]}"; r=$?
            [ "$r" = 2 ] && return 0   # skipped; run_key said why
@@ -246,7 +263,7 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
     if running "${C_PROC[i]}" || { [ -s "$s" ] && open_in "${C_OPEN[i]}" "$s"; }; then C_BUSY[i]=1; fi
   done
 }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ]; }   # small pick-only commands too; expired profiles are junk at any size
+visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag head=0 ln lc=0
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done

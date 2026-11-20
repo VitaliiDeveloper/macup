@@ -68,6 +68,10 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
+# Bundle ids of your own dev builds, e.g. dev.myapp, com.mycompany.myapp. Their containers in
+# ~/Library/Containers whose app is gone are offered by clean.dev_containers. Apple's are never offered.
+dev_container_prefixes =
+
 # Keep macup reports for this many days, and at most this many runs (one file per run; remove them all: macup reports clean)
 keep_reports_days = 30
 keep_reports = 20

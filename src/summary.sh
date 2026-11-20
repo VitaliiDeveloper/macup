@@ -4,6 +4,7 @@ if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_A
   CHOSEN=$(pick)
   if [ -n "$CHOSEN" ]; then
     RISKY=0; for i in $CHOSEN; do { [ "${C_LVL[i]}" = 3 ] || [ "${C_AUTO[i]}" = 0 ]; } && RISKY=1; done
+    for i in $CHOSEN; do [ "${C_TASK[i]}" = clean.dev_containers ] && { printf '%s\n' "$(_ 'The picked containers hold app data (documents, settings, databases): it goes to the Trash.')" >/dev/tty; break; }; done
     if [ "$RISKY" = 1 ]; then
       c=$(ask "$(_ 'This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ')")
       case "$c" in y|Y|т|Т|д|Д) ;; *) CHOSEN="" ;; esac

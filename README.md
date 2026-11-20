@@ -37,6 +37,7 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 - 🔴 **aggressive:** browser caches (Chrome, Arc, Edge, Brave, Firefox, Opera, Vivaldi and other Chromium or Firefox-based browsers). Profiles, passwords and history are never touched.
 - **Only when you pick them** (or turn them on with `enable`): simulator runtimes, erasing a simulator, simulators unused for 30 days, other big folders in `~/Library/Caches`, stale `node_modules` and other stale build folders (`Pods`, `.build`, `.dart_tool`, `.next`, Rust and Maven `target`, Gradle `build`), Docker images no container uses, stopped Docker containers, Homebrew packages nothing needs any more, the Trash.
 - **Only when you pick them after `macup check`:** leftovers of deleted apps — background programs and their folders, the app's data (settings, history, saved passwords), and system services (these ask for your Mac password once). They go to the Trash, so you can put them back.
+- **Only when you pick them, never with `enable`:** containers of your own dev builds whose app is gone (`dev_container_prefixes`). What is inside goes to the Trash; macOS keeps the empty folder.
 - **Measured, never deleted:** Xcode Archives, simulator devices, Flutter pub-cache, Codex chat history, AI models, Android SDK and emulators, iPhone and iPad backups, Docker Desktop's disk image, Docker volumes, virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware); render caches of Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic and Camera Raw (with the app's own menu item to clear them).
 
 Run `macup tasks` for the full list with task ids.
@@ -220,12 +221,15 @@ device_support_days = 90      # delete DeviceSupport folders older than this
 simulator_days = 30           # offer simulators unused for this long
 stale_project_days = 90       # a project is stale after this many days without changes
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
+dev_container_prefixes =      # bundle ids of your dev builds, e.g. dev.myapp
 keep_reports_days = 30        # delete macup reports older than this
 keep_reports = 20             # and never keep more than this many runs (one report file per run)
 step_timeout_minutes = 60     # stop an update or cleanup command that runs longer (App Store installs: four times as long)
 ```
 
 `project_dirs` is used by `--deep`, by stale `node_modules` and build folders, and to find version pins.
+
+`dev_container_prefixes` names your own bundle ids (`dev.myapp` also covers `dev.myapp.demo`). A sandboxed build leaves a container in `~/Library/Containers`, and it stays after the build is gone (a cleaned DerivedData, a test bundle id). `macup check` lists each one whose app Spotlight cannot find, with its size and last change, for you to pick; `clean` and `all` never delete them. What is inside goes; macOS keeps the empty folder and its `.com.apple.containermanagerd.metadata.plist`, and refuses to remove them, so macup leaves them and does not offer them again. A container stays while its parent id has an app (`dev.myapp.share` while `dev.myapp` exists), because Spotlight does not index app extensions, and while something has a file open in it. A container holds the app's data, so nothing is offered without this setting, `com.apple.*` never is, and with Spotlight off nothing is offered.
 
 Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_CONFIG_HOME` (config location).
 

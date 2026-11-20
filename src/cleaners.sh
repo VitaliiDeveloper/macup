@@ -248,6 +248,34 @@ if task_allowed clean.trash; then
   if [ -d "$HOME/.Trash" ] && ! ls "$HOME/.Trash" >/dev/null 2>&1; then task clean.trash && warn 'Trash: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)'
   else cand clean.trash 3 "$(_ 'Trash')" "$(kb "$HOME/.Trash")" empty "$HOME/.Trash"; fi
 fi
+# a container holds the app's data, not a cache: only names you listed, never on its own (CL_MANUAL), one item per container.
+# macOS refuses to remove the container folder and its marker plist, so only what is inside goes, to the Trash.
+# Interactive only: reading other apps' containers can raise a privacy prompt, and only a person can pick them.
+# Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id has an app:
+# dev.app for dev.app.share, and for dev.app-LaunchAtLoginHelper
+app_for(){ local id=$1 up; while :; do
+  [ -n "$(mdfind "kMDItemCFBundleIdentifier == '$id'c" 2>/dev/null | head -1)" ] && return 0
+  up=${id%[.-]*}
+  { [ "$up" != "$id" ] && case "$up" in *.*) true ;; *) false ;; esac; } || return 1
+  id=$up
+done; }
+if task_allowed clean.dev_containers && lo_interactive && [ -n "$(dev_prefixes)" ]; then
+  step 'Looking for containers of dev builds'
+  if [ -z "$(mdfind "kMDItemCFBundleIdentifier == 'com.apple.finder'" 2>/dev/null | head -1)" ]; then
+    info 'Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered'
+  else
+    lsof_snap "$BODY.du.devc"
+    for c in "$HOME/Library/Containers"/*; do
+      [ -d "$c" ] && [ ! -L "$c" ] && dev_container "$c" || continue
+      app_for "${c##*/}" && continue
+      if open_in "$c" "$BODY.du.devc"; then info '%s: %s — skipped while the app is open' "${c##*/}" "$(hum "$(kb "$c")")"; continue; fi
+      if ! ls "$c" >/dev/null 2>&1; then info '%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)' "${c##*/}"; continue; fi
+      items=$(find "$c" -mindepth 1 -maxdepth 1 ! -name .com.apple.containermanagerd.metadata.plist 2>/dev/null)
+      [ -n "$items" ] || continue   # emptied before: only the marker macOS keeps is left
+      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(stat -f %Sm -t %F "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
+    done
+  fi
+fi
 # --- Android, Gradle, Maven: downloaded again by the next build. Only these subfolders:
 # gradle.properties, settings.xml, keystores and emulators sit next to them and are never touched.
 CL_LVL=2

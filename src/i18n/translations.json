@@ -1858,5 +1858,33 @@
   "%s: some files could not be moved (see the report)": {
     "uk": "%s: деякі файли не вдалося перемістити (див. звіт)",
     "ru": "%s: некоторые файлы не удалось переместить (см. отчёт)"
+  },
+  "Looking for containers of dev builds": {
+    "uk": "Шукаю контейнери тестових збірок",
+    "ru": "Ищу контейнеры тестовых сборок"
+  },
+  "Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered": {
+    "uk": "Контейнери збірок: Spotlight не відповідає, тож macup не може визначити, яких програм уже немає; нічого не запропоновано",
+    "ru": "Контейнеры сборок: Spotlight не отвечает, поэтому macup не может определить, каких приложений уже нет; ничего не предложено"
+  },
+  "Container of a dev build whose app is gone: %s (changed %s)": {
+    "uk": "Контейнер тестової збірки, чиєї програми вже немає: %s (змінено %s)",
+    "ru": "Контейнер тестовой сборки, чьего приложения уже нет: %s (изменён %s)"
+  },
+  "Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)": {
+    "uk": "Контейнери в ~/Library/Containers з назвами з dev_container_prefixes, чиєї програми вже немає (лише коли вибереш)",
+    "ru": "Контейнеры в ~/Library/Containers с именами из dev_container_prefixes, чьего приложения уже нет (только когда выберете)"
+  },
+  "%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)": {
+    "uk": "%s: не вдається прочитати — дай терміналу Full Disk Access (System Settings → Privacy & Security)",
+    "ru": "%s: не удаётся прочитать — дайте терминалу Full Disk Access (System Settings → Privacy & Security)"
+  },
+  "The picked containers hold app data (documents, settings, databases): it goes to the Trash.": {
+    "uk": "Вибрані контейнери містять дані застосунків (документи, налаштування, бази даних): вони підуть у Кошик.",
+    "ru": "Выбранные контейнеры содержат данные приложений (документы, настройки, базы данных): они уйдут в Корзину."
+  },
+  "%s: could not remove all of it (see the report)": {
+    "uk": "%s: не все вдалося видалити (див. звіт)",
+    "ru": "%s: удалить удалось не всё (см. отчёт)"
   }
 }

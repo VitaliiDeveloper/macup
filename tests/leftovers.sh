@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2088  # the report prints paths with a literal ~
 # Leftovers of deleted apps: launch agents, their folders, app data, system services, BTM records.
 # Runs against fake homes, a fake /Applications (MACUP_APPS) and a fake /Library (MACUP_SYSLIB). tests/run.sh calls it.
 cd "$(dirname "$0")/.." || exit 1

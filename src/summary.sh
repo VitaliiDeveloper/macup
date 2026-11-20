@@ -22,7 +22,15 @@ if task check.trends && [ -n "$PREV" ]; then
 $PREV
 EOF
   DFREE=$((FREE_AFTER - ${P_FREE:-$FREE_AFTER}))
-  if [ "$DFREE" -lt -20971520 ]; then warn 'Free space: %s since %s — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS"
+  # swap files take disk space and macOS deletes them on restart: growing swap is not something filling the disk
+  DSWAP=0
+  case "$P_SWAP" in ''|*[!0-9]*) ;; *) [ "$SWAP_OK" = 1 ] && [ "$DFREE" -lt 0 ] && DSWAP=$(( (SWAP - P_SWAP) * 1024 )) ;; esac
+  [ "$DSWAP" -lt 0 ] && DSWAP=0
+  [ "$DSWAP" -gt $((-DFREE)) ] && [ "$DSWAP" -gt 0 ] && DSWAP=$((-DFREE))
+  if [ "$DSWAP" -ge 1048576 ]; then
+    if [ $((DFREE + DSWAP)) -lt -20971520 ]; then warn 'Free space: %s since %s (%s of it is swap, freed on restart) — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS" "$(hum "$DSWAP")"
+    else info 'Free space: %s since %s (%s of it is swap, freed on restart)' "$(hum "$DFREE")" "$P_TS" "$(hum "$DSWAP")"; fi
+  elif [ $((DFREE + DSWAP)) -lt -20971520 ]; then warn 'Free space: %s since %s — something is filling the disk (try: macup check --deep)' "$(hum "$DFREE")" "$P_TS"
   else info 'Free space: %s since %s' "$( [ "$DFREE" -ge 0 ] && printf '+')$(hum "$DFREE")" "$P_TS"; fi
   [ -n "$BMAX" ] && [ -n "$P_MAX" ] && [ "$P_MAX" != "$BMAX" ] && info 'Battery capacity: %s%% → %s%%' "$P_MAX" "$BMAX"
   [ -n "$BCYC" ] && [ -n "$P_CYC" ] && [ "$P_CYC" != "$BCYC" ] && info 'Battery cycles: +%s' "$((BCYC - P_CYC))"
@@ -63,17 +71,29 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   if [ ${#WARN[@]} -gt 0 ]; then echo "- **$(_f 'Needs attention (%s):' "${#WARN[@]}")**"; for w in "${WARN[@]}"; do echo "    - $w"; done
   else echo "- $(_ 'Needs attention: nothing')"; fi
   [ -n "$NEWER" ] && echo "- $(_f 'macup %s is available: %s' "$NEWER" "$(update_cmd)")"
-  echo
-  _f 'Command log: %s' "\`$(tildify "$RAW")\`"; echo
 } >"$SUM"
-cat "$SUM" "$BODY" >"$REPORT"; rm -f "$SUM"
+{ cat "$SUM" "$BODY"; raw_section; } >"$REPORT"; rm -f "$SUM"; REPORT_DONE=1
 
 [ "$QUIET" = 1 ] && exec >&3 3>&-
 if [ "$JSON" = 1 ]; then
-  printf '{"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
+  # schema grows by adding fields; a change that breaks a reader raises the number
+  # "log" stays for older readers: the command output is at the end of the report now, so it names the report
+  json_items(){ local i; printf '['; for ((i = 0; i < IT_N; i++)); do [ $i = 0 ] || printf ','
+    printf '{"section":"%s","kind":"%s","text":"%s","details":%s}' "$(jstr "${IT_SEC[i]}")" "${IT_KIND[i]}" "$(jstr "${IT_MSG[i]}")" "$(jlines "$(awk -F'\t' -v i="$i" '$1 == i { sub(/^[^\t]*\t/, ""); print }' "$BODY.det" 2>/dev/null)")"; done; printf ']'; }
+  json_cands(){ local i first=1 lv inc opt hid busy; printf '['
+    # every candidate, the small ones the terminal list hides too: a program can still --pick them
+    [ "$DRY" = 1 ] && for ((i = 0; i < ${C_N:-0}; i++)); do
+      [ $first = 1 ] || printf ','; first=0
+      case "${C_LVL[i]}" in 1) lv=safe ;; 2) lv=standard ;; *) lv=aggressive ;; esac
+      opt=true; inc=false; [ "${C_AUTO[i]}" = 1 ] && { opt=false; [ "${C_LVL[i]}" -le "$LEVEL" ] && inc=true; }
+      hid=true; visible "$i" && hid=false
+      busy=false; [ "${C_BUSY[i]:-0}" = 1 ] && busy=true
+      printf '{"key":"%s","task":"%s","level":"%s","kb":%s,"opt_in":%s,"in_clean":%s,"hidden":%s,"busy":%s,"text":"%s"}' "${C_KEY[i]}" "${C_TASK[i]}" "$lv" "${C_KB[i]:-0}" "$opt" "$inc" "$hid" "$busy" "$(jstr "${C_LBL[i]}")"
+    done; printf ']'; }
+  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
     "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
-  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s"}\n' \
-    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$RAW")"
+  printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
+    "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$REPORT")" "$(json_items)" "$(json_cands)"
 else
 printf '%s\n%s━━━━━━━━━━━━━━━━ %s ━━━━━━━━━━━━━━━━%s\n' "$CL" "$B" "$(_ 'Summary')" "$N"
 if [ ${#UPDATED[@]} -gt 0 ]; then

@@ -12,6 +12,28 @@ EOF
   printf '\n'; _f 'Turn tasks off or on in %s (skip = … / enable = …)' "$(tildify "$CONF")"; printf '\n'
 }
 
+# --json: the same lists for a program (a GUI); see "For scripts and other programs" in the README
+tasks_json(){
+  local id def desc on first=1
+  load_conf; printf '{"schema":1,"config":"%s","tasks":[' "$(jstr "$CONF")"
+  while IFS='|' read -r id def desc; do
+    if task "$id"; then on=true; else on=false; fi
+    [ $first = 1 ] || printf ','; first=0
+    printf '{"id":"%s","group":"%s","default":"%s","on":%s,"text":"%s"}' "$id" "${id%%.*}" "$def" "$on" "$(jstr "$(_ "$desc")")"
+  done <<EOF
+$TASKS
+EOF
+  printf ']}\n'
+}
+history_json(){
+  [ -s "$HISTORY" ] || { echo '{"schema":1,"runs":[]}'; return; }
+  awk -F, 'function n(v){ return v == "" ? "null" : v + 0 }
+    BEGIN{ printf "{\"schema\":1,\"runs\":[" }
+    { printf "%s{\"date\":\"%s\",\"mode\":\"%s\",\"free_kb\":%s,\"total_kb\":%s,\"memory_free_pct\":%s,\"swap_mb\":%s,\"battery_cycles\":%s,\"battery_max_pct\":%s,\"updated\":%s,\"freed_kb\":%s,\"warnings\":%s}", \
+        (NR > 1 ? "," : ""), $1, $2, n($3), n($4), n($5), n($6), n($7), n($8), n($9), n($10), n($11) }
+    END{ print "]}" }' "$HISTORY"
+}
+
 write_default_conf(){
   mkdir -p "$CONF_DIR"
   # the heredoc expands \$MSG_LANG, so a backtick in it must be escaped: unescaped, bash runs what is between them
@@ -46,8 +68,9 @@ stale_project_days = 90
 # Where your code lives (used by --deep and clean.stale_node_modules)
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
 
-# Keep macup reports for this many days
-keep_reports_days = 60
+# Keep macup reports for this many days, and at most this many runs (one file per run; remove them all: macup reports clean)
+keep_reports_days = 30
+keep_reports = 20
 
 # Stop an update or cleanup command that runs longer than this many minutes (App Store installs get four times as long)
 step_timeout_minutes = 60
@@ -75,7 +98,50 @@ choose_lang(){ # [code]
 
 show_last(){
   local f; f=$(ls -t "$LOGDIR"/macup_*.md 2>/dev/null | head -1)
-  if [ -n "$f" ]; then cat "$f"; else _ 'No reports yet. Run: macup check'; echo; fi
+  [ -n "$f" ] || { _ 'No reports yet. Run: macup check'; echo; return; }
+  # the command output can be thousands of lines of brew: it stays in the file
+  awk -v more="$(_f 'The command output is at the end of %s' "$(tildify "$f")")" '{ a[NR] = $0 }
+    END { n = NR; for (i = 1; i <= NR; i++) if (a[i] ~ /^## / && a[i+2] == "~~~~") { n = i - 1; cut = 1; break }
+      for (i = 1; i <= n; i++) print a[i]; if (cut) printf "%s\n", more }' "$f"
+}
+
+# macup's reports: one file per run in $LOGDIR (macup_<date>.md; .log files are left by versions before 2.9.0)
+report_mode(){ sed -n '3s/^[^:]*: \([a-z+]*\) · macup .*/\1/p' "$1" 2>/dev/null; }
+report_date(){ local b=${1##*/macup_}; b=${b%.*}; printf '%s %s:%s' "${b%%_*}" "$(echo "${b#*_}" | cut -d- -f1)" "$(echo "${b#*_}" | cut -d- -f2)"; }
+reports(){ # [clean|open]
+  local mds n kb f m ans first=1
+  mds=$(ls "$LOGDIR"/macup_*.md 2>/dev/null); n=$(cnt "$mds")
+  kb=$(find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -exec du -k {} + 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  case "$1" in
+    "") ;;
+    open)  mkdir -p "$LOGDIR"; open "$LOGDIR"; return 0 ;;
+    clean) [ "$kb" -gt 0 ] || { _ 'Nothing to remove.'; echo; return 0; }
+           _f 'Reports to remove: %s (%s) in %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+           if [ "$YES" != 1 ]; then
+             ans=""; { : </dev/tty; } 2>/dev/null && ans=$(ask "$(_ 'Remove them? [y/N] ')")
+             case "$ans" in y|Y|т|Т|д|Д) ;; *) _ 'Nothing removed.'; echo; return 0 ;; esac
+           fi
+           find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \) -delete 2>/dev/null
+           _ 'Removed.'; echo; return 0 ;;
+    *)     echo "macup reports [clean|open] [--yes] [--json]"; return 2 ;;
+  esac
+  if [ "$JSON" = 1 ]; then
+    printf '{"schema":1,"folder":"%s","count":%s,"kb":%s,"reports":[' "$(jstr "$LOGDIR")" "$n" "$kb"
+    [ -n "$mds" ] && while IFS= read -r f; do
+      [ $first = 1 ] || printf ','; first=0
+      m=$(report_mode "$f"); [ -n "$m" ] && m="\"$m\""
+      printf '{"file":"%s","date":"%s","mode":%s,"kb":%s}' "$(jstr "$f")" "$(report_date "$f")" "${m:-null}" \
+        "$(du -k "$f" "${f%.md}.log" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+    done <<EOF
+$mds
+EOF
+    printf ']}\n'; return 0
+  fi
+  [ "$n" -gt 0 ] || { _ 'No reports yet. Run: macup check'; echo; return 0; }
+  _f 'Reports: %s · %s · %s' "$n" "$(hum "$kb")" "$(tildify "$LOGDIR")"; echo
+  _f 'Oldest: %s · newest: %s' "$(report_date "$(echo "$mds" | head -1)")" "$(report_date "$(echo "$mds" | tail -1)")"; echo
+  _f 'Kept: %s days, at most %s runs (keep_reports_days, keep_reports in %s)' "$(num "$(conf keep_reports_days 30)" 30)" "$(num "$(conf keep_reports 20)" 20)" "$(tildify "$CONF")"; echo
+  _ 'Remove them all: macup reports clean · open the folder: macup reports open'; echo
 }
 
 show_history(){
@@ -138,7 +204,7 @@ self_update(){
   esac
   if ! ver_gt "$newv" "$MACUP_VERSION"; then _f 'macup %s is already the latest.' "$MACUP_VERSION"; echo; rm -f "$tmp"; exit 0; fi
   target=$(resolve_self)
-  if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; fi
+  if install -m 755 "$tmp" "$target" 2>/dev/null; then _f 'macup updated: %s → %s' "$MACUP_VERSION" "$newv"; else _f "Couldn't write %s" "$target"; echo; rm -f "$tmp"; exit 1; fi
   echo; rm -f "$tmp"
 }
 
@@ -214,7 +280,7 @@ uninstall(){ # macup, older copies, settings, history, reports, the schedule, th
     if [ -z "$others" ]; then rcs+=("$rc"); lines+=("$l")
     else left="$left$(_f 'Kept: the PATH line in %s, because %s also has %s' "$(tildify "$rc")" "$(tildify "$dir")" "$others")"$'\n'; fi
   done
-  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.??????' -o -name 'macup.??????.*' -o -name 'macup-lang.??????' \) \
+  tmps=$(find "${TMPDIR:-/tmp}/" -maxdepth 1 -type f \( -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]' -o -name 'macup.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9].*' -o -name 'macup-lang.??????' \) ! -name macup.sha256 \
     ! -name "$(basename "${LANGFILE:-none}")" 2>/dev/null)
 
   _ 'macup uninstall removes:'; echo

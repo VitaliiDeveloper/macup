@@ -14,14 +14,15 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 
 ## Features
 
-- **Updates in one go:** Homebrew, App Store apps (with [`mas`](https://github.com/mas-cli/mas)), Claude Code and its plugins, global npm packages, agent skills in `~/.agents`, pipx, uv tools, rustup, Oh My Zsh, GitHub CLI extensions, Grok CLI, Antigravity CLI, global pnpm packages, Bun, Deno, `cargo install` programs (with [`cargo-update`](https://github.com/nabijaczleweli/cargo-update)), mise tools, asdf plugins, VS Code and Cursor extensions. Ruby gems are opt-in.
+- **Updates in one go:** Homebrew, App Store apps (with [`mas`](https://github.com/mas-cli/mas)), Claude Code and its plugins, global npm packages, agent skills in `~/.agents`, pipx, uv tools, rustup, Oh My Zsh, GitHub CLI extensions, Grok CLI, Antigravity CLI, global pnpm packages, Bun, Deno, `cargo install` programs (with [`cargo-update`](https://github.com/nabijaczleweli/cargo-update)), mise tools, asdf plugins, VS Code, Cursor, Windsurf and VSCodium extensions, Google Cloud SDK components, .NET global tools, Composer global packages. Ruby gems are opt-in.
 - **Apps that update themselves are listed when they fall behind.** Apps installed from a download (Cursor, VS Code, Postman, …) are compared with the Homebrew catalog; macup installs nothing for them.
 - **macOS updates are reported, never installed.**
 - **Cleanup in three levels:** `safe` (rebuilds itself, the default), `standard` (downloaded again), `aggressive` (browser caches; apps may sign you out).
 - **Check first, pick later:** `macup check` changes nothing. It lists what can be cleaned, with sizes, and lets you pick.
-- **Health and security checks:** disk space and SMART, memory, CPU, battery, FileVault, Firewall, SIP, Gatekeeper, Time Machine, launch agents, Claude Code MCP servers, `brew doctor`, commands that cannot start.
+- **Health and security checks:** disk space and SMART, memory, CPU, battery, FileVault, Firewall, SIP, Gatekeeper, Time Machine, Remote Login and Screen Sharing, launch agents, Claude Code MCP servers, `brew doctor`, commands that cannot start, a GitHub CLI login that stopped working, signing certificates about to expire, apps that keep crashing, core dumps, folders in `PATH` that do not exist.
 - **Reports and trends:** every run saves a Markdown report. `macup history` shows free space, swap and battery across runs.
-- **For scripts:** `--quiet` prints only the summary, `--json` prints it as JSON, and the exit status is 3 when a step failed.
+- **For scripts and other programs:** `--quiet` prints only the summary, `--json` prints the whole result as JSON, `--pick` cleans exactly the items you name, and the exit status is 3 when a step failed.
+- **Tidy with its own files:** macup keeps its reports for 30 days and never more than 20 runs, and removes its leftover temp files.
 - **Optional schedule:** `macup schedule weekly` runs a check on its own and shows a notification when something needs a look. Off unless you turn it on.
 - **Interface in English, Ukrainian and Russian.**
 - **No dependencies:** a single Bash file that runs on the bash 3.2 that ships with macOS.
@@ -30,11 +31,11 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 <details>
 <summary>What each level cleans</summary>
 
-- 🟢 **safe:** Xcode DerivedData, SwiftUI previews, old DeviceSupport, old device logs, simulator caches, unavailable simulators (also Xcode's test clones); SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, Bun, Deno, pip, Poetry (its virtualenvs stay), uv and Go caches; caches of Electron apps (VS Code, Cursor, Claude, Slack, Discord and others, found by folder layout); Codex leftovers; logs older than 30 days; Quick Look cache.
-- 🟡 **standard:** Gradle, Android Studio, JetBrains IDEs, Maven, Cargo registry downloads; Docker build cache and dangling images; old Playwright/Puppeteer browsers; older patch versions in nvm, rbenv, pyenv, mise and asdf.
+- 🟢 **safe:** Xcode DerivedData, SwiftUI previews, old DeviceSupport, old device logs, simulator caches, unavailable simulators (also Xcode's test clones); SwiftPM, CocoaPods, Carthage, Homebrew, npm, pnpm, Yarn, Bun, Deno (its `localStorage` and KV data stay), pip, Poetry (its virtualenvs stay), uv and Go build caches; expired provisioning profiles; caches of Electron apps (VS Code, Cursor, Claude, Slack, Discord and others, found by folder layout); Codex leftovers; logs and crash reports older than 30 days, npm and Gradle daemon logs too; Quick Look cache.
+- 🟡 **standard:** Gradle, Android Studio, JetBrains IDEs, Maven, Cargo registry and git downloads, the Go module cache, the npx cache; Docker build cache and dangling images; old Playwright, Puppeteer and Cypress builds; older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise and asdf.
 - 🔴 **aggressive:** browser caches (Chrome, Arc, Edge, Brave, Firefox, Opera, Vivaldi and other Chromium or Firefox-based browsers). Profiles, passwords and history are never touched.
-- **Only when you pick them** (or turn them on with `enable`): simulator runtimes, erasing a simulator, simulators unused for 30 days, other big folders in `~/Library/Caches`, stale `node_modules`, the Trash.
-- **Measured, never deleted:** Xcode Archives, simulator devices, Flutter pub-cache, Codex chat history, AI models, Android SDK and emulators, iPhone and iPad backups, Docker Desktop's disk image; render caches of Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic and Camera Raw (with the app's own menu item to clear them).
+- **Only when you pick them** (or turn them on with `enable`): simulator runtimes, erasing a simulator, simulators unused for 30 days, other big folders in `~/Library/Caches`, stale `node_modules` and other stale build folders (`Pods`, `.build`, `.dart_tool`, `.next`, Rust and Maven `target`, Gradle `build`), Docker images no container uses, stopped Docker containers, Homebrew packages nothing needs any more, the Trash.
+- **Measured, never deleted:** Xcode Archives, simulator devices, Flutter pub-cache, Codex chat history, AI models, Android SDK and emulators, iPhone and iPad backups, Docker Desktop's disk image, Docker volumes, virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware); render caches of Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic and Camera Raw (with the app's own menu item to clear them).
 
 Run `macup tasks` for the full list with task ids.
 
@@ -43,22 +44,25 @@ Run `macup tasks` for the full list with task ids.
 ### Safety
 
 - **Nothing changes without a command.** Only `all`, `update`, `clean`, the menu, or your pick after a check change anything.
-- **`macup check` installs and deletes nothing.** It does go online: it refreshes Homebrew's package list, asks npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
+- **`macup check` installs and deletes nothing** on your Mac. It tidies only macup's own old reports. It does go online: it asks Homebrew, npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
 - **`clean` and `all` stop at `safe`** unless you set `--level` or `clean_level`.
 - **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed.
 - **Pinned versions stay.** Versions named in `.nvmrc`, `.tool-versions`, `.python-version`, `package.json` (`volta`, `engines`), virtualenvs and similar files are kept. A pin without the patch (`20.5`) keeps the newest `20.5.x`.
-- **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs.
+- **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs, Cargo's while `cargo` runs, and the npx cache while anything started with `npx` runs (MCP servers). A check already marks such items in its list and leaves them out of what could be freed.
+- **Build folders in projects are deleted only on request,** only next to the file that builds them again (`target` next to `Cargo.toml`), never when git tracks files in them, and never when they were built recently.
+- **Docker volumes are never deleted.**
 - **One run at a time.** A second `macup` started while one is running refuses to start.
-- **A command that hangs is stopped** after `step_timeout_minutes` (60), and the run goes on.
+- **A command that hangs is stopped** after `step_timeout_minutes` (60), together with what it started, and the run goes on.
 - **Aggressive and opt-in picks ask for a yes.**
-- **No sudo, with one exception:** App Store updates need your Mac password (`mas` requires it), and macup asks for it before installing them. It makes sudo forget the password right after them, so the updaters that run next cannot use it. A cask's own installer may also ask.
+- **No sudo, with one exception** (`sudo macup` refuses to run): App Store updates need your Mac password (`mas` requires it), and macup asks for it before installing them. It makes sudo forget the password right after them, so the updaters that run next cannot use it. A cask's own installer may also ask; that password is forgotten after `brew upgrade` too.
 - **Fixes are printed, never run.** For example, `brew link --overwrite node` for a command whose interpreter is gone.
 
 ## Requirements
 
 - macOS. The installer refuses other systems. The tests run on macOS 15 and 26, on Apple silicon and Intel. macOS 12 and later should work; older systems are not tested, and some checks are skipped there.
 - `/bin/bash` 3.2 and `curl`. Both ship with macOS.
-- Optional: `python3`, from the Xcode Command Line Tools. Some tasks use it to read JSON: npm globals, agent skills, Claude Code plugins, simulators, the commands check, and finding app caches by folder layout. Without it, those tasks are skipped.
+- Optional: `python3`, from the Xcode Command Line Tools. Some tasks use it to read JSON and property lists: npm globals, agent skills, Claude Code plugins, simulators, the commands check, apps that fall behind, expired provisioning profiles, signing certificates, and finding app caches by folder layout. Without it, those tasks are skipped.
+- Optional: `git`, also from the Command Line Tools. Stale build folders are offered only when git can tell that it tracks no file in them.
 - Optional: the tools macup updates (Homebrew, `mas`, Claude Code, npm, …). Missing ones are skipped.
 
 ## Installation
@@ -137,7 +141,7 @@ Plain `macup` opens a menu:
 | `macup clean` | Cleanup + checks |
 | `macup last` | Print the latest report |
 | `macup history` | Trends across runs: free space, swap, battery, freed space |
-| `macup reports` | Open the reports folder in Finder |
+| `macup reports` | How many reports there are, their size, the oldest and newest. `macup reports clean` removes them all (asks first; `--yes` does not ask), `macup reports open` shows the folder in Finder |
 | `macup tasks` | Every task id and whether it is on |
 | `macup config` | Create or open the config file |
 | `macup lang [en\|uk\|ru]` | Change the interface language |
@@ -154,10 +158,12 @@ Plain `macup` opens a menu:
 | `--deep` | Also list the largest folders, old and big files in Downloads, project build artifacts (`node_modules`, `Pods`, `.build`, Rust and Maven `target`, Gradle `build`, `.next`, `.venv`). On its own (`macup --deep`) it is a deep check |
 | `--skip id,…` | Skip tasks for this run. Groups work: `'clean.*'` |
 | `--only id,…` | Run only these tasks |
+| `--enable id,…` | Turn on opt-in tasks for this run, e.g. `--enable clean.trash` |
 | `--lang en\|uk\|ru` | Language for this run |
 | `--no-color` | Plain output |
 | `--quiet` | Print only the summary; the rest is in the report |
-| `--json` | Print the summary as one JSON object |
+| `--json` | Print the whole result as one JSON object. Also `macup tasks --json`, `macup history --json` and `macup reports --json` |
+| `--pick key,…` | Clean exactly these items of `macup check --json`, without asking |
 | `--notify` | Show a macOS notification when something needs attention (the schedule uses it) |
 | `--yes` | `uninstall` without the question |
 
@@ -173,11 +179,27 @@ macup update --skip update.mas      # updates without the App Store
 macup check --only check.security   # only the security checks
 macup check --deep                  # find what fills the disk
 macup all --no-color                # from a script: plain `macup` only prints help there
-macup check --json                  # the summary for a script: free space, warnings, what could be freed
+macup check --json                  # everything a check found, for a script or another program
+macup clean --enable clean.stale_artifacts --level standard   # also stale build folders in projects
 macup schedule weekly               # optional: a check every Monday at 10:00, with a notification
 ```
 
 Quote task groups in zsh: `--skip 'clean.*'`.
+
+### For scripts and other programs
+
+A program that shows macup's results its own way (a menu bar app, a GUI) needs no terminal output to parse:
+
+| Command | What it prints |
+|---|---|
+| `macup check --json` | One object: `free_kb`, `total_kb`, `needs_attention`, `updated`, `failed_steps`, `report` (and `log`, the same path: the command output is at the end of the report); `items`, every line of the run with its `section`, `kind` (`ok`, `info`, `warn`, `fail`), `text` and `details`; `cleanable`, every item that can be cleaned with its `key`, `task`, `level`, `kb`, `text`, `opt_in` (cleaned only when picked or enabled) and `in_clean` (a plain `macup clean` takes it), `hidden` (under 1 MB, so the terminal list leaves it out; it can still be picked) and `busy` (in use right now: the cleanup skips it, and `could_free_kb` and `could_free_more_kb` leave it out) |
+| `macup clean --pick key,… --json` | Cleans exactly the items with these keys, opt-in and aggressive ones too, runs no update and no check, and prints the same object. A key stays the same from run to run. A key that is no longer there is reported and the exit status is 3 |
+| `macup all --json`, `update`, `clean` | The same object after the run; `cleanable` is empty |
+| `macup tasks --json` | Every task: `id`, `group`, `default`, `on`, `text`; and the path of the config |
+| `macup history --json` | The runs of `history.csv` as objects |
+| `macup reports --json` | `folder`, `count`, `kb`, and `reports`: each with `file`, `date`, `mode` and `kb` |
+
+`--pick` asks nothing: the program that calls it shows the choice to the person first. Texts come in the language of `--lang` or the config. Every object has `"schema": 1`; new fields may be added, and the number changes only when an existing field does.
 
 ### Schedule (optional)
 
@@ -190,17 +212,18 @@ macup runs only when you start it. `macup schedule weekly` (or `daily`) adds a L
 ```ini
 language = en                 # en, uk, ru (first run: your macOS language)
 skip =                        # tasks to never run; groups work: update.*, clean.*, check.*
-enable =                      # opt-in tasks, e.g. clean.stale_node_modules, clean.trash
+enable =                      # opt-in tasks, e.g. clean.stale_node_modules, clean.stale_artifacts, clean.trash
 clean_level = safe            # what clean/all may remove: safe, standard, aggressive
 device_support_days = 90      # delete DeviceSupport folders older than this
 simulator_days = 30           # offer simulators unused for this long
 stale_project_days = 90       # a project is stale after this many days without changes
 project_dirs = ~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work
-keep_reports_days = 60        # delete macup reports older than this
+keep_reports_days = 30        # delete macup reports older than this
+keep_reports = 20             # and never keep more than this many runs (one report file per run)
 step_timeout_minutes = 60     # stop an update or cleanup command that runs longer (App Store installs: four times as long)
 ```
 
-`project_dirs` is used by `--deep`, by stale `node_modules`, and to find version pins.
+`project_dirs` is used by `--deep`, by stale `node_modules` and build folders, and to find version pins.
 
 Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_CONFIG_HOME` (config location).
 
@@ -208,8 +231,9 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 |---|---|
 | `~/.local/bin/macup` | The script |
 | `~/.config/macup/config` | Settings |
-| `~/Library/Logs/macup/` | Reports (`.md`) and command logs (`.log`) |
-| `~/Library/Application Support/macup/history.csv` | Run history for `macup history` |
+| `~/Library/Logs/macup/` | One report per run (`.md`, with what the commands printed at the end), kept for `keep_reports_days` and at most `keep_reports` runs; `macup reports clean` removes them. `schedule.log`: the scheduled check's output, its last 200 lines |
+| `~/Library/Application Support/macup/history.csv` | Run history for `macup history`, its last 500 runs |
+| `~/Library/Caches/macup/` | The Homebrew cask catalog for the apps check |
 | `~/Library/LaunchAgents/com.vitaliideveloper.macup.plist` | The schedule, only after `macup schedule weekly` or `daily` |
 
 ## Tech stack and architecture
@@ -219,7 +243,7 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 - **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table in `src/core.sh`. `--skip`, `--only`, `skip` and `enable` all use these ids.
 - **Cleaners as data:** tables at the top of `src/cleaners.sh` (`CACHE_DIRS`, `TOOL_CACHES`, `ELECTRON_APPS`, `BROWSERS`). A new cache is usually one line.
 - **Two-phase cleanup:** cleaners first register candidates with a size and level, then the chosen ones run. Every path is checked against an allow-list again right before it is deleted.
-- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
+- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
 - **CI (GitHub Actions):** ShellCheck on Ubuntu; a bash 3.2 syntax check, the tests, an install and smoke runs on macOS 15 and 26, Apple silicon and Intel.
 
 Development:
@@ -232,7 +256,7 @@ Development:
 tests/run.sh
 ```
 
-Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`.
 
 ## License
 

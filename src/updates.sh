@@ -25,8 +25,8 @@ PY
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
-    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see log)'; fi
-    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see log)
+    if run claude plugin marketplace update; then ok 'Plugin marketplaces refreshed'; else err 'Plugin marketplaces: refresh failed (see the report)'; fi
+    # no -y: a plugin whose marketplace asks to run a command is left for you to confirm (see the report)
     printf '%s\n' "$P1" | while read -r name ver; do [ -n "$name" ] && { step 'Plugin %s' "$name"; (cd "$HOME" && run claude plugin update --scope user "$name"); }; done
   fi
   P2=$(plugins)
@@ -70,7 +70,7 @@ for k, v in d.items():
       [ -z "$p" ] && continue
       if UPD; then
         step 'npm %s' "$p"
-        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see log)' "$p"; fi
+        if run npm install -g "$p@$l"; then ok '%s: %s → %s' "$p" "$c" "$l"; UPDATED+=("$p $c → $l"); else err '%s: update failed (see the report)' "$p"; fi
       else sub "$p: $c → $l"; fi
     done <<EOF
 $NO
@@ -98,7 +98,7 @@ for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash
 $S2
 EOF
       ok 'Agent skills: %s installed, %s updated' "$(cnt "$S2")" "$n"
-    else err 'Agent skills: update failed (see log)'; fi
+    else err 'Agent skills: update failed (see the report)'; fi
   else
     # the skills CLI has no read-only check (`skills check` now updates), so a check only counts them
     LATER_SKILLS="$(_ 'Agent skills')"
@@ -106,17 +106,30 @@ EOF
 fi
 
 if task update.brew && have brew; then
-  step 'brew update'; run brew update   # refreshes the package list only
+  if UPD; then step 'brew update'; run brew update
+  else export HOMEBREW_NO_AUTO_UPDATE=1   # brew update also updates Homebrew itself and its taps; a check changes nothing
+  fi
   OF=$(brew outdated --formula --verbose 2>/dev/null); NF=$(cnt "$OF")
   OC=$(brew outdated --cask --verbose 2>/dev/null);    NC=$(cnt "$OC")
   if [ $((NF + NC)) -eq 0 ]; then ok 'Homebrew: up to date'
   else
     if UPD; then
       step 'brew upgrade (formulae: %s, casks: %s)' "$NF" "$NC"
-      if run brew upgrade; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see log)'; fi
+      # a cask's installer may ask for the Mac password: the updaters that run next must not find sudo unlocked by it
+      SUDO_PRE=0; sudo -n true 2>/dev/null && SUDO_PRE=1
+      run brew upgrade; BRC=$?
+      [ "$SUDO_PRE" = 0 ] && sudo -k 2>/dev/null
+      if [ $BRC = 0 ]; then ok 'Homebrew: upgraded — formulae: %s, casks: %s' "$NF" "$NC"; else err 'Homebrew: upgraded with errors (see the report)'; fi
       done_upd 'Homebrew: formulae: %s, casks: %s' "$NF" "$NC"
     else warn 'Homebrew: outdated — formulae: %s, casks: %s' "$NF" "$NC"; fi
     lines "$(printf '%s\n%s\n' "$OF" "$OC")"
+  fi
+  if ! UPD; then
+    BT=0; BR=$(brew --repository 2>/dev/null); BA=$(brew --cache 2>/dev/null)
+    for f in "$BR/.git/FETCH_HEAD" "$BA/api/formula.jws.json" "$BA/api/cask.jws.json"; do
+      t=$(stat -f %m "$f" 2>/dev/null); [ -n "$t" ] && [ "$t" -gt "$BT" ] && BT=$t
+    done
+    [ "$BT" -gt 0 ] && [ $(($(date +%s) - BT)) -gt 86400 ] && info 'The Homebrew package list is from %s; macup update refreshes it' "$(date -r "$BT" +%Y-%m-%d)"
   fi
   # in a check the casks brew upgrades anyway are already listed above
   # not --greedy: a version :latest cask is always "outdated" and does not update itself
@@ -206,7 +219,7 @@ LATER="${LATER_SKILLS:-}"
 simple_update(){ # task-id label cmd...
   local id=$1 label; label=$(_ "$2"); shift 2
   task "$id" || return 0
-  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see log)' "$label"; fi
+  if UPD; then step '%s' "$label"; if run "$@"; then ok '%s: updated' "$label"; else err '%s: update failed (see the report)' "$label"; fi
   else LATER="$LATER${LATER:+, }$label"; fi
 }
 have pipx   && simple_update update.pipx   'pipx tools'      pipx upgrade-all
@@ -222,8 +235,20 @@ home_bin deno && simple_update update.deno 'Deno' deno upgrade
 have cargo && have cargo-install-update && simple_update update.cargo 'cargo programs' cargo install-update -a
 have mise && simple_update update.mise 'mise tools'   mise upgrade
 have asdf && simple_update update.asdf 'asdf plugins' asdf plugin update --all
-have code   && simple_update update.editor_ext 'VS Code extensions' code --update-extensions
-have cursor && simple_update update.editor_ext 'Cursor extensions'  cursor --update-extensions
+have code     && simple_update update.editor_ext 'VS Code extensions'  code --update-extensions
+have cursor   && simple_update update.editor_ext 'Cursor extensions'   cursor --update-extensions
+have windsurf && simple_update update.editor_ext 'Windsurf extensions' windsurf --update-extensions
+have codium   && simple_update update.editor_ext 'VSCodium extensions' codium --update-extensions
+# gcloud from Google's own installer updates its components itself; a Homebrew cask is brew's
+home_bin gcloud && simple_update update.gcloud 'Google Cloud SDK' gcloud components update --quiet
+# `dotnet tool update --all` exists since .NET 9; asked only when there are global tools
+if have dotnet && task update.dotnet && [ -n "$(ls -A "$HOME/.dotnet/tools" 2>/dev/null)" ]; then
+  DN=$(tl 20 dotnet --version 2>/dev/null); DN=${DN%%.*}
+  case "$DN" in ''|*[!0-9]*) ;; *) [ "$DN" -ge 9 ] && simple_update update.dotnet '.NET global tools' dotnet tool update --global --all ;; esac
+fi
+for cj in "$HOME/.composer/composer.json" "$HOME/.config/composer/composer.json"; do
+  [ -f "$cj" ] && have composer && { simple_update update.composer 'Composer global packages' composer global update --no-interaction; break; }
+done
 # opt-in: updating every gem takes long; the system Ruby's gems belong to macOS and need sudo
 have gem && [ "$(command -v gem)" != /usr/bin/gem ] && simple_update update.gem 'Ruby gems' gem update
 
@@ -234,7 +259,7 @@ if task update.grok && have grok; then
   if [ -z "$latest" ]; then warn '%s: could not check for updates' 'Grok CLI'
   elif [ "$(gj installer)" = internal ]; then   # a brew or npm install is updated by that step
     if UPD; then
-      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see log)' 'Grok CLI'; fi
+      if ver_gt "$latest" "$v1"; then step '%s' 'Grok CLI'; run grok update || err '%s: update failed (see the report)' 'Grok CLI'; fi
       upd 'Grok CLI' "$v1" "$(grok --version 2>/dev/null | awk '{print $2}')"
     elif ver_gt "$latest" "$v1"; then warn '%s: %s → %s available' 'Grok CLI' "$v1" "$latest"
     else ok '%s %s' 'Grok CLI' "$v1"; fi
@@ -245,7 +270,7 @@ fi
 if task update.agy && have agy && [[ "$(command -v agy)" == "$HOME"/* ]]; then
   if UPD; then
     v1=$(agy --version 2>/dev/null); step '%s' 'Antigravity CLI'
-    run agy update || err '%s: update failed (see log)' 'Antigravity CLI'
+    run agy update || err '%s: update failed (see the report)' 'Antigravity CLI'
     upd 'Antigravity CLI' "$v1" "$(agy --version 2>/dev/null)"
   else LATER="$LATER${LATER:+, }Antigravity CLI"; fi
 fi
@@ -258,6 +283,7 @@ if task check.macos_updates; then
   # a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
   ST=$(printf '%s\n' "$SL" | sed -n 's/^[[:space:]]*Title: //p' | awk -F', Version: ' '{v=$2; sub(/,.*/, "", v); print (v == "" || index($1, v)) ? $1 : $1 " " v}')
   if [ "$SLRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'softwareupdate' 240
+  elif [ -z "$SU" ] && { [ "$SLRC" != 0 ] || printf '%s\n' "$SL" | grep -qiE 'error|could not|unable to|not connected|no internet|offline'; }; then info "macOS updates: could not check (no connection to Apple's server?)"
   elif [ -z "$SU" ]; then ok 'macOS: up to date'; else warn 'macOS: updates available — System Settings → General → Software Update'; lines "${ST:-$SU}"; fi
 fi
 fi # WANT_UPD

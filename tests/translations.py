@@ -16,7 +16,7 @@ for lang in ('uk', 'ru'):
 code = src[:src.index('lang_table(){')] + src[src.index('\nload_lang\n'):]
 used = set()
 q = r"""'([^']*)'|"((?:[^"\\$]|\\.)*)\""""
-for m in re.finditer(r"\b(?:ok|info|warn|fail|step|_|_f|done_upd|section|ask \"\$\(_)\s+(?:" + q + ")", code):
+for m in re.finditer(r"\b(?:ok|info|warn|fail|err|step|_|_f|done_upd|section|ask \"\$\(_)\s+(?:" + q + ")", code):
     used.add(m.group(1) if m.group(1) is not None else m.group(2))
 for m in re.finditer(r"\b(?:clean_dir|clean_old|measure_cmd|simple_update)\s+\S+\s+'([^']*)'", code): used.add(m.group(1))
 for table in ('CACHE_DIRS', 'TOOL_CACHES'):

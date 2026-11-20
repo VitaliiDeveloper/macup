@@ -27,8 +27,9 @@ if task check.disk; then
   [ "${SNAPS:-0}" -gt 0 ] && info 'Local Time Machine snapshots: %s (macOS frees them automatically when space runs low)' "$SNAPS"
 fi
 
-MEMFREE=""; SWAP=0
+MEMFREE=""; SWAP=0; SWAP_OK=0
 if task check.memory; then
+  SWAP_OK=1
   RAM=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
   MEMFREE=$(memory_pressure 2>/dev/null | awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}')
   SWAP=$(sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}')
@@ -77,6 +78,14 @@ if task check.security; then
   AU=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled 2>/dev/null)
   CR=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall 2>/dev/null)
   if [ "$AU" = 0 ]; then warn 'Automatic update checks: off'; elif [ "$CR" = 0 ]; then warn 'Security responses & system files: not installed automatically'; else ok 'Automatic security updates: on'; fi
+  # sharing services that let other computers in: said, not judged (a build machine needs them)
+  SH=$(launchctl print-disabled system 2>/dev/null)
+  shared(){ printf '%s\n' "$SH" | grep -qE "\"$1\" => (enabled|false)"; }
+  shared com.openssh.sshd && info 'Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)'
+  shared com.apple.screensharing && info 'Screen Sharing is on: other computers can see and control this Mac (System Settings → General → Sharing)'
+  if shared com.apple.RemoteDesktop.agent || { ! printf '%s\n' "$SH" | grep -q 'com.apple.RemoteDesktop.agent' && pgrep -x ARDAgent >/dev/null 2>&1; }; then
+    info 'Remote Management is on: other computers can see and control this Mac with Apple Remote Desktop (System Settings → General → Sharing)'
+  fi
   # its own id so people who keep no backups can skip it; only skip, so --only check.security still includes it
   if [[ "$SKIP" == *",check.time_machine,"* ]]; then :
   elif tmutil destinationinfo 2>/dev/null | grep -q 'Name'; then

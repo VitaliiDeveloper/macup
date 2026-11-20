@@ -67,9 +67,20 @@ blob "$H/.bun/install/cache/x"; blob "$L/Caches/deno/deps"; blob "$L/Caches/pypo
 blob "$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/lib" 64; printf 'version = 3.12.1\n' >"$L/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12/pyvenv.cfg"
 blob "$H/.cargo/registry/cache/index.crates.io"; blob "$H/.cargo/registry/src/index.crates.io"; mkdir -p "$H/.cargo/registry/index"; echo idx >"$H/.cargo/registry/index/keep"
 blob "$L/Caches/JetBrains/IntelliJIdea2025.1/index"
+# Deno keeps localStorage and Deno.openKv() databases inside its cache folder: they stay
+mkdir -p "$L/Caches/deno/location_data/abc"; echo kv >"$L/Caches/deno/location_data/abc/kv.sqlite3"; echo ls >"$L/Caches/deno/location_data/abc/local_storage"
 # a pin without the patch (.nvmrc "21.2") keeps the newest 21.2.x; a pin in package.json (volta, engines) counts too
 for v in v21.2.0 v21.2.5 v21.7.0 v23.1.0 v23.4.0; do blob "$H/.nvm/versions/node/$v" 1024; done
 mkdir -p "$H/Code/partial" "$H/Code/volta"; echo "21.2" >"$H/Code/partial/.nvmrc"
 printf '{"dependencies":{"left-pad":"23.4.0"},"volta":{"node":"23.1.0"}}\n' >"$H/Code/volta/package.json"
 # --deep: target counts only next to Cargo.toml or pom.xml
 blob "$H/Code/rs/target/debug"; echo '[package]' >"$H/Code/rs/Cargo.toml"; blob "$H/Code/plain/target/data" 64
+# --- 2.9 cleaners: Cargo git, old Cypress versions, expired provisioning profiles, npm and Gradle daemon logs, npx
+blob "$H/.cargo/git/checkouts/repo-1/abc"; blob "$H/.cargo/git/db/repo-1"
+blob "$L/Caches/Cypress/13.1.0/Cypress"; blob "$L/Caches/Cypress/13.6.2/Cypress" 64
+PP="$L/MobileDevice/Provisioning Profiles"; mkdir -p "$PP"
+prof(){ printf 'sig<?xml version="1.0"?><plist version="1.0"><dict><key>ExpirationDate</key><date>%s</date></dict></plist>sig' "$2" >"$PP/$1"; }
+prof expired.mobileprovision 2020-01-01T00:00:00Z; prof valid.mobileprovision 2099-01-01T00:00:00Z; echo broken >"$PP/unreadable.mobileprovision"
+mkdir -p "$H/.npm/_logs" "$H/.gradle/daemon/8.9"; echo old >"$H/.npm/_logs/old-debug-0.log"; old "$H/.npm/_logs/old-debug-0.log"; echo new >"$H/.npm/_logs/new-debug-0.log"
+echo old >"$H/.gradle/daemon/8.9/daemon-1.out.log"; old "$H/.gradle/daemon/8.9/daemon-1.out.log"; echo keep >"$H/.gradle/daemon/8.9/registry.bin"; old "$H/.gradle/daemon/8.9/registry.bin"
+blob "$H/.npm/_npx/abc/node_modules/x"

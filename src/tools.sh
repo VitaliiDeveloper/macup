@@ -16,7 +16,7 @@ if task check.brew_doctor && have brew; then
   DOC=$(tl 240 brew doctor 2>&1); DOCRC=$?; echo "$DOC" >>"$RAW"
   ND=$(printf '%s\n' "$DOC" | grep -c '^Warning:')
   if [ "$DOCRC" = 124 ]; then warn '%s: no answer in %s seconds, skipped' 'brew doctor' 240
-  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the log)' "$ND"; else ok 'brew doctor: all good'; fi
+  elif [ "$ND" -gt 0 ]; then warn 'brew doctor: %s warnings (details in the report)' "$ND"; else ok 'brew doctor: all good'; fi
 fi
 if task check.xcode; then
   if XP=$(xcode-select -p 2>/dev/null) && [ -d "$XP" ]; then
@@ -96,7 +96,8 @@ for d in dirs.values():
             name = rest[0]
         elif os.access(args[0], os.X_OK): continue
         else: name = os.path.basename(args[0])
-        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else "-"
+        uv = re.search(r"/uv/tools/([^/]+)/", os.path.realpath(p) + " " + args[0])
+        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else f"uv tool install --reinstall {uv.group(1)}" if uv else "-"
         groups.setdefault((name, hint), set()).add(e.name)
 print(n)
 for (name, hint), names in sorted(groups.items()):
@@ -120,9 +121,80 @@ PY
 $(printf '%s\n' "$CMDS" | tail -n +2)
 EOF
   fi
+  # (no `case` inside $( ): bash 3.2 takes its ")" for the end of the substitution)
+  # folders of yours in PATH that do not exist: a line in ~/.zshrc for a tool that was removed (macOS itself lists system folders that may not exist)
+  GONEP=$(printf '%s' "$USER_PATH" | tr ':' '\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do [[ "$d" == "$HOME"/* ]] && [ ! -d "$d" ] && tildify "$d"; done | paste -sd, - | sed 's/,/, /g')
+  [ -n "$GONEP" ] && info 'PATH names folders that do not exist: %s — the lines that add them (~/.zshrc, ~/.zprofile) can go' "$GONEP"
 fi
 if task check.docker && have docker && tl 20 docker info >/dev/null 2>&1; then
-  DDF=$(docker system df 2>/dev/null | awk 'NR>1{printf "%s %s (%s); ", $1, $4, $5}')
-  info 'Docker: %s' "${DDF%; }"
+  # the Reclaimable column has a space inside ("1.2GB (50%)"), so the columns are asked for by name
+  DDF=$(tl 30 docker system df --format '{{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' 2>/dev/null | paste -sd';' - | sed 's/;/; /g')
+  [ -n "$DDF" ] && info 'Docker: %s' "$DDF"
+  DV=$(tl 30 docker volume ls -qf dangling=true 2>/dev/null | grep -c .)
+  [ "${DV:-0}" -gt 0 ] && info 'Docker volumes no container uses: %s — macup never deletes volumes; look: docker volume ls -f dangling=true' "$DV"
+fi
+# a token GitHub no longer accepts fails later, in the middle of a push or a release
+if task check.gh && have gh && [ -s "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml" ]; then
+  GHS=$(tl 20 gh auth status 2>&1 </dev/null)
+  printf '%s\n' "$GHS" | grep -qiE 'token .* is (invalid|no longer valid)|authentication failed' && warn 'GitHub CLI: the saved login no longer works — run: gh auth login'
+fi
+# signing certificates: Xcode says nothing until the build fails on the day one expires
+if task check.certs && have security && have openssl && have python3; then
+  CE=$(security find-identity -v -p codesigning 2>/dev/null | python3 -c '
+import datetime, re, subprocess, sys
+names = set(re.findall(r"\x22([^\x22]+)\x22", sys.stdin.read()))
+if not names: sys.exit()
+pems = re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", subprocess.run(["security", "find-certificate", "-a", "-p"], capture_output=True, text=True).stdout, re.S)
+soon, newest = 30 * 86400, {}
+def x(pem, *a): return subprocess.run(["openssl", "x509", "-noout", *a], input=pem, capture_output=True, text=True)
+for pem in pems:
+    m = re.search(r"^\s*commonName\s*=\s*(.+)$", x(pem, "-subject", "-nameopt", "multiline").stdout, re.M)   # one field per line: a comma in the name stays
+    name = m.group(1).strip() if m else ""
+    if name not in names or x(pem, "-checkend", "0").returncode != 0: continue   # already expired: it signs nothing, Keychain Access shows it
+    end = datetime.datetime.strptime(x(pem, "-enddate").stdout.strip().split("=")[1], "%b %d %H:%M:%S %Y %Z")
+    if name not in newest or end > newest[name][0]: newest[name] = (end, pem)   # renewed in Xcode: same name, the newer one counts
+for name in sorted(newest):
+    if x(newest[name][1], "-checkend", str(soon)).returncode != 0: print(name)' 2>/dev/null)
+  [ -n "$CE" ] && { warn 'Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts' "$(cnt "$CE")"; lines "$CE"; }
+fi
+# an app that keeps crashing: the reports are in ~/Library/Logs/DiagnosticReports, and in Retired/ once macOS has sent them
+if task check.crashes && have python3 && [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
+  CR=$(python3 -c '
+import collections, datetime, glob, json, os, re, time
+home = os.path.expanduser("~")
+d = home + "/Library/Logs/DiagnosticReports"
+now = time.time()
+apps, system, seen = collections.Counter(), 0, set()
+def mine(path): return path.startswith("/Applications/") or path.startswith(home + "/Applications/")
+for f in sorted(glob.glob(d + "/*.ips") + glob.glob(d + "/Retired/*.ips") + glob.glob(d + "/*.crash") + glob.glob(d + "/Retired/*.crash")):
+    base = os.path.basename(f)
+    if base in seen or base.startswith("ExcUserFault_"): continue
+    seen.add(base)
+    try:
+        text = open(f, errors="replace").read()
+        when, name, path = os.path.getmtime(f), re.sub(r"[-_][0-9]{4}-[0-9][0-9]-[0-9][0-9].*", "", base), ""
+        if f.endswith(".ips"):
+            head, _, body = text.partition("\n")
+            h = json.loads(head)
+            if str(h.get("bug_type")) != "309": continue
+            name = h.get("app_name") or h.get("name") or name
+            try: when = datetime.datetime.strptime(h["timestamp"], "%Y-%m-%d %H:%M:%S.%f %z").timestamp()
+            except Exception: pass
+            m = re.search(r"\x22procPath\x22\s*:\s*(\x22(?:[^\x22\\]|\\.)*\x22)", body)
+            path = json.loads(m.group(1)) if m else ""
+        else:
+            m = re.search(r"^Path:\s+(.+)$", text, re.M)
+            path = m.group(1).strip() if m else ""
+    except Exception: continue
+    if now - when > 7 * 86400: continue
+    if mine(path): apps[name] += 1
+    else: system += 1
+print("S", system)
+for n, c in apps.most_common():
+    if c >= 3: print("A", c, n)' 2>/dev/null)
+  CRA=$(printf '%s\n' "$CR" | awk '$1 == "A" {n=$2; $1=$2=""; sub(/^ +/,""); printf "%s ×%d\n", $0, n}' | head -5 | paste -sd, - | sed 's/,/, /g')
+  CRS=$(printf '%s\n' "$CR" | awk '$1 == "S" {print $2}')
+  [ -n "$CRA" ] && info 'Crashed 3 or more times in the last 7 days: %s' "$CRA"
+  [ "${CRS:-0}" -ge 3 ] && info 'macOS system processes crashed %s times this week (not yours to fix; Apple gets the reports)' "$CRS"
 fi
 

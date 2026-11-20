@@ -20,6 +20,7 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 - **Cleanup in three levels:** `safe` (rebuilds itself, the default), `standard` (downloaded again), `aggressive` (browser caches; apps may sign you out).
 - **Check first, pick later:** `macup check` changes nothing. It lists what can be cleaned, with sizes, and lets you pick.
 - **Health and security checks:** disk space and SMART, memory, CPU, battery, FileVault, Firewall, SIP, Gatekeeper, Time Machine, Remote Login and Screen Sharing, launch agents, Claude Code MCP servers, `brew doctor`, commands that cannot start, a GitHub CLI login that stopped working, signing certificates about to expire, apps that keep crashing, core dumps, folders in `PATH` that do not exist.
+- **Leftovers of deleted apps:** an app dragged to the Trash often leaves its updater running, its folders and its data. `macup check` lists them in plain words (what it is, why it can go) and moves the ones you pick to the Trash.
 - **Reports and trends:** every run saves a Markdown report. `macup history` shows free space, swap and battery across runs.
 - **For scripts and other programs:** `--quiet` prints only the summary, `--json` prints the whole result as JSON, `--pick` cleans exactly the items you name, and the exit status is 3 when a step failed.
 - **Tidy with its own files:** macup keeps its reports for 30 days and never more than 20 runs, and removes its leftover temp files.
@@ -35,6 +36,7 @@ macup updates all of them, deletes only caches that rebuild themselves, and chec
 - 🟡 **standard:** Gradle, Android Studio, JetBrains IDEs, Maven, Cargo registry and git downloads, the Go module cache, the npx cache; Docker build cache and dangling images; old Playwright, Puppeteer and Cypress builds; older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise and asdf.
 - 🔴 **aggressive:** browser caches (Chrome, Arc, Edge, Brave, Firefox, Opera, Vivaldi and other Chromium or Firefox-based browsers). Profiles, passwords and history are never touched.
 - **Only when you pick them** (or turn them on with `enable`): simulator runtimes, erasing a simulator, simulators unused for 30 days, other big folders in `~/Library/Caches`, stale `node_modules` and other stale build folders (`Pods`, `.build`, `.dart_tool`, `.next`, Rust and Maven `target`, Gradle `build`), Docker images no container uses, stopped Docker containers, Homebrew packages nothing needs any more, the Trash.
+- **Only when you pick them after `macup check`:** leftovers of deleted apps — background programs and their folders, the app's data (settings, history, saved passwords), and system services (these ask for your Mac password once). They go to the Trash, so you can put them back.
 - **Measured, never deleted:** Xcode Archives, simulator devices, Flutter pub-cache, Codex chat history, AI models, Android SDK and emulators, iPhone and iPad backups, Docker Desktop's disk image, Docker volumes, virtual machines (Colima, Lima, Podman, minikube, Parallels, VMware); render caches of Final Cut Pro, Premiere/After Effects, DaVinci Resolve, Lightroom Classic and Camera Raw (with the app's own menu item to clear them).
 
 Run `macup tasks` for the full list with task ids.
@@ -46,7 +48,7 @@ Run `macup tasks` for the full list with task ids.
 - **Nothing changes without a command.** Only `all`, `update`, `clean`, the menu, or your pick after a check change anything.
 - **`macup check` installs and deletes nothing** on your Mac. It tidies only macup's own old reports. It does go online: it asks Homebrew, npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
 - **`clean` and `all` stop at `safe`** unless you set `--level` or `clean_level`.
-- **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed.
+- **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed. The one exception is the data of a deleted app, and only when you pick it; it goes to the Trash.
 - **Pinned versions stay.** Versions named in `.nvmrc`, `.tool-versions`, `.python-version`, `package.json` (`volta`, `engines`), virtualenvs and similar files are kept. A pin without the patch (`20.5`) keeps the newest `20.5.x`.
 - **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs, Cargo's while `cargo` runs, and the npx cache while anything started with `npx` runs (MCP servers). A check already marks such items in its list and leaves them out of what could be freed.
 - **Build folders in projects are deleted only on request,** only next to the file that builds them again (`target` next to `Cargo.toml`), never when git tracks files in them, and never when they were built recently.
@@ -54,8 +56,8 @@ Run `macup tasks` for the full list with task ids.
 - **One run at a time.** A second `macup` started while one is running refuses to start.
 - **A command that hangs is stopped** after `step_timeout_minutes` (60), together with what it started, and the run goes on.
 - **Aggressive and opt-in picks ask for a yes.**
-- **No sudo, with one exception** (`sudo macup` refuses to run): App Store updates need your Mac password (`mas` requires it), and macup asks for it before installing them. It makes sudo forget the password right after them, so the updaters that run next cannot use it. A cask's own installer may also ask; that password is forgotten after `brew upgrade` too.
-- **Fixes are printed, never run.** For example, `brew link --overwrite node` for a command whose interpreter is gone.
+- **No sudo, with two exceptions** (`sudo macup` refuses to run): App Store updates need your Mac password (`mas` requires it), and macup asks for it before installing them. It makes sudo forget the password right after them, so the updaters that run next cannot use it. A cask's own installer may also ask; that password is forgotten after `brew upgrade` too. Picked system leftovers of deleted apps ask for it once, show the exact commands first, and sudo forgets it right after; scheduled and `--quiet` runs never ask.
+- **Fixes are printed, never run.** For example, `brew link --overwrite node` for a command whose interpreter is gone. The exception: when you pick a leftover background program, macup stops it (`launchctl bootout`) before moving it to the Trash.
 
 ## Requirements
 

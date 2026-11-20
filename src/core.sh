@@ -122,7 +122,9 @@ clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only whe
 clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
 clean.stale_artifacts|off|Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in)
 clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
-clean.trash|off|Empty the Trash (opt-in)'
+clean.trash|off|Empty the Trash (opt-in)
+clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
+clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)'
 
 # ---------------------------------------------------------------- config
 conf(){ # key default

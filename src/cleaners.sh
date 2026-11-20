@@ -452,8 +452,8 @@ if task_allowed clean.app_caches; then
     [ "$s" -lt 102400 ] && break
     b=${e##*/}; [ -d "$e" ] && [ ! -L "$e" ] || continue
     case "$b" in com.apple.*|Adobe\ Camera\ Raw*|*.ShipIt) continue ;; esac
-    printf '%s' "$COVERED" | grep -qxF "$e" && continue
-    printf '%s' "$COVERED" | grep -qF "$e/" && continue
+    printf '%s' "$COVERED" | grep -xF -- "$e" >/dev/null && continue   # no grep -q: with pipefail an early exit reads as "not covered"
+    printf '%s' "$COVERED" | grep -F -- "$e/" >/dev/null && continue
     # not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
     [ -n "$(find "$e" -maxdepth 3 -name pyvenv.cfg -print 2>/dev/null | head -1)" ] && continue
     printf '%s\t%s\n' "$s" "$e"
@@ -463,13 +463,17 @@ if task_allowed clean.app_caches; then
   done < "$BODY.caches"; rm -f "$BODY.caches"
 fi
 
+leftovers_cands
+
 # what a plain `macup all` would free, and what more is there
 settle
 [ "$DRY" = 1 ] && mark_busy
 for ((i = 0; i < C_N; i++)); do
   visible "$i" && [ "${C_BUSY[i]:-0}" = 0 ] || continue
+  case "${C_TASK[i]}" in clean.orphan_*) continue ;; esac   # counted together below: their entries can share a folder
   if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
+POT_MORE=$((POT_MORE + $(lo_total)))
 if CLEAN && [ -n "$PICK" ]; then
   # --pick: the keys a check gave, chosen by a person in another program; that choice is the confirmation
   section "Cleanup"

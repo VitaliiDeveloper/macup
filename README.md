@@ -10,7 +10,7 @@ One command to update, clean and check a developer's Mac.
 
 A developer's Mac has tools from many package managers, and each one updates with its own command.
 Caches from Xcode, simulators, package managers and Electron apps keep growing.
-macup updates all of them, deletes only caches that rebuild themselves, and checks the system's health and security in one run.
+macup updates all of them, deletes only caches that rebuild themselves (what is left of deleted apps goes to the Trash, and only when you pick it), and checks the system's health and security in one run.
 
 ## Features
 
@@ -49,7 +49,7 @@ Run `macup tasks` for the full list with task ids.
 - **Nothing changes without a command.** Only `all`, `update`, `clean`, the menu, or your pick after a check change anything.
 - **`macup check` installs and deletes nothing** on your Mac. It tidies only macup's own old reports. It does go online: it asks Homebrew, npm, the App Store, Apple and GitHub for versions, and briefly starts your MCP servers to test them.
 - **`clean` and `all` stop at `safe`** unless you set `--level` or `clean_level`.
-- **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed. The one exception is the data of a deleted app, and only when you pick it; it goes to the Trash.
+- **Only listed cache folders.** Settings, chat history, keys, `gradle.properties`, Maven's `settings.xml`, browser profiles and pending app updates are never touched. Symlinks are never followed. The exceptions are the data of a deleted app and the containers of your own dev builds whose app is gone, only when you pick them; they go to the Trash.
 - **Pinned versions stay.** Versions named in `.nvmrc`, `.tool-versions`, `.python-version`, `package.json` (`volta`, `engines`), virtualenvs and similar files are kept. A pin without the patch (`20.5`) keeps the newest `20.5.x`.
 - **Apps that are open are skipped.** The summary lists them. Xcode's caches are also left alone while an `xcodebuild` runs, Cargo's while `cargo` runs, and the npx cache while anything started with `npx` runs (MCP servers). A check already marks such items in its list and leaves them out of what could be freed.
 - **Build folders in projects are deleted only on request,** only next to the file that builds them again (`target` next to `Cargo.toml`), never when git tracks files in them, and never when they were built recently.

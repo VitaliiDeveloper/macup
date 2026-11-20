@@ -306,7 +306,7 @@ run_odata(){ # n
 ${D_PATHS[n]}
 EOF2
   KEY_FREED=$((s - $(kbl "$(outer "${D_PATHS[n]}")")))
-  [ "$bad" = 1 ] && warn '%s: some files could not be moved (see log)' "${D_NAME[n]} · $(_ 'data of a deleted app')"
+  [ "$bad" = 1 ] && warn '%s: some files could not be moved (see the report)' "${D_NAME[n]} · $(_ 'data of a deleted app')"
   return 0
 }
 

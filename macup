@@ -1236,7 +1236,7 @@ These steps need your Mac password: || Для цих кроків потрібе
 Mac password to remove system leftovers: || Пароль Мака, щоб прибрати системні залишки:
 Password not accepted, system items skipped || Пароль не прийнято, системні пункти пропущено
 Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Елементи входу, що ведуть на видалені застосунки: %s — вимкніть їх у Системних параметрах → Загальні → Елементи входу
-%s: some files could not be moved (see log) || %s: деякі файли не вдалося перемістити (див. журнал)
+%s: some files could not be moved (see the report) || %s: деякі файли не вдалося перемістити (див. звіт)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1704,7 +1704,7 @@ These steps need your Mac password: || Для этих шагов нужен п�
 Mac password to remove system leftovers: || Пароль Мака, чтобы убрать системные остатки:
 Password not accepted, system items skipped || Пароль не принят, системные пункты пропущены
 Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Объекты входа, ведущие на удалённые приложения: %s — выключите их в Системных настройках → Основные → Объекты входа
-%s: some files could not be moved (see log) || %s: некоторые файлы не удалось переместить (см. журнал)
+%s: some files could not be moved (see the report) || %s: некоторые файлы не удалось переместить (см. отчёт)
 EOF
   ;;
   esac
@@ -2647,6 +2647,7 @@ run_key(){ local out r=0
     simrt:*)    set -- ${1#simrt:}; sim_id "$1" && run xcrun simctl runtime delete "$1" && KEY_FREED=$2 ;;   # simrt:<id> <kb>
     simerase:*) for u in ${1#simerase:}; do sim_id "$u" && run xcrun simctl erase "$u" || return 1; done ;;
     simdel:*)   for u in ${1#simdel:}; do sim_id "$u" && run xcrun simctl delete "$u" || return 1; done ;;
+    orph:*)    run_orph "${1#orph:}"; return ;;
     odata:*)   run_odata "${1#odata:}"; return ;;
     docker)    out=$({ docker builder prune -f || exit 1; docker image prune -f; } 2>&1) || r=1; echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}'); return $r ;;
@@ -2660,7 +2661,7 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
   rm -rf "$1" 2>>"$RAW"
 }
 exec_cand(){ # index
-  local i=$1 lbl=${C_LBL[$1]} b a d p
+  local i=$1 lbl=${C_LBL[$1]} b a d p r
   KBP_N=0
   if running "${C_PROC[i]}" || open_in "${C_OPEN[i]}"; then
     info '%s: %s — skipped while the app is open' "$lbl" "$(hum "${C_KB[i]}")"
@@ -2684,7 +2685,9 @@ EOF2
            # never "cleaned" for something macup would not touch
            if [ "$REFUSED" -gt 0 ] && [ "$a" -ge "$b" ]; then err '%s: nothing removed, the path is outside what macup may delete (see the report)' "$lbl"; return 0; fi ;;
     cmd)   KEY_FREED=""; b=0; a=0; [ -n "${C_MDIR[i]}" ] && b=$(kbl "${C_MDIR[i]}")
-           if ! run_key "${C_PATHS[i]}"; then err '%s: failed (see the report)' "$lbl"; return 0; fi
+           run_key "${C_PATHS[i]}"; r=$?
+           [ "$r" = 2 ] && return 0   # skipped; run_key said why
+           if [ "$r" != 0 ]; then err '%s: failed (see the report)' "$lbl"; return 0; fi
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
@@ -2732,7 +2735,7 @@ pick(){ # reads a choice, prints the chosen indexes one per line
     lv=""; case "$tok" in safe|"$(_ safe)") lv=1 ;; standard|"$(_ standard)") lv=2 ;; aggressive|"$(_ aggressive)") lv=3 ;; esac
     if [ -n "$lv" ]; then
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
-    elif echo "$tok" | grep -qE '^[0-9]{1,4}(-[0-9]{1,4})?$'; then
+    elif echo "$tok" | grep -E '^[0-9]{1,4}(-[0-9]{1,4})?$' >/dev/null; then
       a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
       while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
     fi
@@ -3047,7 +3050,7 @@ run_odata(){ # n
 ${D_PATHS[n]}
 EOF2
   KEY_FREED=$((s - $(kbl "$(outer "${D_PATHS[n]}")")))
-  [ "$bad" = 1 ] && warn '%s: some files could not be moved (see log)' "${D_NAME[n]} · $(_ 'data of a deleted app')"
+  [ "$bad" = 1 ] && warn '%s: some files could not be moved (see the report)' "${D_NAME[n]} · $(_ 'data of a deleted app')"
   return 0
 }
 

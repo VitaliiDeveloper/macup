@@ -133,7 +133,7 @@ interrupted(){
 }
 # 4: the terminal's stderr; the trap can fire inside run, where stdout and stderr go to $RAW
 exec 4>&2
-trap interrupted INT
+trap interrupted INT TERM HUP   # Ctrl-C, a kill, a terminal that closes: the report keeps what was printed
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
 stop_sudo_keep(){

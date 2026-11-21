@@ -294,7 +294,8 @@ pick(){ # reads a choice, prints the chosen indexes one per line
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
     elif echo "$tok" | grep -E '^[0-9]{1,4}(-[0-9]{1,4})?$' >/dev/null; then
       a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
-      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
+      # leftovers of deleted apps and dev containers hold data: only their own number takes them, never a range
+      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && { [ "${tok%-*}" = "${tok#*-}" ] || case "${C_TASK[i]}" in clean.orphan_*|clean.dev_containers) false ;; esac; } && echo "$i"; a=$((a + 1)); done
     fi
   done | sort -un
 }

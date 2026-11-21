@@ -299,4 +299,8 @@ sec=$(sed -n '/Leftovers of deleted apps/,$p' "$H.out")
 printf '%s\n' "$sec" | grep -q 'ai.perplexity.CometUpdater.wake — app is not installed' && ! printf '%s\n' "$sec" | grep -qE 'Could not extract|steamclean|homebrew.mxcl.redis|com.me.script' \
   && pass "macOS 15 plutil: a missing key is not a value" || { fail "macOS 15 plutil"; printf '%s\n' "$sec" | head -12; }
 
+# --- a range (1-30) never takes leftovers: data and agents go only by their own number
+H="$W/rg"; data_home "$H"; PK_ONLY=clean.orphan_agents,clean.orphan_data pk "$H" '1-30' y
+[ -f "$H/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] && [ -d "$H/Library/Application Support/Comet" ] && pass "range: leftovers are never picked by a range" || { fail "range: leftovers taken by 1-30"; ls "$H/.Trash"; }
+
 [ $F = 0 ] || exit 1

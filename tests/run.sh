@@ -806,6 +806,12 @@ grep -q 'PATH names folders that do not exist: ~/no/such/dir ' "$W/misc.out" && 
 if [ "$(id -u)" = 0 ]; then
   env HOME="$H" SUDO_USER=me /bin/bash "$M" check --only check.system </dev/null >"$W/misc.out" 2>&1; [ $? = 1 ] && grep -q 'does not need sudo' "$W/misc.out" && pass "sudo macup refuses to run" || fail "sudo macup ran"
 fi
+# --- MACUP_PATH=keep: macup leaves PATH as it is, so a fake brew wins over the real one (tests, the screenshot generator)
+H="$W/kp"; mkdir -p "$H/.config/macup" "$W/kpbin"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\necho "$*" >>"$HOME/brew.log"\n' >"$W/kpbin/brew"; chmod +x "$W/kpbin/brew"
+env -i HOME="$H" MACUP_PATH=keep PATH="$W/kpbin:/usr/bin:/bin:/usr/sbin:/sbin" /bin/bash "$M" check --only clean.brew --no-color </dev/null >"$W/kp.out" 2>&1
+grep -q 'cleanup' "$H/brew.log" 2>/dev/null && pass "MACUP_PATH=keep: the brew on PATH is the one used" || { fail "MACUP_PATH=keep"; cat "$W/kp.out" | tail -5; }
+
 # --- leftovers of deleted apps
 tests/leftovers.sh || F=1
 

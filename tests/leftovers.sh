@@ -62,7 +62,7 @@ cat >"$W/bin/osascript" <<'FAKE'
 #!/bin/bash
 exit 0
 FAKE
-chmod +x "$W/bin/"*; export PATH="$W/bin:$PATH"
+chmod +x "$W/bin/"*; export PATH="$W/bin:$PATH" MACUP_PATH=keep   # the fakes above win over Homebrew's tools
 
 app(){ # dir bundle-id
   mkdir -p "$1/Contents/MacOS"

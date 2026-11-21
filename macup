@@ -26,7 +26,8 @@ DEV="$HOME/Library/Developer"
 SCHED_LABEL="com.vitaliideveloper.macup"
 SCHED_PLIST="$HOME/Library/LaunchAgents/$SCHED_LABEL.plist"
 USER_PATH=$PATH   # as the terminal has it: check.commands reports its folders that do not exist
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
+# MACUP_PATH=keep: PATH stays as given, for tests that put fakes first (brew, npm…) and must never reach the real ones
+[ "${MACUP_PATH:-}" = keep ] || export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
 

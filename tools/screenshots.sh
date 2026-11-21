@@ -1,8 +1,8 @@
 #!/bin/bash
 # Makes the README screenshots (docs/images/*.svg) from the real macup in this checkout, run against a made-up Mac:
 # a fake home with caches and an app's leftovers, fake sizes and free space, no running apps. Nothing of this Mac
-# shows up, and nothing outside a temp folder is touched: macup puts /opt/homebrew/bin first in PATH, so only cleaners
-# that work on files alone are run (no brew, npm, pip, docker, xcrun), each named below.
+# shows up, and nothing outside a temp folder is touched: MACUP_PATH=keep keeps the real Homebrew off PATH, and only
+# cleaners that work on files alone are run (no brew, npm, pip, docker, xcrun), each named below.
 #   tools/screenshots.sh            rebuild macup, then write docs/images/check.svg, summary.svg, menu.svg
 set -eo pipefail
 cd "$(dirname "$0")/.."
@@ -86,7 +86,7 @@ chmod +x "$B"/*
 waitfor(){ local i=0; while [ $i -lt 240 ]; do grep -qF "$2" "$1" 2>/dev/null && return; sleep 0.5; i=$((i + 1)); done; }
 run(){ # file prompt input macup-args… — macup in a terminal; the input is typed once the prompt shows (no prompt: none)
   local f=$1 pr=$2 in=$3; shift 3; : >"$f"
-  ( [ -n "$pr" ] && { waitfor "$f" "$pr"; printf '%s' "$in"; }; waitfor "$f" "${DONE:-Report: }"; sleep 1 ) | script -q /dev/null env -i HOME="$H" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8 \
+  ( [ -n "$pr" ] && { waitfor "$f" "$pr"; printf '%s' "$in"; }; waitfor "$f" "${DONE:-Report: }"; sleep 1 ) | script -q /dev/null env -i MACUP_PATH=keep HOME="$H" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8 \
     MACUP_APPS="$H/Apps" MACUP_SYSLIB="$W/SysLib" /bin/bash "$PWD/macup" "$@" >"$f" 2>&1 || true
   # the clock: a fixed report name and run time
   sed -i '' -E 's/macup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9-]{8}/macup_2026-11-21_09-41-07/g; s/· [0-9]+m [0-9]+s/· 0m 38s/g' "$f"

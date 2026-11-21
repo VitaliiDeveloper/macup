@@ -363,6 +363,8 @@ dch "$P"; dcpick '' ''; o=$(tr -d '\r' <"$W/dc.out")
 echo "$o" | grep -q 'gone: dev.acme.shots (changed [0-9-]*).*only if you pick it' && echo "$o" | grep -q 'gone: dev.acme.demo' && echo "$o" | grep -q 'dev.acme.open: .*skipped' \
   && ! echo "$o" | grep -qE 'gone: (dev.acme.app|dev.acme.shell|dev.acmetool|com\.)' && [ -z "$(dcgone)" ] \
   && pass "dev containers: one pick-only item per gone container; live app, its extension, open ones, emptied ones, Apple's and other names are not offered" || { fail "dev containers: check"; echo "$o"; }
+dch "$P"; touch -t 202611030000 "$W/dc/Library/Containers/dev.acme.demo/Data/blob"; touch -t 202401010000 "$W/dc/Library/Containers/dev.acme.demo/Data" "$W/dc/Library/Containers/dev.acme.demo"; dcpick '' ''
+tr -d '\r' <"$W/dc.out" | grep -q 'gone: dev.acme.demo (changed 2026-11-03)' && pass "dev containers: changed is the newest file inside, not the folder" || { fail "dev containers: changed date"; tr -d '\r' <"$W/dc.out" | grep 'dev.acme.demo'; }
 dch "$P"; dcpick '' ''; n=$(tr -d '\r' <"$W/dc.out" | grep -E '^ +[0-9]+ .*gone: dev.acme.shots' | awk '{print $1}')
 dch "$P"; dcpick "$n" y
 [ "$(dcgone)" = "./Library/Containers/dev.acme.shots/Data/blob" ] && [ -f "$W/dc/.Trash/dev.acme.shots/Data/blob" ] && grep -q 'hold app data' "$W/dc.out" && pass "dev containers: a pick and a yes, after a warning about app data, move that container's contents to the Trash; the folder and the macOS marker stay" || { fail "dev containers: pick"; dcgone; tr -d '\r' <"$W/dc.out" | tail -20; }
@@ -421,8 +423,7 @@ echo "brew $* NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE:-}" >>"$BREWLOG"
 exit 0
 FAKE
 chmod +x "$BB/brew"; mkdir -p "$W/brewrepo/.git"; : >"$W/brewrepo/.git/FETCH_HEAD"; touch -t 202001010000 "$W/brewrepo/.git/FETCH_HEAD"
-sed 's|^export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:|export PATH="|' "$M" >"$W/macup-nobrew"   # macup puts the real Homebrew first in PATH
-env HOME="$H" PATH="$BB:$SB:$PATH" BREWLOG="$W/brew.log" BREWREPO="$W/brewrepo" /bin/bash "$W/macup-nobrew" check --only update.brew --no-color </dev/null >"$W/brewchk.out" 2>&1
+env MACUP_PATH=keep HOME="$H" PATH="$BB:$SB:$PATH" BREWLOG="$W/brew.log" BREWREPO="$W/brewrepo" /bin/bash "$M" check --only update.brew --no-color </dev/null >"$W/brewchk.out" 2>&1
 grep -q 'brew outdated' "$W/brew.log" && ! grep -q '^brew update' "$W/brew.log" && ! grep 'brew outdated' "$W/brew.log" | grep -qv 'NO_AUTO_UPDATE=1$' \
   && grep -q 'package list is from 2020-01-01' "$W/brewchk.out" && pass "check never runs brew update, calls brew with HOMEBREW_NO_AUTO_UPDATE=1 and says how old the list is" || { fail "check leaves Homebrew alone"; cat "$W/brew.log" "$W/brewchk.out"; }
 sys --only check.battery | grep -q 'Battery: 83% charged, 612 cycles, 76% capacity, Normal — capacity under 80%' && pass "battery: cycles and capacity read from system_profiler" || { fail "battery parsing"; sys --only check.battery; }
@@ -550,6 +551,13 @@ kill -INT -- -"$p" 2>/dev/null; wait "$p"; rc=$?
 r=$(ls "$H"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 [ $rc = 130 ] && [ -n "$r" ] && grep -q 'Interrupted. Report: ~/Library/Logs/macup/macup_' "$W/int.out" && grep -q 'agy is downloading' "$r" && grep -q 'incomplete' "$r" && [ -z "$(ls "$H"/Library/Logs/macup/*.log 2>/dev/null)" ] \
   && pass "Ctrl-C: the report keeps what the commands printed" || { fail "Ctrl-C (rc=$rc)"; cat "$W/int.out" "$r"; }
+# the same for a terminal that closes (SIGHUP) or a kill (SIGTERM)
+H="$W/term"; mkdir -p "$H/.local/bin" "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"; cp "$W/int/.local/bin/agy" "$H/.local/bin/agy"
+env HOME="$H" /bin/bash "$M" update --only update.agy --no-color </dev/null >"$W/term.out" 2>&1 & p=$!
+for i in $(seq 1 100); do [ -e "$H/started" ] && break; sleep 0.2; done
+kill -TERM "$p" 2>/dev/null; wait "$p"; rc=$?
+r=$(ls "$H"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
+[ -n "$r" ] && grep -q 'agy is downloading' "$r" && grep -q 'incomplete' "$r" && pass "SIGTERM: the report keeps what the commands printed" || { fail "SIGTERM (rc=$rc)"; cat "$W/term.out"; }
 
 # --- since the last run: swap that grew is not "something is filling the disk"
 H="$W/swp"; SW="$W/swpbin"; mkdir -p "$SW" "$H/.config/macup" "$H/Library/Application Support/macup"; printf 'language = en\n' >"$H/.config/macup/config"
@@ -618,6 +626,11 @@ for p in edited untouched; do blob "$C/$p/node_modules/x"; echo '{}' >"$C/$p/pac
 touch "$C/edited/src/app/components/ui/x.tsx"
 env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_node_modules --enable clean.stale_node_modules --no-color </dev/null >"$W/deep.out" 2>&1
 [ -f "$C/edited/node_modules/x/blob" ] && [ ! -e "$C/untouched/node_modules" ] && pass "stale node_modules: a recent file at any depth keeps them" || { fail "stale node_modules: deep recent file"; cat "$W/deep.out"; }
+# a folder named build that is source (no build.gradle next to it) is looked into: an edit there keeps the project's target
+H="$W/srcb"; C="$H/Code"; mkdir -p "$H/.config/macup"; printf 'language = en\n' >"$H/.config/macup/config"
+blob "$C/rs/target/debug"; echo '[package]' >"$C/rs/Cargo.toml"; mkdir -p "$C/rs/build"; echo 'fn x(){}' >"$C/rs/build/gen.rs"; old "$C/rs"; touch "$C/rs/build/gen.rs"
+env HOME="$H" /bin/bash "$M" clean --level standard --only clean.stale_artifacts --enable clean.stale_artifacts --no-color </dev/null >"$W/srcb.out" 2>&1
+[ -f "$C/rs/target/debug/blob" ] && pass "stale build folders: an edit inside a source folder named build keeps the project" || { fail "stale build folders: source build folder"; cat "$W/srcb.out"; }
 # a stale Pods folder under 1 MB: hidden in the list, but in --json with "hidden" and cleaned when picked
 H="$W/hid"; C="$H/Code"; mkdir -p "$H/.config/macup" "$C/small/Pods/Lib"; printf 'language = en\n' >"$H/.config/macup/config"
 dd if=/dev/zero of="$C/small/Pods/Lib/blob" bs=1024 count=200 2>/dev/null; echo "pod 'Lib'" >"$C/small/Podfile"; old "$C/small"
@@ -806,6 +819,12 @@ grep -q 'PATH names folders that do not exist: ~/no/such/dir ' "$W/misc.out" && 
 if [ "$(id -u)" = 0 ]; then
   env HOME="$H" SUDO_USER=me /bin/bash "$M" check --only check.system </dev/null >"$W/misc.out" 2>&1; [ $? = 1 ] && grep -q 'does not need sudo' "$W/misc.out" && pass "sudo macup refuses to run" || fail "sudo macup ran"
 fi
+# --- MACUP_PATH=keep: macup leaves PATH as it is, so a fake brew wins over the real one (tests, the screenshot generator)
+H="$W/kp"; mkdir -p "$H/.config/macup" "$W/kpbin"; printf 'language = en\n' >"$H/.config/macup/config"
+printf '#!/bin/bash\necho "$*" >>"$HOME/brew.log"\n' >"$W/kpbin/brew"; chmod +x "$W/kpbin/brew"
+env -i HOME="$H" MACUP_PATH=keep PATH="$W/kpbin:/usr/bin:/bin:/usr/sbin:/sbin" /bin/bash "$M" check --only clean.brew --no-color </dev/null >"$W/kp.out" 2>&1
+grep -q 'cleanup' "$H/brew.log" 2>/dev/null && pass "MACUP_PATH=keep: the brew on PATH is the one used" || { fail "MACUP_PATH=keep"; cat "$W/kp.out" | tail -5; }
+
 # --- leftovers of deleted apps
 tests/leftovers.sh || F=1
 

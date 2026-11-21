@@ -315,25 +315,6 @@ EOF2
   return 0
 }
 
-btm_stale(){ # names of this user's Background Task Management records whose app is gone; the format is undocumented, so no match means nothing
-  lo_interactive && have sfltool || return 0   # it can wait on a system prompt: never in unattended runs
-  btm_dump | awk -v u="$(id -u)" -v h="$HOME" '
-    /Records for UID/ { on = ($4 == u); next }
-    !on { next }
-    /^ *Name: / { n = $0; sub(/^ *Name: /, "", n); next }
-    /^ *URL: \// { p = $0; sub(/^ *URL: /, "", p); if (index(p, "/Users/" u "/") == 1) p = h substr(p, length("/Users/" u) + 1); print n "|" p }' |
-  while IFS='|' read -r n p; do [ -e "$p" ] || echo "$n"; done | sort -u
-}
-btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
-  local f p t=0
-  f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
-  sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
-  while kill -0 "$p" 2>/dev/null && [ "$t" -lt 50 ]; do sleep 0.2; t=$((t + 1)); done
-  if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
-  wait "$p" 2>/dev/null
-  cat "$f"; rm -f "$f"
-}
-
 run_devc(){ # container — what is inside goes to ~/.Trash/<bundle id>; re-checked: still a dev container, no app, nothing open
   local c=$1 n=${1##*/} t i=2 s e bad=0
   dev_container "$c" && [ -d "$c" ] && [ ! -L "$c" ] || { echo "macup refused container: $c" >>"$RAW"; return 1; }

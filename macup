@@ -26,7 +26,8 @@ DEV="$HOME/Library/Developer"
 SCHED_LABEL="com.vitaliideveloper.macup"
 SCHED_PLIST="$HOME/Library/LaunchAgents/$SCHED_LABEL.plist"
 USER_PATH=$PATH   # as the terminal has it: check.commands reports its folders that do not exist
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
+# MACUP_PATH=keep: PATH stays as given, for tests that put fakes first (brew, npm…) and must never reach the real ones
+[ "${MACUP_PATH:-}" = keep ] || export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:$PATH"
 # Without the Command Line Tools, /usr/bin/python3, swift, xcrun, git are stubs that pop up an install dialog
 CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
 
@@ -1241,7 +1242,6 @@ Needs your Mac password (asked once for all such items). || Потрібен п�
 These steps need your Mac password: || Для цих кроків потрібен пароль Мака:
 Mac password to remove system leftovers: || Пароль Мака, щоб прибрати системні залишки:
 Password not accepted, system items skipped || Пароль не прийнято, системні пункти пропущено
-Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Елементи входу, що ведуть на видалені застосунки: %s — вимкніть їх у Системних параметрах → Загальні → Елементи входу
 %s: some files could not be moved (see the report) || %s: деякі файли не вдалося перемістити (див. звіт)
 Looking for containers of dev builds || Шукаю контейнери тестових збірок
 Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнери збірок: Spotlight не відповідає, тож macup не може визначити, яких програм уже немає; нічого не запропоновано
@@ -1716,7 +1716,6 @@ Needs your Mac password (asked once for all such items). || Нужен паро�
 These steps need your Mac password: || Для этих шагов нужен пароль Мака:
 Mac password to remove system leftovers: || Пароль Мака, чтобы убрать системные остатки:
 Password not accepted, system items skipped || Пароль не принят, системные пункты пропущены
-Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Объекты входа, ведущие на удалённые приложения: %s — выключите их в Системных настройках → Основные → Объекты входа
 %s: some files could not be moved (see the report) || %s: некоторые файлы не удалось переместить (см. отчёт)
 Looking for containers of dev builds || Ищу контейнеры тестовых сборок
 Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнеры сборок: Spotlight не отвечает, поэтому macup не может определить, каких приложений уже нет; ничего не предложено
@@ -1867,7 +1866,7 @@ interrupted(){
 }
 # 4: the terminal's stderr; the trap can fire inside run, where stdout and stderr go to $RAW
 exec 4>&2
-trap interrupted INT
+trap interrupted INT TERM HUP   # Ctrl-C, a kill, a terminal that closes: the report keeps what was printed
 # the loop that keeps sudo's password fresh during App Store updates. A password macup asked for is forgotten
 # right after them: the updaters that run next (pipx, Oh My Zsh, gh extensions, …) must not find sudo unlocked.
 stop_sudo_keep(){
@@ -2774,7 +2773,8 @@ pick(){ # reads a choice, prints the chosen indexes one per line
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
     elif echo "$tok" | grep -E '^[0-9]{1,4}(-[0-9]{1,4})?$' >/dev/null; then
       a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
-      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && echo "$i"; a=$((a + 1)); done
+      # leftovers of deleted apps and dev containers hold data: only their own number takes them, never a range
+      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && { [ "${tok%-*}" = "${tok#*-}" ] || case "${C_TASK[i]}" in clean.orphan_*|clean.dev_containers) false ;; esac; } && echo "$i"; a=$((a + 1)); done
     fi
   done | sort -un
 }
@@ -3096,25 +3096,6 @@ EOF2
   return 0
 }
 
-btm_stale(){ # names of this user's Background Task Management records whose app is gone; the format is undocumented, so no match means nothing
-  lo_interactive && have sfltool || return 0   # it can wait on a system prompt: never in unattended runs
-  btm_dump | awk -v u="$(id -u)" -v h="$HOME" '
-    /Records for UID/ { on = ($4 == u); next }
-    !on { next }
-    /^ *Name: / { n = $0; sub(/^ *Name: /, "", n); next }
-    /^ *URL: \// { p = $0; sub(/^ *URL: /, "", p); if (index(p, "/Users/" u "/") == 1) p = h substr(p, length("/Users/" u) + 1); print n "|" p }' |
-  while IFS='|' read -r n p; do [ -e "$p" ] || echo "$n"; done | sort -u
-}
-btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
-  local f p t=0
-  f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
-  sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
-  while kill -0 "$p" 2>/dev/null && [ "$t" -lt 50 ]; do sleep 0.2; t=$((t + 1)); done
-  if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
-  wait "$p" 2>/dev/null
-  cat "$f"; rm -f "$f"
-}
-
 run_devc(){ # container — what is inside goes to ~/.Trash/<bundle id>; re-checked: still a dev container, no app, nothing open
   local c=$1 n=${1##*/} t i=2 s e bad=0
   dev_container "$c" && [ -d "$c" ] && [ ! -L "$c" ] || { echo "macup refused container: $c" >>"$RAW"; return 1; }
@@ -3325,15 +3306,20 @@ if task_allowed clean.stale_node_modules || task_allowed clean.stale_artifacts; 
     [ -z "$root" ] && continue
     # shellcheck disable=SC2086 # NAMEX is a list of find arguments
     ARTS=$(find "$root" -maxdepth 5 -type d \( -name .git $NAMEX \) -prune -print 2>/dev/null | grep -v '/\.git$')
+    REAL=$(printf '%s\n' "$ARTS" | while IFS= read -r a; do [ -n "$a" ] && artifact_ok "$a" && echo "$a"; done)
     while IFS= read -r a; do
       [ -z "$a" ] && continue
       rel=${a#"$root"}
       case "${rel%/*}" in */.*) continue ;; esac   # inside a hidden folder
       case "$rel" in */lib/node_modules) continue ;; esac   # global npm installs
       artifact_ok "$a" || continue
-      # any depth (src/app/components/x.tsx), but never inside build folders, where an install touches every file
-      # shellcheck disable=SC2086
-      recent=$(find "${a%/*}" \( -name .git $NAMEX -o -path "$a" \) -prune -o -type f -mtime -"$STALE_DAYS" -print -quit 2>/dev/null)
+      # any depth (src/app/components/x.tsx), but never inside build folders, where an install touches every file;
+      # a folder only named like one (build/ with source, no build.gradle) is looked into
+      PX=(-name .git -o -path "$a")
+      while IFS= read -r b; do [ -n "$b" ] && case "$b" in "${a%/*}"/*) PX+=(-o -path "$b") ;; esac; done <<EOF2
+$REAL
+EOF2
+      recent=$(find "${a%/*}" \( "${PX[@]}" \) -prune -o -type f -mtime -"$STALE_DAYS" -print -quit 2>/dev/null)
       [ -n "$recent" ] && continue
       [ -n "$(find "$a" -maxdepth 2 -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)" ] && continue
       if [ "${a##*/}" = node_modules ]; then STALE="$STALE$a"$'\n'
@@ -3385,6 +3371,10 @@ fi
 # Interactive only: reading other apps' containers can raise a privacy prompt, and only a person can pick them.
 # Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id has an app:
 # dev.app for dev.app.share, and for dev.app-LaunchAtLoginHelper
+newest(){ # container → the date of its newest file; the folder's own date and macOS's marker say when it was made
+  local t; t=$(find "$1" -type f ! -name .com.apple.containermanagerd.metadata.plist -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1)
+  date -r "${t:-$(stat -f %m "$1")}" +%F
+}
 app_for(){ local id=$1 up; while :; do
   [ -n "$(mdfind "kMDItemCFBundleIdentifier == '$id'c" 2>/dev/null | head -1)" ] && return 0
   up=${id%[.-]*}
@@ -3404,7 +3394,7 @@ if task_allowed clean.dev_containers && lo_interactive && [ -n "$(dev_prefixes)"
       if ! ls "$c" >/dev/null 2>&1; then info '%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)' "${c##*/}"; continue; fi
       items=$(find "$c" -mindepth 1 -maxdepth 1 ! -name .com.apple.containermanagerd.metadata.plist 2>/dev/null)
       [ -n "$items" ] || continue   # emptied before: only the marker macOS keeps is left
-      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(stat -f %Sm -t %F "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
+      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(newest "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
     done
   fi
 fi
@@ -3732,11 +3722,6 @@ if task check.startup; then
   if [ -n "$LO" ]; then
     warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"
     lines "$LO"
-  fi
-  BS=$(btm_stale)
-  if [ -n "$BS" ]; then
-    warn 'Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items' "$(cnt "$BS")"
-    lines "$BS"
   fi
   info 'Login items: System Settings → General → Login Items & Extensions'
 fi

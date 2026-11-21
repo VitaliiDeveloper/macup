@@ -73,7 +73,9 @@ Orphans with reason (`app not installed`, `program missing`, `empty plist`) and,
 `sudo rm <plist>`. Privileged helpers in `/Library/PrivilegedHelperTools` whose daemon is orphaned are listed the same
 way.
 
-BTM (read-only): `sfltool dumpbtm` runs without sudo. Only the `Records for UID <uid>` section is parsed; paths
+Update 2026-11-21: removed in the release after 2.9.0. `sfltool dumpbtm` asks for an administrator password through SecurityAgent, so every interactive check waited behind a dialog.
+
+BTM (read-only, as first shipped): `sfltool dumpbtm` runs without sudo. Only the `Records for UID <uid>` section is parsed; paths
 `/Users/<uid>/…` are mapped to `$HOME`; `(null)` and relative URLs are skipped. A remaining absolute path that does not
 exist is a stale login item, shown with "System Settings → General → Login Items". When nothing parses (format
 changed), the BTM part is skipped silently.

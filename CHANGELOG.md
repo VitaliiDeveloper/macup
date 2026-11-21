@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Fixes:
+
+- **`macup check` no longer opens a hidden password dialog.** 2.9.0 read Background Task Management with `sfltool dumpbtm` to report login items of deleted apps; macOS asks for an administrator password for that (SecurityAgent), so every check in a terminal waited 10 seconds behind a dialog and then gave up. That report is gone: macOS removes the records of a deleted app itself, and the launch agents an app leaves behind are still found from their files.
+- **A range never picks leftovers of deleted apps or dev containers.** `1-30` took everything in between, data and saved passwords included, with only the yes before it. They now go only by their own number.
+- **A kill or a closed terminal keeps the report.** Only Ctrl-C wrote what the commands had printed so far; SIGTERM and SIGHUP now do the same.
+- **A source folder named `build` or `target` is looked into.** The check for recent edits skipped every folder with such a name, so a project edited only there counted as untouched and could lose its build folder. Only a real build folder (next to its build file) is skipped now.
+- **A dev container's "changed" date is its newest file,** not the day the folder was made.
+
+For developers:
+
+- **`MACUP_PATH=keep`** leaves `PATH` as given. macup puts Homebrew's folders first, so a test or the screenshot generator could reach the real `brew` past its fakes; they now set it.
+
 ## 2.9.0 — 2026-11-20
 
 Fixes:

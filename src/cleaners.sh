@@ -193,15 +193,20 @@ if task_allowed clean.stale_node_modules || task_allowed clean.stale_artifacts; 
     [ -z "$root" ] && continue
     # shellcheck disable=SC2086 # NAMEX is a list of find arguments
     ARTS=$(find "$root" -maxdepth 5 -type d \( -name .git $NAMEX \) -prune -print 2>/dev/null | grep -v '/\.git$')
+    REAL=$(printf '%s\n' "$ARTS" | while IFS= read -r a; do [ -n "$a" ] && artifact_ok "$a" && echo "$a"; done)
     while IFS= read -r a; do
       [ -z "$a" ] && continue
       rel=${a#"$root"}
       case "${rel%/*}" in */.*) continue ;; esac   # inside a hidden folder
       case "$rel" in */lib/node_modules) continue ;; esac   # global npm installs
       artifact_ok "$a" || continue
-      # any depth (src/app/components/x.tsx), but never inside build folders, where an install touches every file
-      # shellcheck disable=SC2086
-      recent=$(find "${a%/*}" \( -name .git $NAMEX -o -path "$a" \) -prune -o -type f -mtime -"$STALE_DAYS" -print -quit 2>/dev/null)
+      # any depth (src/app/components/x.tsx), but never inside build folders, where an install touches every file;
+      # a folder only named like one (build/ with source, no build.gradle) is looked into
+      PX=(-name .git -o -path "$a")
+      while IFS= read -r b; do [ -n "$b" ] && case "$b" in "${a%/*}"/*) PX+=(-o -path "$b") ;; esac; done <<EOF2
+$REAL
+EOF2
+      recent=$(find "${a%/*}" \( "${PX[@]}" \) -prune -o -type f -mtime -"$STALE_DAYS" -print -quit 2>/dev/null)
       [ -n "$recent" ] && continue
       [ -n "$(find "$a" -maxdepth 2 -mtime -"$STALE_DAYS" -print 2>/dev/null | head -1)" ] && continue
       if [ "${a##*/}" = node_modules ]; then STALE="$STALE$a"$'\n'
@@ -253,6 +258,10 @@ fi
 # Interactive only: reading other apps' containers can raise a privacy prompt, and only a person can pick them.
 # Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id has an app:
 # dev.app for dev.app.share, and for dev.app-LaunchAtLoginHelper
+newest(){ # container → the date of its newest file; the folder's own date and macOS's marker say when it was made
+  local t; t=$(find "$1" -type f ! -name .com.apple.containermanagerd.metadata.plist -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1)
+  date -r "${t:-$(stat -f %m "$1")}" +%F
+}
 app_for(){ local id=$1 up; while :; do
   [ -n "$(mdfind "kMDItemCFBundleIdentifier == '$id'c" 2>/dev/null | head -1)" ] && return 0
   up=${id%[.-]*}
@@ -272,7 +281,7 @@ if task_allowed clean.dev_containers && lo_interactive && [ -n "$(dev_prefixes)"
       if ! ls "$c" >/dev/null 2>&1; then info '%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)' "${c##*/}"; continue; fi
       items=$(find "$c" -mindepth 1 -maxdepth 1 ! -name .com.apple.containermanagerd.metadata.plist 2>/dev/null)
       [ -n "$items" ] || continue   # emptied before: only the marker macOS keeps is left
-      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(stat -f %Sm -t %F "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
+      CL_MANUAL=1 cand clean.dev_containers 3 "$(_f 'Container of a dev build whose app is gone: %s (changed %s)' "${c##*/}" "$(newest "$c")")" "$(kbl "$items")" cmd "devc:$c" "" "" "$c"
     done
   fi
 fi

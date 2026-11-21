@@ -1242,7 +1242,6 @@ Needs your Mac password (asked once for all such items). || Потрібен п�
 These steps need your Mac password: || Для цих кроків потрібен пароль Мака:
 Mac password to remove system leftovers: || Пароль Мака, щоб прибрати системні залишки:
 Password not accepted, system items skipped || Пароль не прийнято, системні пункти пропущено
-Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Елементи входу, що ведуть на видалені застосунки: %s — вимкніть їх у Системних параметрах → Загальні → Елементи входу
 %s: some files could not be moved (see the report) || %s: деякі файли не вдалося перемістити (див. звіт)
 Looking for containers of dev builds || Шукаю контейнери тестових збірок
 Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнери збірок: Spotlight не відповідає, тож macup не може визначити, яких програм уже немає; нічого не запропоновано
@@ -1717,7 +1716,6 @@ Needs your Mac password (asked once for all such items). || Нужен паро�
 These steps need your Mac password: || Для этих шагов нужен пароль Мака:
 Mac password to remove system leftovers: || Пароль Мака, чтобы убрать системные остатки:
 Password not accepted, system items skipped || Пароль не принят, системные пункты пропущены
-Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items || Объекты входа, ведущие на удалённые приложения: %s — выключите их в Системных настройках → Основные → Объекты входа
 %s: some files could not be moved (see the report) || %s: некоторые файлы не удалось переместить (см. отчёт)
 Looking for containers of dev builds || Ищу контейнеры тестовых сборок
 Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered || Контейнеры сборок: Spotlight не отвечает, поэтому macup не может определить, каких приложений уже нет; ничего не предложено
@@ -3097,25 +3095,6 @@ EOF2
   return 0
 }
 
-btm_stale(){ # names of this user's Background Task Management records whose app is gone; the format is undocumented, so no match means nothing
-  lo_interactive && have sfltool || return 0   # it can wait on a system prompt: never in unattended runs
-  btm_dump | awk -v u="$(id -u)" -v h="$HOME" '
-    /Records for UID/ { on = ($4 == u); next }
-    !on { next }
-    /^ *Name: / { n = $0; sub(/^ *Name: /, "", n); next }
-    /^ *URL: \// { p = $0; sub(/^ *URL: /, "", p); if (index(p, "/Users/" u "/") == 1) p = h substr(p, length("/Users/" u) + 1); print n "|" p }' |
-  while IFS='|' read -r n p; do [ -e "$p" ] || echo "$n"; done | sort -u
-}
-btm_dump(){ # sfltool can hang without a word; ten seconds, then nothing
-  local f p t=0
-  f=$(mktemp "${TMPDIR:-/tmp}/macup-btm.XXXXXX") || return 0
-  sfltool dumpbtm </dev/null >"$f" 2>/dev/null & p=$!
-  while kill -0 "$p" 2>/dev/null && [ "$t" -lt 50 ]; do sleep 0.2; t=$((t + 1)); done
-  if kill -0 "$p" 2>/dev/null; then kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; fi
-  wait "$p" 2>/dev/null
-  cat "$f"; rm -f "$f"
-}
-
 run_devc(){ # container — what is inside goes to ~/.Trash/<bundle id>; re-checked: still a dev container, no app, nothing open
   local c=$1 n=${1##*/} t i=2 s e bad=0
   dev_container "$c" && [ -d "$c" ] && [ ! -L "$c" ] || { echo "macup refused container: $c" >>"$RAW"; return 1; }
@@ -3733,11 +3712,6 @@ if task check.startup; then
   if [ -n "$LO" ]; then
     warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"
     lines "$LO"
-  fi
-  BS=$(btm_stale)
-  if [ -n "$BS" ]; then
-    warn 'Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items' "$(cnt "$BS")"
-    lines "$BS"
   fi
   info 'Login items: System Settings → General → Login Items & Extensions'
 fi

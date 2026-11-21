@@ -81,11 +81,6 @@ if task check.startup; then
     warn 'Leftovers of deleted apps: %s (macup check lets you pick them)' "$(cnt "$LO")"
     lines "$LO"
   fi
-  BS=$(btm_stale)
-  if [ -n "$BS" ]; then
-    warn 'Login items that point to deleted apps: %s — turn them off in System Settings → General → Login Items' "$(cnt "$BS")"
-    lines "$BS"
-  fi
   info 'Login items: System Settings → General → Login Items & Extensions'
 fi
 

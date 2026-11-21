@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Fixes:
+
+- **`macup check` no longer opens a hidden password dialog.** 2.9.0 read Background Task Management with `sfltool dumpbtm` to report login items of deleted apps; macOS asks for an administrator password for that (SecurityAgent), so every check in a terminal waited 10 seconds behind a dialog and then gave up. That report is gone: macOS removes the records of a deleted app itself, and the launch agents an app leaves behind are still found from their files.
+
 ## 2.9.0 — 2026-11-20
 
 Fixes:

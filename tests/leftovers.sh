@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2088  # the report prints paths with a literal ~
-# Leftovers of deleted apps: launch agents, their folders, app data, system services, BTM records.
+# Leftovers of deleted apps: launch agents, their folders, app data, system services.
 # Runs against fake homes, a fake /Applications (MACUP_APPS) and a fake /Library (MACUP_SYSLIB). tests/run.sh calls it.
 cd "$(dirname "$0")/.." || exit 1
 W=$(mktemp -d "${TMPDIR:-/tmp}/macup-leftovers.XXXXXX"); trap 'chflags -R nouchg "$W" 2>/dev/null; rm -rf "$W"' EXIT
@@ -39,9 +39,7 @@ exit 0
 FAKE
 cat >"$W/bin/sfltool" <<'FAKE'
 #!/bin/bash
-[ -n "$FAKE_BTM_HANG" ] && sleep 60
-[ "$1" = dumpbtm ] && [ -f "${FAKE_BTM:-/nonexistent}" ] && cat "$FAKE_BTM"
-exit 0
+echo "$*" >>"$HOME/sfltool.log"
 FAKE
 # sudo records what it was asked and runs the rest as this user; FAKE_SUDO_FAIL=1 is a wrong password
 cat >"$W/bin/sudo" <<'FAKE'
@@ -200,45 +198,10 @@ sys_home "$H"; lo "$H" check --only check.startup,clean.orphan_agents --no-color
 [ ! -e "$H/sudo.log" ] && grep -q 'sudo launchctl bootout system/com.gone.daemon' "$H.out" && grep -q 'sudo mv .*com.gone.daemon.plist' "$H.out" && grep -q 'com.prefix.only' "$H.out" \
   && pass "system leftovers: unattended runs only print the commands" || { fail "system leftovers: unattended"; sed -n '/Startup/,/Login items/p' "$H.out"; }
 
-# --- Background Task Management: login items whose app is gone (read only)
-H="$W/bt"; leftovers_home "$H"; U=$(id -u)
-cat >"$H.btm" <<EOF
-========================
- Records for UID -2 : FFFFEEEE-DDDD-CCCC-BBBB-AAAAFFFFFFFE
-========================
- #1:
-                 Name: Nobody
-                  URL: /Users/-2/Applications/Nobody.app
-========================
- Records for UID $U : 0BF99691-0E1F-433D-8FF0-0C94BE67D58A
-========================
- #1:
-                 Name: Ghost
-                 Type: app (0x2)
-                  URL: /Users/$U/Applications/Ghost.app
- #2:
-                 Name: Steam
-                  URL: /Users/$U/Apps/Steam.app
- #3:
-                 Name: Xnull
-                  URL: (null)
- #4:
-                 Name: Yrel
-                  URL: Contents/Library/LoginItems/Y.app
-EOF
-cp "$H.btm" "$H.full"
-bt(){ (sleep 1; until_done "$H.out") | script -q /dev/null env FAKE_BTM="$H.btm" FAKE_BTM_HANG="${FAKE_BTM_HANG:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" /bin/bash "$M" check --only check.startup --no-color >"$H.out" 2>&1; tr -d '\r' <"$H.out" >"$H.o2"; mv "$H.o2" "$H.out"; }
-bt
-sec=$(sed -n '/Login items that point to deleted apps/,/Login items:/p' "$H.out")
-printf '%s\n' "$sec" | grep -q 'Ghost' && ! printf '%s\n' "$sec" | grep -qE 'Steam|Xnull|Yrel|Nobody' && grep -q 'Login Items' "$H.out" \
-  && pass "btm: only this user's records that point to a missing app" || { fail "btm"; sed -n '/Startup/,/Summary/p' "$H.out"; }
-: >"$H.btm"; bt; cp "$H.full" "$H.btm"
-! grep -q 'point to deleted apps' "$H.out" && ! grep -qE 'line [0-9]+:|command not found' "$H.out" && pass "btm: nothing to parse, nothing said" || fail "btm: empty output"
-
-FAKE_BTM="$H.btm" lo "$H" check --only check.startup --no-color </dev/null >"$H.out" 2>&1
-! grep -q 'Ghost' "$H.out" && pass "btm: unattended runs never ask sfltool" || fail "btm: unattended run read BTM"
-t0=$SECONDS; FAKE_BTM_HANG=1 bt
-[ $((SECONDS - t0)) -lt 40 ] && ! grep -q 'point to deleted apps' "$H.out" && pass "btm: a hanging sfltool is given up on" || fail "btm: hang ($((SECONDS - t0))s)"
+# --- Background Task Management is never read: sfltool dumpbtm asks for an administrator password (SecurityAgent)
+H="$W/bt"; leftovers_home "$H"
+(sleep 1; until_done "$H.out") | script -q /dev/null env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" /bin/bash "$M" check --only check.startup --no-color >"$H.out" 2>&1
+[ ! -e "$H/sfltool.log" ] && pass "btm: sfltool is never run, so no password dialog" || fail "btm: sfltool was run"
 
 # --- review findings: a folder is never taken by mistake
 rv_home(){ # dir

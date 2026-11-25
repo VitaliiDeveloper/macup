@@ -6,7 +6,7 @@
 # Compatible with the stock macOS bash 3.2. No sudo required.
 # Languages: English (en), Українська (uk), Русский (ru) — `macup lang`.
 
-MACUP_VERSION="2.9.1"
+MACUP_VERSION="2.9.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
@@ -116,7 +116,8 @@ clean.docker_containers|off|Stopped Docker containers (only when you pick them)
 clean.old_versions|on|Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay
 clean.playwright|on|Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays
 clean.profiles|on|Expired provisioning profiles
-clean.ai_tools|on|Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched
+clean.ai_tools|on|Leftovers of AI coding tools: Codex temporary files, backups and unfinished downloads, old Grok and Antigravity CLI versions, edit backups of deleted Claude Code sessions; chat history is never touched
+clean.editor_workspaces|on|Data VS Code, Cursor and similar editors keep for a workspace whose folder is gone, AI chats included (only when you pick it, to the Trash)
 clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
 clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
 clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
@@ -1107,7 +1108,6 @@ Apps outside Homebrew and the App Store: up to date (%s checked) || Програ
 %s: could not check for updates || %s: не вдалося перевірити оновлення
 %s: %s → %s available || %s: доступна %s → %s
 Old Antigravity CLI versions left by its updates || Старі версії Antigravity CLI, що лишилися після оновлень
-Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається
 Global pnpm packages || Глобальні pnpm-пакети
 Bun (bun upgrade; a Homebrew install is left to Homebrew) || Bun (bun upgrade; встановлений через Homebrew оновлює Homebrew)
 Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrade; встановлений через Homebrew оновлює Homebrew)
@@ -1250,6 +1250,18 @@ Containers in ~/Library/Containers named by dev_container_prefixes whose app is 
 %s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || %s: не вдається прочитати — дай терміналу Full Disk Access (System Settings → Privacy & Security)
 The picked containers hold app data (documents, settings, databases): it goes to the Trash. || Вибрані контейнери містять дані застосунків (документи, налаштування, бази даних): вони підуть у Кошик.
 %s: could not remove all of it (see the report) || %s: не все вдалося видалити (див. звіт)
+Data VS Code, Cursor and similar editors keep for a workspace whose folder is gone, AI chats included (only when you pick it, to the Trash) || Дані, які VS Code, Cursor та схожі редактори зберігають для робочої області, чиєї папки вже немає, разом з AI-чатами (лише якщо вибрати, у Кошик)
+Codex plugin backups left by an interrupted update || Резервні копії плагінів Codex після перерваного оновлення
+Unfinished Codex state writes || Недописані файли стану Codex
+Codex plugin catalogs of accounts unused for 30 days || Каталоги плагінів Codex для акаунтів, не використаних 30 днів
+Old Grok CLI versions left by its updates || Старі версії Grok CLI, що лишилися після оновлень
+Claude Code edit backups of deleted sessions (%s) || Резервні копії правок видалених сесій Claude Code (%s)
+%s: data of workspaces whose folder is gone (%s) || %s: дані робочих областей, чиїх папок уже немає (%s)
+%s: moved %s to the Trash || %s: %s перенесено в Кошик
+Would move to the Trash: ~%s (freed when you empty it) || Перенесе в Кошик: ~%s (місце звільниться, коли його очистиш)
+Claude Cowork virtual machine: %s (not a cache; Claude.app downloads it again if it is removed) || Віртуальна машина Claude Cowork: %s (це не кеш; Claude.app завантажить її знову, якщо її видалити)
+Leftovers of AI coding tools: Codex temporary files, backups and unfinished downloads, old Grok and Antigravity CLI versions, edit backups of deleted Claude Code sessions; chat history is never touched || Залишки AI-інструментів для коду: тимчасові файли, резервні копії й недокачані завантаження Codex, старі версії Grok і Antigravity CLI, резервні копії правок видалених сесій Claude Code; історія чатів не чіпається
+Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default) || Історія чатів Claude Code: %s (це не кеш; Claude Code сам видаляє транскрипти, старші за cleanupPeriodDays, типово 30 днів)
 EOF
   ;;
   ru) cat <<'EOF'
@@ -1581,7 +1593,6 @@ Apps outside Homebrew and the App Store: up to date (%s checked) || Прилож
 %s: could not check for updates || %s: не удалось проверить обновления
 %s: %s → %s available || %s: доступна %s → %s
 Old Antigravity CLI versions left by its updates || Старые версии Antigravity CLI, оставшиеся после обновлений
-Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched || Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается
 Global pnpm packages || Глобальные pnpm-пакеты
 Bun (bun upgrade; a Homebrew install is left to Homebrew) || Bun (bun upgrade; установленный через Homebrew обновляет Homebrew)
 Deno (deno upgrade; a Homebrew install is left to Homebrew) || Deno (deno upgrade; установленный через Homebrew обновляет Homebrew)
@@ -1724,6 +1735,18 @@ Containers in ~/Library/Containers named by dev_container_prefixes whose app is 
 %s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security) || %s: не удаётся прочитать — дайте терминалу Full Disk Access (System Settings → Privacy & Security)
 The picked containers hold app data (documents, settings, databases): it goes to the Trash. || Выбранные контейнеры содержат данные приложений (документы, настройки, базы данных): они уйдут в Корзину.
 %s: could not remove all of it (see the report) || %s: удалить удалось не всё (см. отчёт)
+Data VS Code, Cursor and similar editors keep for a workspace whose folder is gone, AI chats included (only when you pick it, to the Trash) || Данные, которые VS Code, Cursor и похожие редакторы хранят для рабочей области, чьей папки уже нет, вместе с AI-чатами (только если выбрать, в Корзину)
+Codex plugin backups left by an interrupted update || Резервные копии плагинов Codex после прерванного обновления
+Unfinished Codex state writes || Недописанные файлы состояния Codex
+Codex plugin catalogs of accounts unused for 30 days || Каталоги плагинов Codex для аккаунтов, не использованных 30 дней
+Old Grok CLI versions left by its updates || Старые версии Grok CLI, оставшиеся после обновлений
+Claude Code edit backups of deleted sessions (%s) || Резервные копии правок удалённых сессий Claude Code (%s)
+%s: data of workspaces whose folder is gone (%s) || %s: данные рабочих областей, чьих папок уже нет (%s)
+%s: moved %s to the Trash || %s: %s перемещено в Корзину
+Would move to the Trash: ~%s (freed when you empty it) || Переместит в Корзину: ~%s (место освободится, когда её очистите)
+Claude Cowork virtual machine: %s (not a cache; Claude.app downloads it again if it is removed) || Виртуальная машина Claude Cowork: %s (это не кэш; Claude.app скачает её снова, если её удалить)
+Leftovers of AI coding tools: Codex temporary files, backups and unfinished downloads, old Grok and Antigravity CLI versions, edit backups of deleted Claude Code sessions; chat history is never touched || Остатки AI-инструментов для кода: временные файлы, резервные копии и недокачанные загрузки Codex, старые версии Grok и Antigravity CLI, резервные копии правок удалённых сессий Claude Code; история чатов не трогается
+Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default) || История чатов Claude Code: %s (это не кэш; Claude Code сам удаляет транскрипты старше cleanupPeriodDays, по умолчанию 30 дней)
 EOF
   ;;
   esac
@@ -2484,7 +2507,7 @@ fi
 #   1 safe        rebuilds itself, nothing to notice
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
-C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
+C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0; POT_TRASH=0
 C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=(); C_SUDO=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
@@ -2502,7 +2525,20 @@ artifact_ok(){ # path → true when it is a build folder with its build file nex
   esac
 }
 # Only these places, and never these names, whatever a cleaner asks for.
+# The few paths inside ~/.claude and an editor's User folder that a cleaner may take, each exactly one entry deep.
+ai_path(){
+  local r
+  case "$1" in */../*|*/..|*/./*|*/.) return 1 ;; esac
+  case "$1" in
+    "$HOME/.claude/file-history/"*) r=${1#"$HOME/.claude/file-history/"}; case "$r" in ""|*/*|*[!0-9A-Za-z-]*) return 1 ;; esac ;;
+    "$HOME/Library/Application Support/"*/User/workspaceStorage/*) r=${1#"$HOME/Library/Application Support/"}
+      case "$r" in */*/*/*/*|*//*|/*) return 1 ;; esac
+      case "${1##*/}" in ""|.*|*[!0-9A-Za-z-]*) return 1 ;; esac ;;
+    *) return 1 ;;
+  esac
+}
 safe_path(){
+  ai_path "$1" && return 0
   case "$1" in
     "$HOME"/Library/*|"$HOME"/.*) ;;
     *) in_projects "$1" && artifact_ok "$1" || return 1 ;;   # clean.stale_*: a build folder inside project_dirs, nothing else there
@@ -2584,7 +2620,7 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | trash (paths, to the Trash) | cmd (key)
   task_allowed "$1" || return 0
   C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9; C_INFO[C_N]=${10}
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
@@ -2691,6 +2727,15 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
   safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
   rm -rf "$1" 2>>"$RAW"
 }
+to_trash_path(){ # one path, re-checked like del, moved into the Trash under a free name
+  local b t i=2
+  [ -L "$1" ] && return 0
+  [ -e "$1" ] || return 0
+  safe_path "$1" || { echo "macup refused to move: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
+  mkdir -p "$HOME/.Trash"; b=$(basename "$1"); t="$HOME/.Trash/$b"
+  while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$b $i"; i=$((i + 1)); done
+  mv "$1" "$t" 2>>"$RAW"
+}
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p r
   KBP_N=0
@@ -2708,8 +2753,8 @@ exec_cand(){ # index
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    rm)    b=$(kbl "${C_PATHS[i]}"); REFUSED=0
-           while IFS= read -r p; do [ -n "$p" ] && del "$p"; done <<EOF2
+    rm|trash) b=$(kbl "${C_PATHS[i]}"); REFUSED=0
+           while IFS= read -r p; do [ -n "$p" ] || continue; if [ "${C_KIND[i]}" = trash ]; then to_trash_path "$p"; else del "$p"; fi; done <<EOF2
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
@@ -2727,8 +2772,10 @@ EOF2
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
-  d=$((b - a)); [ "$d" -lt 0 ] && d=0
-  FREED=$((FREED + d)); DID_CLEAN=1
+  d=$((b - a)); [ "$d" -lt 0 ] && d=0; DID_CLEAN=1
+  # the Trash still holds it: nothing is freed until it is emptied
+  if [ "${C_KIND[i]}" = trash ]; then ok '%s: moved %s to the Trash' "$lbl" "$(hum "$d")"; return 0; fi
+  FREED=$((FREED + d))
   if [ "$d" -ge 1024 ]; then ok '%s: freed %s' "$lbl" "$(hum "$d")"; else ok '%s: cleaned' "$lbl"; fi
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
@@ -2742,7 +2789,8 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
     if running "${C_PROC[i]}" || { [ -s "$s" ] && open_in "${C_OPEN[i]}" "$s"; }; then C_BUSY[i]=1; fi
   done
 }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
+visible(){ case "${C_TASK[$1]}" in clean.ai_tools|clean.editor_workspaces) return 0 ;; esac   # few, and each worth a look at any size
+  [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag head=0 ln lc=0
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done
@@ -3500,15 +3548,96 @@ if task_allowed clean.playwright; then
   [ -n "$L" ] && CL_KEY=browsers cand clean.playwright 2 "$(_f 'Old Playwright, Puppeteer and Cypress builds (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 
-# --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
+# --- AI tools: only leftovers and caches. Chat history, sessions, settings and databases are never touched.
+# Codex runs as the CLI and inside ChatGPT.app; Claude Code as the CLI and inside Claude.app.
+CODEX_BUSY='(^|/)codex(\.js)?( |$)|/(ChatGPT|Codex)\.app/Contents/'
+CLAUDE_BUSY='(^|/)claude( |$)|/\.local/share/claude/versions/|/Claude\.app/Contents/'
 if task_allowed clean.ai_tools; then
 L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtime +7 2>/dev/null)
-[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+# each is a few KB, so they are worth it by number, not by size
+[ -n "$L" ] && { [ "$(cnt "$L")" -ge 50 ] || [ "$(kbl "$L")" -ge 1024 ]; } && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
-[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
+# the old plugin set is kept aside while a new one moves in, and stays only after a crash or a failed rollback (codex-rs/core-plugins/src/startup_sync.rs)
+L=""; [ -d "$HOME/.codex/.tmp/plugins" ] && L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'plugins-backup-*' -mtime +7 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_pbak cand clean.ai_tools 1 "$(_ 'Codex plugin backups left by an interrupted update')" "$(kbl "$L")" trash "$L" "$CODEX_BUSY"
+# ChatGPT.app writes its state to a temporary file and renames it; one a week old was never renamed
+L=$(find "$HOME/.codex" -mindepth 1 -maxdepth 1 -type f -name '..codex-global-state.json*.tmp-*' -mtime +7 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_gs cand clean.ai_tools 1 "$(_ 'Unfinished Codex state writes')" "$(kbl "$L")" trash "$L" "$CODEX_BUSY"
+# the catalog is fetched again after 3 hours (codex-rs/core-plugins/src/remote/catalog_cache.rs): one untouched for 30 days is for an account no longer used
+L=$(find "$HOME/.codex/cache/remote_plugin_catalog" -mindepth 1 -maxdepth 1 -type f -name '*.json' -mtime +30 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_cat cand clean.ai_tools 2 "$(_ 'Codex plugin catalogs of accounts unused for 30 days')" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
 # agy update keeps the replaced binary next to the new one
 L=$(find "$HOME/.local/bin" -maxdepth 1 -type f -name 'agy.*.old' 2>/dev/null)
 [ -n "$L" ] && CL_KEY=agy_old cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
+# grok update downloads each version next to the last one and points ~/.grok/bin at the new one; an hour-old file is no download in progress
+GROK_DL="$HOME/.grok/downloads"
+if [ -d "$GROK_DL" ] && [ ! -L "$GROK_DL" ] && [ ! -L "$HOME/.grok" ]; then
+  use=$(for l in "$HOME/.grok/bin"/*; do [ -L "$l" ] && readlink "$l"; done | sed 's|.*/||' | grep .)
+  L=""; [ -n "$use" ] && L=$(find "$GROK_DL" -mindepth 1 -maxdepth 1 -type f -name 'grok-*' -mmin +60 2>/dev/null | while IFS= read -r f; do
+    printf '%s\n' "$use" | grep -qxF -- "${f##*/}" || printf '%s\n' "$f"; done)
+  [ -n "$L" ] && CL_KEY=grok_old cand clean.ai_tools 1 "$(_ 'Old Grok CLI versions left by its updates')" "$(kbl "$L")" rm "$L" '(^|/)(grok|agent)( |$)|/\.grok/downloads/'
+fi
+if [ -d "$HOME/.claude" ] && [ ! -L "$HOME/.claude" ]; then
+  # rewind needs the session's transcript; without it in ~/.claude/projects the edit backups have no use. No transcripts at all: nothing goes.
+  CC_FH="$HOME/.claude/file-history"; CC_PR="$HOME/.claude/projects"
+  if [ -d "$CC_FH" ] && [ ! -L "$CC_FH" ] && [ -d "$CC_PR" ] && [ ! -L "$CC_PR" ]; then
+    ids=$(find "$CC_PR" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' 2>/dev/null | sed 's|.*/||; s|\.jsonl$||')
+    L=""; [ -n "$ids" ] && L=$(find "$CC_FH" -mindepth 1 -maxdepth 1 -type d -mtime +7 2>/dev/null | while IFS= read -r d; do
+      printf '%s\n' "$ids" | grep -qxF -- "${d##*/}" || printf '%s\n' "$d"; done)
+    [ -n "$L" ] && CL_KEY=claude_fh cand clean.ai_tools 1 "$(_f 'Claude Code edit backups of deleted sessions (%s)' "$(cnt "$L")")" "$(kbl "$L")" trash "$L" "$CLAUDE_BUSY"
+  fi
+fi
+fi
+
+# --- editors: what VS Code, Cursor and the like keep for a workspace whose folder is gone, AI chats of that project included.
+# Only folders in the home folder count: an unmounted disk looks the same as a deleted folder. Only on a pick, to the Trash.
+if task_allowed clean.editor_workspaces && have python3; then
+while IFS='|' read -r folder name; do
+  ED_A="$HOME/Library/Application Support/$folder"; ED_WS="$ED_A/User/workspaceStorage"
+  [ -d "$ED_WS" ] && [ ! -L "$ED_WS" ] && [ ! -L "$ED_A" ] && [ ! -L "$ED_A/User" ] || continue
+  L=$(python3 - "$ED_WS" "$HOME" <<'PY' 2>/dev/null
+import json, os, sys, urllib.parse
+ws, home = sys.argv[1], sys.argv[2]
+for d in sorted(os.listdir(ws)):
+    p = os.path.join(ws, d)
+    if os.path.islink(p) or not os.path.isdir(p):
+        continue
+    try:
+        with open(os.path.join(p, "workspace.json"), encoding="utf-8") as f:
+            j = json.load(f)
+    except Exception:
+        continue
+    u = j.get("folder") or j.get("workspace") or ""
+    if not isinstance(u, str) or not u.startswith("file://"):
+        continue
+    u = urllib.parse.urlparse(u)
+    if u.netloc not in ("", "localhost"):
+        continue
+    w = urllib.parse.unquote(u.path)
+    if not w.startswith(home + "/") or "/../" in w or os.path.lexists(w):
+        continue
+    # iCloud Drive and cloud providers hide folders while signed out; under Library nothing is a project
+    if w.startswith(home + "/Library/"):
+        continue
+    # gone only if the deepest folder still there is a real one on the home folder's disk: a symlink on the way may lead to an unmounted disk
+    cur, ok = home, True
+    for part in w[len(home) + 1:].split("/"):
+        nxt = os.path.join(cur, part)
+        if os.path.islink(nxt):
+            ok = False; break
+        if not os.path.isdir(nxt):
+            break
+        cur = nxt
+    if ok and os.stat(cur).st_dev == os.stat(home).st_dev:
+        print(p)
+PY
+)
+  [ -n "$L" ] || continue
+  CL_MANUAL=1 CL_KEY="ws|$folder" cand clean.editor_workspaces 3 "$(_f '%s: data of workspaces whose folder is gone (%s)' "$name" "$(cnt "$L")")" "$(kbl "$L")" trash "$L" "/$name.app/Contents/|user-data-dir=$ED_A( --|/|$)"
+done <<EOF2
+$ELECTRON_APPS
+EOF2
 fi
 
 # --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
@@ -3621,7 +3750,9 @@ settle
 for ((i = 0; i < C_N; i++)); do
   visible "$i" && [ "${C_BUSY[i]:-0}" = 0 ] || continue
   case "${C_TASK[i]}" in clean.orphan_*) continue ;; esac   # counted together below: their entries can share a folder
-  if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
+  # what goes to the Trash frees nothing until the Trash is emptied
+  if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ] && [ "${C_KIND[i]}" = trash ]; then POT_TRASH=$((POT_TRASH + C_KB[i]))
+  elif [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
 POT_MORE=$((POT_MORE + $(lo_total)))
 if CLEAN && [ -n "$PICK" ]; then
@@ -3648,8 +3779,11 @@ if task check.sizes; then
   elif [ "$s" -gt 0 ]; then info 'Xcode Archives: %s' "$(hum "$s")"; fi
   kb_get "$DEV/CoreSimulator/Devices"; s=$KB; [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
   s=$(kb "$HOME/.pub-cache");          [ "$s" -gt 0 ] && info 'Flutter pub-cache: %s (full reset: dart pub cache clean)' "$(hum "$s")"
-  s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)")
+  s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)"$'\n'"$HOME/.codex/sqlite")
   [ "$s" -ge 102400 ] && info 'Codex chat history: %s (not a cache; delete old chats in Codex itself)' "$(hum "$s")"
+  s=$(kb "$HOME/.claude/projects"); [ "$s" -ge 102400 ] && info 'Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default)' "$(hum "$s")"
+  # the virtual machine Cowork runs in: a whole disk that Claude.app downloads again when it is gone
+  s=$(kb "$HOME/Library/Application Support/Claude/vm_bundles"); [ "$s" -ge 1048576 ] && info 'Claude Cowork virtual machine: %s (not a cache; Claude.app downloads it again if it is removed)' "$(hum "$s")"
   s=$(kbl "$HOME/.cache/huggingface"$'\n'"$HOME/.ollama/models"$'\n'"$HOME/.lmstudio/models")
   [ "$s" -ge 102400 ] && info 'AI models (Hugging Face, Ollama, LM Studio): %s' "$(hum "$s")"
   s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")
@@ -3768,7 +3902,7 @@ EOF
 fi
 
 # ================================================================ PICK (interactive check)
-if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE)) -gt 0 ]; then
+if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE + POT_TRASH)) -gt 0 ]; then
   echo
   CHOSEN=$(pick)
   if [ -n "$CHOSEN" ]; then
@@ -3845,6 +3979,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
   if CLEAN || [ "$DID_CLEAN" = 1 ]; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"
   elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"; fi
+  ! CLEAN && [ "$DID_CLEAN" = 0 ] && WANT_CLN && [ "${POT_TRASH:-0}" -gt 0 ] && echo "- $(_f 'Would move to the Trash: ~%s (freed when you empty it)' "$(hum "$POT_TRASH")")"
   if [ ${#SKIPPED[@]} -gt 0 ]; then echo "- **$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")**"; for s in "${SKIPPED[@]}"; do echo "    - $s"; done; fi
   WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && echo "- $(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
@@ -3870,8 +4005,8 @@ if [ "$JSON" = 1 ]; then
       busy=false; [ "${C_BUSY[i]:-0}" = 1 ] && busy=true
       printf '{"key":"%s","task":"%s","level":"%s","kb":%s,"opt_in":%s,"in_clean":%s,"hidden":%s,"busy":%s,"text":"%s"}' "${C_KEY[i]}" "${C_TASK[i]}" "$lv" "${C_KB[i]:-0}" "$opt" "$inc" "$hid" "$busy" "$(jstr "${C_LBL[i]}")"
     done; printf ']'; }
-  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
-    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
+  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,"to_trash_kb":%s,' \
+    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}" "${POT_TRASH:-0}"
   printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
     "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$REPORT")" "$(json_items)" "$(json_cands)"
 else
@@ -3881,6 +4016,7 @@ if [ ${#UPDATED[@]} -gt 0 ]; then
 elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
 if CLEAN || [ "$DID_CLEAN" = 1 ]; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
 elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POT_AUTO")")"; fi
+! CLEAN && [ "$DID_CLEAN" = 0 ] && WANT_CLN && [ "${POT_TRASH:-0}" -gt 0 ] && printf '  %s\n' "$(_f 'Would move to the Trash: ~%s (freed when you empty it)' "$(hum "$POT_TRASH")")"
 if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$Y" "$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")" "$N"; for s in "${SKIPPED[@]}"; do printf '    · %s\n' "$s"; done
 fi

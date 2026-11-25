@@ -29,3 +29,7 @@
 ./.gradle/daemon/8.9/daemon-1.out.log
 ./.npm/_logs/old-debug-0.log
 ./Library/MobileDevice/Provisioning Profiles/expired.mobileprovision
+./.grok/downloads/grok-1.0.89-macos-aarch64
+./.codex/.tmp/plugins-backup-Ab12Cd/repo/blob
+./.codex/..codex-global-state.json.tmp-1784380121760-c8bf
+./.claude/file-history/bbbb-2222/blob

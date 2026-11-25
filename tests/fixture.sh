@@ -84,3 +84,27 @@ prof expired.mobileprovision 2020-01-01T00:00:00Z; prof valid.mobileprovision 20
 mkdir -p "$H/.npm/_logs" "$H/.gradle/daemon/8.9"; echo old >"$H/.npm/_logs/old-debug-0.log"; old "$H/.npm/_logs/old-debug-0.log"; echo new >"$H/.npm/_logs/new-debug-0.log"
 echo old >"$H/.gradle/daemon/8.9/daemon-1.out.log"; old "$H/.gradle/daemon/8.9/daemon-1.out.log"; echo keep >"$H/.gradle/daemon/8.9/registry.bin"; old "$H/.gradle/daemon/8.9/registry.bin"
 blob "$H/.npm/_npx/abc/node_modules/x"
+# --- 2.9.2 AI tools. Grok: the version ~/.grok/bin points at and a download in progress stay
+mkdir -p "$H/.grok/downloads" "$H/.grok/bin"; for v in 1.0.89 1.0.92 1.0.93; do dd if=/dev/zero of="$H/.grok/downloads/grok-$v-macos-aarch64" bs=1024 count=2048 2>/dev/null; done
+old "$H/.grok/downloads/grok-1.0.89-macos-aarch64" "$H/.grok/downloads/grok-1.0.92-macos-aarch64"; ln -s ../downloads/grok-1.0.92-macos-aarch64 "$H/.grok/bin/grok"
+# Codex: a stale plugin backup next to the live plugin set, an unfinished state write, the catalog of an account unused for a month
+blob "$H/.codex/.tmp/plugins/repo" 64; blob "$H/.codex/.tmp/plugins-backup-Ab12Cd/repo" 2048; old "$H/.codex/.tmp/plugins-backup-Ab12Cd"
+echo '{}' >"$H/.codex/.codex-global-state.json"; dd if=/dev/zero of="$H/.codex/..codex-global-state.json.tmp-1784380121760-c8bf" bs=1024 count=1024 2>/dev/null; old "$H/.codex/..codex-global-state.json.tmp-1784380121760-c8bf"
+mkdir -p "$H/.codex/cache/remote_plugin_catalog"
+dd if=/dev/zero of="$H/.codex/cache/remote_plugin_catalog/old.json" bs=1024 count=2048 2>/dev/null; old "$H/.codex/cache/remote_plugin_catalog/old.json"; echo '{}' >"$H/.codex/cache/remote_plugin_catalog/fresh.json"
+# Claude Code prunes its own plugin versions: none of them go
+C="$H/.claude/plugins/cache/mkt/plug"; for v in 0.8.0 0.9.0 1.0.0 1.0.1; do blob "$C/$v" 1024; done
+for v in 0.8.0 0.9.0 1.0.0; do echo 1700000000000 >"$C/$v/.orphaned_at"; done; old "$C/0.8.0" "$C/1.0.0"
+printf '{"plugins":{"plug@mkt":[{"installPath":"%s"}]}}\n' "$C/0.8.0" >"$H/.claude/plugins/installed_plugins.json"
+# edit backups: of a session with a transcript (stays), of a deleted one (goes), of a deleted one from today (stays)
+mkdir -p "$H/.claude/projects/-Users-me-app"; echo '{}' >"$H/.claude/projects/-Users-me-app/aaaa-1111.jsonl"; echo '{}' >"$H/.claude/history.jsonl"
+for s in aaaa-1111 bbbb-2222 cccc-3333; do blob "$H/.claude/file-history/$s" 1024; done; old "$H/.claude/file-history/aaaa-1111" "$H/.claude/file-history/bbbb-2222"
+# editors: a workspace whose folder is gone (only on a pick), one whose folder is there, one on a disk that is not mounted
+WS="$L/Application Support/Code/User/workspaceStorage"; mkdir -p "$WS/abc123" "$WS/def456" "$WS/ext789"
+printf '{"folder":"file://%s/Code/gone%%20app"}\n' "$H" >"$WS/abc123/workspace.json"; dd if=/dev/zero of="$WS/abc123/state.vscdb" bs=1024 count=2048 2>/dev/null
+printf '{"folder":"file://%s/Code/new"}\n' "$H" >"$WS/def456/workspace.json"; echo db >"$WS/def456/state.vscdb"
+printf '{"folder":"file:///Volumes/Ext/proj"}\n' >"$WS/ext789/workspace.json"; echo db >"$WS/ext789/state.vscdb"
+# ...and folders that only look gone: behind a symlink to an unmounted disk, in iCloud Drive while signed out
+ln -s /Volumes/macup-no-such-disk/Projects "$H/Linked"; mkdir -p "$WS/lnk111" "$WS/icl222"
+printf '{"folder":"file://%s/Linked/app"}\n' "$H" >"$WS/lnk111/workspace.json"; echo db >"$WS/lnk111/state.vscdb"
+printf '{"folder":"file://%s/Library/Mobile%%20Documents/com~apple~CloudDocs/notes"}\n' "$H" >"$WS/icl222/workspace.json"; echo db >"$WS/icl222/state.vscdb"

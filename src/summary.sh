@@ -1,5 +1,5 @@
 # ================================================================ PICK (interactive check)
-if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE)) -gt 0 ]; then
+if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE + POT_TRASH)) -gt 0 ]; then
   echo
   CHOSEN=$(pick)
   if [ -n "$CHOSEN" ]; then
@@ -76,6 +76,7 @@ SUM=$(mktemp "${TMPDIR:-/tmp}/macup.XXXXXX")
   elif UPD; then echo "- $(_ 'Updates: everything was already up to date')"; fi
   if CLEAN || [ "$DID_CLEAN" = 1 ]; then echo "- **$(_f 'Freed: %s' "$(hum "$FREED")")**"
   elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then echo "- $(_f 'Could free: ~%s' "$(hum "$POT_AUTO")")"; fi
+  ! CLEAN && [ "$DID_CLEAN" = 0 ] && WANT_CLN && [ "${POT_TRASH:-0}" -gt 0 ] && echo "- $(_f 'Would move to the Trash: ~%s (freed when you empty it)' "$(hum "$POT_TRASH")")"
   if [ ${#SKIPPED[@]} -gt 0 ]; then echo "- **$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")**"; for s in "${SKIPPED[@]}"; do echo "    - $s"; done; fi
   WANT_CLN && [ "$DID_CLEAN" = 0 ] && [ "$POT_MORE" -gt 0 ] && echo "- $(_f 'More with a higher level or by picking: ~%s' "$(hum "$POT_MORE")")"
   echo "- $(_f 'Free disk space: %s (%s%%), was %s' "$(hum "$FREE_AFTER")" "$PCT2" "$(hum "$FREE_BEFORE")")"
@@ -101,8 +102,8 @@ if [ "$JSON" = 1 ]; then
       busy=false; [ "${C_BUSY[i]:-0}" = 1 ] && busy=true
       printf '{"key":"%s","task":"%s","level":"%s","kb":%s,"opt_in":%s,"in_clean":%s,"hidden":%s,"busy":%s,"text":"%s"}' "${C_KEY[i]}" "${C_TASK[i]}" "$lv" "${C_KB[i]:-0}" "$opt" "$inc" "$hid" "$busy" "$(jstr "${C_LBL[i]}")"
     done; printf ']'; }
-  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,' \
-    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}"
+  printf '{"schema":1,"version":"%s","mode":"%s","date":"%s","seconds":%s,"free_kb":%s,"total_kb":%s,"freed_kb":%s,"could_free_kb":%s,"could_free_more_kb":%s,"to_trash_kb":%s,' \
+    "$MACUP_VERSION" "$MODE" "$(date '+%Y-%m-%d %H:%M')" "$T" "$FREE_AFTER" "$D_TOTAL" "$FREED" "${POT_AUTO:-0}" "${POT_MORE:-0}" "${POT_TRASH:-0}"
   printf '"updated":%s,"skipped_open":%s,"needs_attention":%s,"failed_steps":%s,"newer_macup":"%s","report":"%s","log":"%s","items":%s,"cleanable":%s}\n' \
     "$(jarr "${UPDATED[@]}")" "$(jarr "${SKIPPED[@]}")" "$(jarr "${WARN[@]}")" "$ERRS" "$NEWER" "$(jstr "$REPORT")" "$(jstr "$REPORT")" "$(json_items)" "$(json_cands)"
 else
@@ -112,6 +113,7 @@ if [ ${#UPDATED[@]} -gt 0 ]; then
 elif UPD; then printf '  %s%s%s\n' "$G" "$(_ 'Updates: everything was already up to date')" "$N"; fi
 if CLEAN || [ "$DID_CLEAN" = 1 ]; then printf '  %s%s%s\n' "$G" "$(_f 'Freed: %s' "$(hum "$FREED")")" "$N"
 elif WANT_CLN && [ "$POT_AUTO" -gt 0 ]; then printf '  %s\n' "$(_f 'Could free: ~%s  (to free it: macup all)' "$(hum "$POT_AUTO")")"; fi
+! CLEAN && [ "$DID_CLEAN" = 0 ] && WANT_CLN && [ "${POT_TRASH:-0}" -gt 0 ] && printf '  %s\n' "$(_f 'Would move to the Trash: ~%s (freed when you empty it)' "$(hum "$POT_TRASH")")"
 if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '  %s%s%s\n' "$Y" "$(_f 'Skipped because the app is open (%s), quit it and run again:' "${#SKIPPED[@]}")" "$N"; for s in "${SKIPPED[@]}"; do printf '    · %s\n' "$s"; done
 fi

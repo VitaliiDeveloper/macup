@@ -14,6 +14,15 @@ do {
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()
+case .swift(let arguments) where arguments.command == nil && arguments.action == nil && !arguments.deep:
+    switch Menu.run(arguments, env: env, translations: Translations.json) {
+    case .done(let status):
+        exit(status)
+    case .run(let word):
+        // first, not last: a trailing --only with no value would take it
+        if case .swift(let picked) = Router.route([word] + argv, env: env) { MainPass.run(picked, env: env, translations: Translations.json) }
+        BashExec.run(prepending: [word])
+    }
 case .swift(let arguments) where arguments.command == nil:
     MainPass.run(arguments, env: env, translations: Translations.json)
 case .swift(let arguments):

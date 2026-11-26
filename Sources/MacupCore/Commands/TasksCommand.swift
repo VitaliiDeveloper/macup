@@ -1,5 +1,14 @@
 /// `macup tasks` and `macup tasks --json` (commands.sh `list_tasks`, `tasks_json`).
 public enum TasksCommand {
+    /// The list after `load_conf`: the config with the command line's --skip, --only and --enable on top.
+    static func text(_ context: OneOff.Context, json: Bool) -> String {
+        let arguments = context.arguments, env = context.env
+        let selection = Selection(Settings(config: context.config, env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly,
+                                           cliEnable: arguments.cliEnable, cliLevel: arguments.level))
+        return json ? self.json(selection: selection, i18n: context.i18n, confPath: env.conf)
+            : list(selection: selection, i18n: context.i18n, colors: context.colors, conf: env.paths.tildify(env.conf))
+    }
+
     public static func list(selection: Selection, i18n: I18n, colors: Colors, conf: String) -> String {
         var out = "\(colors.bold)\(Text.pad(i18n.translate("TASK"), 26)) \(Text.pad(i18n.translate("STATE"), 6)) \(i18n.translate("WHAT IT DOES"))\(colors.reset)\n"
         for task in Tasks.all {

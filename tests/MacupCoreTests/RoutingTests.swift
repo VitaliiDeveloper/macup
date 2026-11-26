@@ -60,8 +60,13 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(route("self-update"), "self_update")
         XCTAssertEqual(route("schedule weekly"), "schedule")
         XCTAssertEqual(route("check --only check.disk"), "run")
+        XCTAssertEqual(route("check --only check.self_update"), "run")
+        for command in ["last", "history --json", "reports", "config", "lang uk", "uninstall --yes"] {
+            XCTAssertEqual(route(command), String(command.split(separator: " ")[0]), "'\(command)' runs in Swift")
+        }
+        XCTAssertEqual(route(""), "run", "the menu, or the help without a terminal")
         XCTAssertEqual(route("all --only check.disk,update.brew,clean.derived_data --json"), "run")
-        for line in ["", "check", "all --only check.startup", "--deep", "check --deep --only check.startup", "clean --pick clean.derived_data:1", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
+        for line in ["check", "all --only check.startup", "--deep", "check --deep --only check.startup", "clean --pick clean.derived_data:1",
                   "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
             XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }

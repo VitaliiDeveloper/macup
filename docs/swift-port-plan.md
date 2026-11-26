@@ -305,6 +305,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
 - [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
+- [ ] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME.
 
 ## Progress
 

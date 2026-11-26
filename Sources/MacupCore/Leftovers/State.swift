@@ -79,19 +79,29 @@ extension Leftovers {
         case let text as String: return Bash.substitution(text)
         case let number as NSNumber where CFGetTypeID(number) == CFBooleanGetTypeID(): return number.boolValue ? "true" : "false"
         case let number as NSNumber: return CFNumberIsFloatType(number) ? String(format: "%f", number.doubleValue) : number.stringValue
-        case is [String: Any]: return ""
+        case let dictionary as [String: Any]: return dictionary.keys.sorted { $0.caseInsensitiveCompare($1) == .orderedAscending }.joined(separator: "\n")
         case let array as [Any]: return String(array.count)
+        case let date as Date: return ISO8601DateFormatter().string(from: date)
+        case let data as Data: return data.base64EncodedString()
         default: return nil
         }
     }
 
-    /// `assoc_ids`: AssociatedBundleIdentifiers as plutil writes it in JSON, with `[]"` deleted and split at commas.
+    /// `assoc_ids`: AssociatedBundleIdentifiers as plutil writes it in JSON, with `[]"` deleted and split at commas;
+    /// nothing when it is no array or dictionary, or holds a date or data (plutil cannot write those as JSON).
     static func associatedIDs(_ root: Any?) -> [String] {
-        guard let dictionary = root as? [String: Any], let array = dictionary["AssociatedBundleIdentifiers"] as? [Any] else { return [] }
-        let json = array.compactMap { $0 as? String }.map { $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "/", with: "\\/") }
-        return json.joined(separator: ",").filter { $0 != "[" && $0 != "]" && $0 != "\"" }
+        guard let value = (root as? [String: Any])?["AssociatedBundleIdentifiers"], JSONSerialization.isValidJSONObject(value),
+              let json = try? JSONSerialization.data(withJSONObject: value) else { return [] }
+        return String(decoding: json, as: UTF8.self).filter { $0 != "[" && $0 != "]" && $0 != "\"" }
             .split(separator: ",", omittingEmptySubsequences: false).map(String.init).filter { !$0.isEmpty }
     }
+
+    /// Bash compares bytes where Swift's `==`, `hasPrefix` and `contains` would take "é" and "e" + accent as one.
+    static func same(_ left: String, _ right: String) -> Bool { left.utf8.elementsEqual(right.utf8) }
+
+    static func startsWith(_ text: String, _ prefix: String) -> Bool { text.utf8.starts(with: prefix.utf8) }
+
+    static func holds(_ text: String, _ part: String) -> Bool { Data(text.utf8).range(of: Data(part.utf8)) != nil }
 
     /// `codesign -dv --verbose=2 <path> 2>&1`, one line each.
     static func codesign(_ run: Run, _ path: String) -> [String] {

@@ -30,7 +30,7 @@ extension Leftovers {
             var info = stat()
             if lstat(container, &info) == 0 { newest = info.st_mtimespec.tv_sec }
         }
-        return Run.date("%F", time_t(newest ?? 0))
+        return newest.map { Run.date("%F", time_t($0)) } ?? ""   // date -r "" prints nothing
     }
 
     private static let prefixPattern = try! NSRegularExpression(pattern: "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$")

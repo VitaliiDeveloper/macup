@@ -8,18 +8,17 @@ extension Leftovers {
                                     "homekit", "intents", "keyboard", "keychains", "logs", "mail", "maps", "messages", "metadata", "news", "passes",
                                     "photos", "preferences", "printers", "reminders", "safari", "scripts", "services", "sharing", "shortcuts", "sounds",
                                     "spelling", "spotlight", "suggestions", "translation", "trial", "weather", "webkit"]
-    static let genericWords: Set = ["app", "mac", "helper", "helpers", "agent", "code", "updater", "update", "service", "services", "daemon", "data",
-                                    "cache", "caches", "support", "shared", "common"]
+    static let genericWords = " app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
 
     /// What a folder name is checked against: the installed apps' names and Apple's own.
     struct Names {
-        let apps: Set<String>
-        let apple: Set<String>
+        let apps: Set<[UInt8]>
+        let apple: Set<[UInt8]>
     }
 
     /// `data_cands`.
     static func registerData(_ run: Run, _ state: State) {
-        let names = Names(apps: appNames(state), apple: appleNames(run))
+        let names = Names(apps: Set(appNames(state).map { Array($0.utf8) }), apple: Set(appleNames(run).map { Array($0.utf8) }))
         let vendors = sortedUnique(state.orphans.filter { $0.reason != .broken && !$0.vendor.isEmpty }.map { ($0.vendor, $0.name) }, key: \.0)
         let i18n = run.out.i18n
         for (vendor, name) in vendors where !vendorInstalled(state, vendor) {
@@ -53,7 +52,7 @@ extension Leftovers {
         for folder in ["Preferences", "Caches", "HTTPStorages", "Saved Application State", "WebKit", "Logs"] {
             for entry in glob("\(library)/\(folder)", "*") where exists(entry) && !Run.isSymlink(entry) {
                 let name = lc(basename(entry))
-                guard name.hasPrefix(vendor + ".") else { continue }
+                guard startsWith(name, vendor + ".") else { continue }
                 paths.append(entry)
                 var id = name
                 for suffix in [".plist", ".savedstate", ".binarycookies"] where id.hasSuffix(suffix) { id = String(id.dropLast(suffix.count)) }
@@ -101,12 +100,12 @@ extension Leftovers {
 
     /// `name_ok`: a folder named like this may belong to the deleted app, not to another app or to macOS.
     static func nameOK(_ names: Names, _ name: String) -> Bool {
-        !name.isEmpty && !genericWords.contains(name) && !names.apps.contains(name) && !names.apple.contains(name)
+        !name.isEmpty && !holds(genericWords, " \(name) ") && !names.apps.contains(Array(name.utf8)) && !names.apple.contains(Array(name.utf8))
     }
 
     /// `by_name`: entries of a folder named like this, ignoring case, unless an installed app keeps files there.
     static func byName(_ run: Run, _ state: State, _ names: Names, _ folder: String, _ name: String) -> [String] {
-        glob(folder, "*").filter { exists($0) && !Run.isSymlink($0) && lc(basename($0)) == name && !held(run, state, names, $0) }
+        glob(folder, "*").filter { exists($0) && !Run.isSymlink($0) && same(lc(basename($0)), name) && !held(run, state, names, $0) }
     }
 
     /// `held`: a name inside the folder is an installed app's bundle id or app name, or the folder cannot all be read.
@@ -117,7 +116,7 @@ extension Leftovers {
         guard !ids.isEmpty else { return false }
         return listing.lines.dropFirst().contains { line in
             let name = lc(basename(line))
-            return names.apps.contains(name) || ids.contains { name.contains($0) }
+            return names.apps.contains(Array(name.utf8)) || ids.contains { holds(name, $0) }
         }
     }
 }

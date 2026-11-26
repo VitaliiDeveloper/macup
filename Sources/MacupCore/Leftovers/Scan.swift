@@ -36,7 +36,7 @@ extension Leftovers {
     }
 
     static func vendorInstalled(_ state: State, _ vendor: String) -> Bool {
-        !vendor.isEmpty && state.apps.contains { $0.id == vendor || $0.id.hasPrefix(vendor + ".") }
+        !vendor.isEmpty && state.apps.contains { same($0.id, vendor) || startsWith($0.id, vendor + ".") }
     }
 
     static func teamInstalled(_ run: Run, _ state: State, _ team: String) -> Bool {
@@ -53,7 +53,7 @@ extension Leftovers {
         guard program.hasPrefix("\(home)/Library/") else { return false }
         let rest = program.dropFirst(home.count + 9)
         let folder = lc(String(rest.prefix { $0 != "/" }))
-        return lc(label).split(separator: ".", omittingEmptySubsequences: false).contains { $0 == folder }
+        return lc(label).split(separator: ".", omittingEmptySubsequences: false).contains { same(String($0), folder) }
     }
 
     /// The launch agents and daemons a glob finds, in bash's order.

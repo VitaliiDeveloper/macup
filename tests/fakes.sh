@@ -33,8 +33,13 @@ FAKE
 #!/bin/bash
 printf '   Device Identifier:        disk0\n   SMART Status:             %s\n' "${FAKE_SMART-Verified}"
 FAKE
+      # Time Machine: FAKE_SNAPS local snapshots; a destination named FAKE_TM_DEST whose last backup is FAKE_TM_DAYS days old
       tmutil) cat <<'FAKE' ;;
 #!/bin/bash
+case "$1" in
+  destinationinfo) [ -z "${FAKE_TM_DEST:-}" ] || printf '====\nName          : %s\nKind          : Local\n' "$FAKE_TM_DEST"; exit 0 ;;
+  latestbackup) [ -z "${FAKE_TM_DAYS:-}" ] || { day=$(date -v-"$FAKE_TM_DAYS"d +%Y-%m-%d); echo "/Volumes/.timemachine/Disk/$day-101010.backup/$day-101010.backup"; }; exit 0 ;;
+esac
 snap=0; while [ "$snap" -lt "${FAKE_SNAPS:-0}" ]; do snap=$((snap + 1)); echo "com.apple.TimeMachine.2026-11-0$snap-101010.local"; done
 FAKE
       # Homebrew: every call is logged in the home; outdated answers from $HOME/.fake/brew-{formulae,casks,greedy},

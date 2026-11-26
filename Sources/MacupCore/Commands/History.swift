@@ -33,7 +33,7 @@ enum History {
         }.joined()
         // awk's h() sets a global b, the same name the bold colour came in as: the line starts with the last FREED in bytes
         let freed = shown[shown.count - 1][9]
-        let clobbered = awkString((Awk.lessThanZero(freed) ? -Awk.number(freed) : Awk.number(freed)) * 1024)
+        let clobbered = awkString((Awk.lessThanZero(freed) ? 0 - Awk.number(freed) : Awk.number(freed)) * 1024)
         let trend = Awk.unescape(i18n.translate("Free space trend:"))
         out += "\n\(clobbered)\(trend)\(colors.reset) \(line)  (\(hum(low)) … \(hum(high)))\n"
         return out

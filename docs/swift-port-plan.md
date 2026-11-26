@@ -242,7 +242,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 
 ### Phase 6: final review and release (coordinator)
 
-1. The whole `swift/main` diff against `main` gets a Fable review and a code review, and every finding is fixed or answered.
+1. The whole `swift/main` diff against `main` gets a reviewer subagent (Opus, high effort) and a code review, and every finding is fixed or answered.
 2. `main` is merged in one last time, and the carry-over list must be fully ticked.
 3. The suite runs.
 4. One pull request goes from `swift/main` into `main`.
@@ -252,7 +252,7 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 ## Every pull request into `swift/main`
 
 1. **The session runs and reports the numbers:** `./build.sh`, `swift build -c release`, XCTest, `tests/run.sh` on both builds and `tests/diff.sh`, in the background (about 12 minutes per suite).
-2. **A Fable reviewer subagent** reads the diff together with the bash it replaces, looking for changed behaviour. The session fixes or answers each finding.
+2. **A reviewer subagent on Opus at high effort** (not Fable: the owner chose it for cost, 2026-11-26) reads the diff together with the bash it replaces, looking for changed behaviour. The session fixes or answers each finding.
 3. **A code review** (`/code-review` at high) reads the same diff. The session fixes or answers each finding.
 4. **CI** is green.
 5. **Code rules** (ground rule 8) hold for every file the PR adds or changes.

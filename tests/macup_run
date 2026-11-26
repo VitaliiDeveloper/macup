@@ -4,7 +4,9 @@
 #   MACUP_BUILD=swift               the Swift binary itself: MACUP_BIN, else .build/debug/macup
 #   MACUP_AT=<path>                 the copy installed at that path instead
 # These three are taken out of the environment before macup starts. exec: macup keeps this pid, so a test can signal it.
-here=$(cd "$(dirname "$0")/.." && pwd)
+self=$0   # the suites link this file into their fake bin folder: find the checkout through the link
+while [ -L "$self" ]; do l=$(readlink "$self"); case "$l" in /*) self=$l ;; *) self=$(dirname "$self")/$l ;; esac; done
+here=$(cd "$(dirname "$self")/.." && pwd)
 build=${MACUP_BUILD:-bash} at=${MACUP_AT:-} bin=${MACUP_BIN:-$here/.build/debug/macup}
 unset MACUP_BUILD MACUP_AT MACUP_BIN
 case "$build" in

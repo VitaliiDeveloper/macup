@@ -26,9 +26,15 @@ public extension Shell {
     /// `run`: the command with its output (both streams) at the end of the report, no input, stopped after the step limit
     /// with a warning that says so.
     func run(_ argv: [String], log: RunLog, output: Output) -> Int32 {
+        run(argv, log: log, output: output, beforeWarning: {})
+    }
+
+    /// `beforeWarning`: what has to stop writing to the terminal before the timeout warning (tick's step line).
+    private func run(_ argv: [String], log: RunLog, output: Output, beforeWarning: () -> Void) -> Int32 {
         let secs = log.runSeconds ?? log.stepSeconds
         log.append("$ " + argv.joined(separator: " ") + "\n")
         let rc = tl(secs, argv, stdin: .null, stdout: .file(log.raw), stderr: .stdout)
+        beforeWarning()
         if rc == 124 {
             log.append("macup: stopped after \(secs / 60) minutes: \(argv.joined(separator: " "))\n")
             output.warn("%s: stopped after %s minutes without finishing (step_timeout_minutes in %s)",
@@ -57,10 +63,10 @@ public extension Shell {
             } while done.wait(timeout: .now() + 1) == .timedOut
         }
         ticker.start()
-        let rc = run(argv, log: log, output: output)
-        done.signal()
-        while !ticker.isFinished { usleep(1000) }
-        return rc
+        return run(argv, log: log, output: output) {
+            done.signal()
+            while !ticker.isFinished { usleep(1000) }
+        }
     }
 
     private func lineCount(_ path: String) -> Int {

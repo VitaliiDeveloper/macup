@@ -74,9 +74,9 @@ public enum Tidy {
         guard newlines > keep * 2 else { return }
         let tail = lastLines(d, keep)
         guard let h = FileHandle(forWritingAtPath: path) else { return }
-        h.truncateFile(atOffset: 0)
-        h.write(tail)
-        h.closeFile()
+        try? h.truncate(atOffset: 0)
+        try? h.write(contentsOf: tail)
+        try? h.close()
     }
 
     /// `tail -n k`: a last line without a newline counts as a line.

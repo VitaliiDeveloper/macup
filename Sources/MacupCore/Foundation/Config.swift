@@ -168,9 +168,11 @@ public struct Settings {
 
     public init(config: Config, env: Env, cliSkip: String, cliOnly: String, cliEnable: String, cliLevel: Int?) {
         func nospace(_ s: String) -> String { String(s.unicodeScalars.filter { $0 != " " }) }
-        skip = ",\(nospace(config.value("skip", ""))),\(nospace(Bash.substitution(Bash.echo(cliSkip)))),"
-        enable = ",\(nospace(config.value("enable", ""))),\(nospace(Bash.substitution(Bash.echo(cliEnable)))),"
-        only = nospace(Bash.substitution(Bash.echo(cliOnly)))
+        // $(echo "$x" | tr -d ' '): the spaces go first, then $(…) drops the trailing newlines
+        func cli(_ s: String) -> String { Bash.substitution(nospace(Bash.echo(s))) }
+        skip = ",\(nospace(config.value("skip", ""))),\(cli(cliSkip)),"
+        enable = ",\(nospace(config.value("enable", ""))),\(cli(cliEnable)),"
+        only = cli(cliOnly)
         deviceSupportDays = Config.num(config.value("device_support_days", "90"), 90)
         keepReportsDays = Config.num(config.value("keep_reports_days", "30"), 30)
         keepReports = Config.num(config.value("keep_reports", "20"), 20)

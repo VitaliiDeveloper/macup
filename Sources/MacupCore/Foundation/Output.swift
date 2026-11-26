@@ -57,7 +57,7 @@ public final class Output {
     }
 
     public func md(_ s: String) {
-        body?.write(Data((s + "\n").utf8))
+        try? body?.write(contentsOf: Data((s + "\n").utf8))   // a report that cannot be written does not stop the run
     }
 
     public func beginSection(_ en: String) {

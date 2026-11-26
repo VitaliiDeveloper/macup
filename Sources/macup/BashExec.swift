@@ -18,10 +18,15 @@ enum BashExec {
 
     /// The script on a descriptor of its own, 10 or above: the script itself uses 3 and 4.
     private static func scriptDescriptor() -> Int32 {
-        let tmp = ProcessInfo.processInfo.environment["TMPDIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "/tmp"
-        var template = Array("\(tmp)/macup.XXXXXX".utf8CString)
-        let w = mkstemp(&template)
-        guard w >= 0 else { fail("cannot write a temporary file in \(tmp): \(String(cString: strerror(errno)))") }
+        // /tmp when TMPDIR cannot take it: the bash build runs its one-off commands without a temp folder
+        let dirs = [ProcessInfo.processInfo.environment["TMPDIR"].flatMap { $0.isEmpty ? nil : $0 }, "/tmp"].compactMap { $0 }
+        var template: [CChar] = []
+        var w: Int32 = -1
+        for d in dirs where w < 0 {
+            template = Array("\(d)/macup.XXXXXX".utf8CString)
+            w = mkstemp(&template)
+        }
+        guard w >= 0 else { fail("cannot write a temporary file in \(dirs.joined(separator: " or ")): \(String(cString: strerror(errno)))") }
         let path = String(cString: template)
         defer { unlink(path) }
         let data = Array(LegacyScript.text.utf8)

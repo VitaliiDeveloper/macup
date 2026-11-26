@@ -164,11 +164,12 @@ public final class Shell {
     private func notFound(_ argv: [String], stderr: Out) {
         let msg = "macup: \(argv.first ?? ""): command not found\n"
         switch stderr {
-        case .inherit, .stdout: FileHandle.standardError.write(Data(msg.utf8))
+        case .inherit, .stdout: _ = msg.withCString { write(2, $0, strlen($0)) }
         case .null: break
         case .fd(let f): _ = msg.withCString { write(f, $0, strlen($0)) }
         case .file(let p):
-            if let h = FileHandle(forWritingAtPath: p) { h.seekToEndOfFile(); h.write(Data(msg.utf8)); h.closeFile() }
+            let f = open(p, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+            if f >= 0 { _ = msg.withCString { write(f, $0, strlen($0)) }; close(f) }
         }
     }
 }

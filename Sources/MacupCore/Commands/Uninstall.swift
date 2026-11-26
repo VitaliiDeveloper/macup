@@ -44,16 +44,18 @@ enum Uninstall {
             return
         }
 
+        // rm as a tool: it goes on past what it cannot remove and says why, as bash's did
+        let remove = { (argv: [String], stderr: Shell.Out) in _ = context.shell.spawn(argv, stderr: stderr).map(Shell.wait) }
         if isFile(env.schedPlist) {
             let quiet = { (argv: [String]) -> Int32 in context.shell.spawn(argv, stderr: .null).map(Shell.wait) ?? 127 }
             if quiet(["launchctl", "bootout", "gui/\(getuid())/\(Env.schedLabel)"]) != 0 { _ = quiet(["launchctl", "unload", env.schedPlist]) }
-            unlink(env.schedPlist)
+            remove(["rm", "-f", env.schedPlist], .inherit)
         }
-        for dir in dirs { try? FileManager.default.removeItem(atPath: dir) }
+        for dir in dirs { remove(["rm", "-rf", dir], .inherit) }
         for entry in pathLines { removeInstallerLine(entry.rc, entry.line) }
-        for file in temporary { unlink(file) }
+        for file in temporary { remove(["rm", "-f", file], .inherit) }
         for file in programs {
-            unlink(file)
+            remove(["rm", "-f", file], .null)
             if access(file, F_OK) == 0 {
                 out.write(i18n.format("Couldn't remove %s, remove it yourself: sudo rm %s", paths.tildify(file), file) + "\n")
             }
@@ -70,7 +72,6 @@ enum Uninstall {
         out.write(i18n.translate("Removed.") + "\n")
     }
 
-    /// `[ -f ]`: a regular file, through symlinks.
     private static func isFile(_ path: String) -> Bool {
         var info = stat()
         return stat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG

@@ -35,7 +35,6 @@ public enum SelfPath {
         return String(cString: resolved)
     }
 
-    /// `dirname`.
     static func dirname(_ path: String) -> String {
         guard let slash = path.lastIndex(of: "/") else { return "." }
         return slash == path.startIndex ? "/" : String(path[..<slash])

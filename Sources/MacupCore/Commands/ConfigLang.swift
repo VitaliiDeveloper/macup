@@ -69,6 +69,5 @@ enum Terminal {
         return Bash.substitution(Bash.echo(String(decoding: Array(trimmed), as: UTF8.self)))
     }
 
-    /// y|Y|т|Т|д|Д
     static func isYes(_ answer: String) -> Bool { ["y", "Y", "т", "Т", "д", "Д"].contains(answer) }
 }

@@ -286,7 +286,7 @@ cmd-uninstall-yes|cmd_uninstall|TMPDIR=@H/tmp/|uninstall --yes
 cmd-uninstall-yes-self|cmd_uninstall_self|TMPDIR=@H/tmp/ MACUP_AT=@H/.local/bin/macup|uninstall --yes --no-color
 cmd-uninstall-yes-brew|cmd_uninstall_brew|TMPDIR=@H/tmp/ MACUP_AT=@H/brew/bin/macup|uninstall -y
 cmd-uninstall-asked-no|cmd_uninstall|TMPDIR=@H/tmp/ ANSWERS=n|uninstall|tty
-cmd-uninstall-asked-yes|cmd_uninstall|TMPDIR=@H/tmp/ ANSWERS=т|uninstall|tty
+cmd-uninstall-yes-asked|cmd_uninstall|TMPDIR=@H/tmp/ ANSWERS=т|uninstall|tty
 cmd-menu-help|||--no-color|pipe
 cmd-menu-check|cmd_history|ANSWERS=1|--only check.disk
 cmd-menu-default|cmd_history|ANSWERS=/|--only check.disk --no-color

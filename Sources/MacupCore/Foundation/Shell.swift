@@ -177,6 +177,17 @@ public final class Shell {
         return out + [root]
     }
 
+    // MARK: sudo
+
+    /// `sudo -n true`: a password is cached, so sudo would not ask.
+    public var sudoCached: Bool { tl(0, ["sudo", "-n", "true"], stderr: .null) == 0 }
+
+    /// `sudo -v -p prompt`: asks for the Mac password on the terminal; false when it was not given.
+    public func askSudo(_ prompt: String) -> Bool { tl(0, ["sudo", "-v", "-p", prompt]) == 0 }
+
+    /// `sudo -k`: forgets the cached password.
+    public func forgetSudo() { _ = tl(0, ["sudo", "-k"], stderr: .null) }
+
     private func notFound(_ argv: [String], stderr: Out) {
         let msg = "macup: \(argv.first ?? ""): command not found\n"
         switch stderr {

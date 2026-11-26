@@ -81,15 +81,15 @@ grep -q 'Xcode Archives: ' "$work/sizes.out" && pass "update shows Xcode Archive
 
 # --- grok: a check reads `grok update --check --json`; an install that brew or npm owns is left alone
 mkdir -p "$work/gbin"; printf '#!/bin/bash\nprintf "%%s" "$FAKE_GROK"\n' >"$work/gbin/grok"; chmod +x "$work/gbin/grok"
-grok_check(){ env HOME="$home" PATH="$work/gbin:$PATH" FAKE_GROK="$1" macup_run check --only update.grok --no-color </dev/null 2>&1; }
+grok_check(){ env MACUP_PATH=keep HOME="$home" PATH="$work/gbin:$PATH" FAKE_GROK="$1" macup_run check --only update.grok --no-color </dev/null 2>&1; }
 grok_check '{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"internal","error":null}' | grep -q 'Grok CLI: 1.0.70 → 1.0.77 available' && pass "grok: newer version shown" || fail "grok: newer version"
 grok_check '{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"brew","error":null}' | grep -q 'Grok' && fail "grok: brew install is not ours" || pass "grok: brew install left to brew"
 grok_check '{"currentVersion":"1.0.70","latestVersion":null,"installer":"internal","error":"offline"}' | grep -q 'Grok CLI: could not check' && pass "grok: failed check said" || fail "grok: failed check"
 
 # --- apps outside Homebrew: compared with the cached cask catalog (the download fails here, so the cache is used)
-printf '#!/bin/bash\nexit 1\n' >"$work/gbin/curl"; chmod +x "$work/gbin/curl"
+printf '#!/bin/bash\nexit 1\n' >"$work/gbin/curl"; chmod +x "$work/gbin/curl"; fakes "$work/gbin" brew   # brew list --cask: never the real one
 home="$work/apps"; mkdir -p "$home/.config/macup" "$home/Library/Caches/macup"; printf 'language = en\n' >"$home/.config/macup/config"
-apps_check(){ env HOME="$home" PATH="$work/gbin:$PATH" macup_run check --only update.apps --no-color </dev/null 2>&1; }
+apps_check(){ env MACUP_PATH=keep HOME="$home" PATH="$work/gbin:$PATH" macup_run check --only update.apps --no-color </dev/null 2>&1; }
 apps_check | grep -q 'Apps outside Homebrew and the App Store: could not check' && pass "apps: no catalog is said" || fail "apps: no catalog"
 for app in MacupOld:1.0 MacupNew:2.0 MacupMas:1.0 MacupTwin:1.0; do
   mkdir -p "$home/Applications/${app%:*}.app/Contents"

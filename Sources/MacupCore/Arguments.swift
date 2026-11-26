@@ -100,6 +100,7 @@ public struct Arguments: Equatable {
             index += 1
         }
         result.applyPick()
+        if result.action == nil, result.deep { result.dry = true }   // `macup --deep` alone is a deep check
         return result
     }
 

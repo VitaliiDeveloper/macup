@@ -129,7 +129,8 @@ final class OutputShellTests: XCTestCase {
         XCTAssertEqual(try String(contentsOfFile: dir + "/raw", encoding: .utf8), "$ /bin/sh -c echo out; echo err >&2; exit 2\nout\nerr\n")
         let short = RunLog(raw: dir + "/raw2", stepSeconds: 1)
         XCTAssertEqual(sh.run(["/bin/sleep", "30"], log: short, output: output), 124)
-        XCTAssertEqual(try String(contentsOfFile: dir + "/raw2", encoding: .utf8), "$ /bin/sleep 30\nmacup: stopped after 0 minutes: /bin/sleep 30\n")
+        XCTAssertEqual(try String(contentsOfFile: dir + "/raw2", encoding: .utf8), "$ /bin/sleep 30\nTerminated: 15\nmacup: stopped after 0 minutes: /bin/sleep 30\n",
+                       "bash, waiting for the stopped step, says how it ended")
         XCTAssertEqual(output.warnings, ["/bin/sleep: stopped after 0 minutes without finishing (step_timeout_minutes in ~/.config/macup/config)"])
     }
 

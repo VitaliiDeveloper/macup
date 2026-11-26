@@ -20,23 +20,11 @@ bash_only(){ [ "$MACUP_BUILD" = bash ] && return 0; echo "SKIP $* (bash build on
 # shellcheck disable=SC2034  # read by tests/cases/*.sh
 quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.go_mod,clean.sim_unavailable,clean.quicklook,clean.docker,clean.docker_images,clean.docker_containers,clean.brew_autoremove,check.*'
 
-# `running` asks pgrep which apps are open; a fake one answers from FAKE_RUNNING (command lines, one per line), so results never depend on this machine
-mkdir -p "$work/bin"; cat >"$work/bin/pgrep" <<'FAKE'
-#!/bin/bash
-[ "$1" = "-x" ] && { printf '%s\n' "${FAKE_PROCS:-}" | grep -qx -- "$2"; exit; }
-[ "$1" = "-f" ] && [ -n "$2" ] && printf '%s\n' "${FAKE_RUNNING:-}" | grep -qE -- "$2"
-FAKE
-# `lsof` tells which app folders have open files: a fake one lists FAKE_OPEN paths (one per line), or fails with FAKE_LSOF_FAIL
-cat >"$work/bin/lsof" <<'FAKE'
-#!/bin/bash
-[ -n "$FAKE_LSOF_FAIL" ] && exit 1
-printf 'p1\nc%s\nn/\n' "${FAKE_LSOF_CMD:-SomeApp}"; printf '%s\n' "${FAKE_OPEN:-}" | sed '/^$/d; s/^/n/'
-FAKE
-# launchctl and osascript only record what macup asked for: no test loads a LaunchAgent or shows a notification
-# (print-disabled is a question, not a change: it answers from FAKE_SHARING and is not recorded)
-for tool in launchctl osascript; do printf '#!/bin/bash\n[ "$1" = print-disabled ] && { printf "%%s\\n" "${FAKE_SHARING:-}"; exit 0; }\necho "$*" >>"$HOME/%s.log"\n' "$tool" >"$work/bin/$tool"; done
+# shellcheck source=tests/fakes.sh
+. tests/fakes.sh
+fakes "$work/bin" pgrep lsof launchctl osascript
 ln -s "$PWD/tests/macup_run" "$work/bin/macup_run"
-chmod +x "$work/bin/pgrep" "$work/bin/lsof" "$work/bin/launchctl" "$work/bin/osascript"; export PATH="$work/bin:$PATH"
+export PATH="$work/bin:$PATH"
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local home=$1; shift; tests/fixture.sh "$home"; (cd "$home" && find . \( -type f -o -type l \) | sort) >"$home.b"
   env HOME="$home" macup_run "$@" </dev/null >"$home.out" 2>&1

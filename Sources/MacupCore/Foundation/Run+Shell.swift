@@ -33,7 +33,12 @@ public extension Shell {
     private func run(_ argv: [String], log: RunLog, output: Output, beforeWarning: () -> Void) -> Int32 {
         let secs = log.runSeconds ?? log.stepSeconds
         log.append("$ " + argv.joined(separator: " ") + "\n")
-        let rc = tl(secs, argv, stdin: .null, stdout: .file(log.raw), stderr: .stdout)
+        let result = timed(secs, argv, stdin: .null, stdout: .file(log.raw), stderr: .stdout)
+        // bash, which waits for the tool with its own output in the report, says what signal ended it
+        if let signal = result.signal, signal != SIGINT, signal != SIGPIPE {
+            log.append(String(cString: strsignal(signal)) + "\n")
+        }
+        let rc = result.stopped ? 124 : result.status
         beforeWarning()
         if rc == 124 {
             log.append("macup: stopped after \(secs / 60) minutes: \(argv.joined(separator: " "))\n")

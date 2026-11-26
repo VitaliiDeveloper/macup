@@ -1,3 +1,3 @@
 extension Ported {
-    static let checks = Unit(commands: [], tasks: [])
+    static let checks = Unit(commands: [], tasks: ["check.disk"])
 }

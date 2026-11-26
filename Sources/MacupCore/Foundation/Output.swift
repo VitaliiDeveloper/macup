@@ -48,6 +48,7 @@ public final class Output {
     }
 
     public func write(_ text: String) {
+        Interrupt.check()
         var rest = Data(text.utf8)
         while !rest.isEmpty {
             let written = rest.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }

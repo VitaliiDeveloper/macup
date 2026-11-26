@@ -40,6 +40,13 @@ final class LeftoversTests: XCTestCase {
         }
     }
 
+    func testNameOKIsBash() throws {
+        let names = ["mac helper", "app", "helper app", "comet", "", "data cache", "cache"]
+        let bash = try BashOracle.run(names.map { "name_ok \(BashOracle.quoted($0)) && echo yes || echo no" }, prelude: prelude + "LO_NAMES=comet\nLO_APPLE=\n")
+        let lookup = Leftovers.Names(apps: [Array("comet".utf8)], apple: [])
+        for (name, answer) in zip(names, bash) { XCTAssertEqual(Leftovers.nameOK(lookup, name) ? "yes" : "no", answer, name) }
+    }
+
     func testOuterIsBash() throws {
         let lists = ["/a/b\n/a\n/a b/c\n/a/b/c", "\n/x/y/\n/x/y\n/x", "/a/b/../c\n/a/bb\n/a/b", "/Ä/x\n/A/x\n/a"]
         let bash = try BashOracle.run(lists.map { "outer \(BashOracle.quoted($0))" }, prelude: prelude)
@@ -51,14 +58,20 @@ final class LeftoversTests: XCTestCase {
         try """
         <?xml version="1.0"?><plist version="1.0"><dict><key>A</key><real>3600</real><key>B</key><true/><key>C</key><integer>3600</integer>\
         <key>D</key><dict/><key>E</key><array><string>x/y</string><string>z,w</string></array><key>F</key><string>a/b"c</string>\
-        <key>G</key><string></string><key>H</key><false/><key>AssociatedBundleIdentifiers</key><array><string>com.A.b</string><string>org.x</string></array></dict></plist>
+        <key>G</key><string></string><key>H</key><false/><key>I</key><dict><key>b</key><true/><key>C</key><true/><key>_x</key><true/></dict>\
+        <key>J</key><date>2020-01-01T00:00:00Z</date><key>K</key><data>AAEC</data>\
+        <key>AssociatedBundleIdentifiers</key><array><string>com.A.b</string><string>a"b/c\\d</string><integer>5</integer><true/><array><string>n</string></array></array></dict></plist>
         """.write(toFile: file, atomically: true, encoding: .utf8)
-        let keys = ["A", "B", "C", "D", "E", "F", "E.0", "E.1", "E.2", "G", "H", "Z", "F.x", "AssociatedBundleIdentifiers"]
+        let keys = ["A", "B", "C", "D", "E", "F", "E.0", "E.1", "E.2", "G", "H", "I", "J", "K", "Z", "F.x", "AssociatedBundleIdentifiers"]
         let bash = try BashOracle.run(keys.map { "pl \($0) \(BashOracle.quoted(file)) || echo NONE" } + ["assoc_ids \(BashOracle.quoted(file))"], prelude: prelude)
         let root = Leftovers.plist(file)
         for (key, answer) in zip(keys, bash) { XCTAssertEqual(Leftovers.raw(root, key) ?? "NONE", answer, key) }
         XCTAssertEqual(Leftovers.associatedIDs(root).joined(separator: "\n"), bash.last)
         XCTAssertNil(Leftovers.plist(home + "/.config/macup/config"), "not a plist: what plutil -lint refuses")
+        let dated = home + "/dated.plist"
+        try "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>AssociatedBundleIdentifiers</key><array><string>com.x</string><date>2020-01-01T00:00:00Z</date></array></dict></plist>"
+            .write(toFile: dated, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Leftovers.associatedIDs(Leftovers.plist(dated)).joined(separator: "\n"), try BashOracle.run(["assoc_ids \(BashOracle.quoted(dated))"], prelude: prelude)[0])
     }
 
     func testOwnFolderIsBash() throws {

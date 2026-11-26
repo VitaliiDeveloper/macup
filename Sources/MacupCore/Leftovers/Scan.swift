@@ -5,7 +5,6 @@ import Foundation
 /// leaves it registered and its program intact. The owner is found by signing team, then by bundle-id vendor; a vendor
 /// that does not match is a miss, not a removal.
 extension Leftovers {
-    /// `apps_scan`: every installed app's bundle id (lowercase) and path.
     static func scanApps(_ run: Run, _ state: State) {
         state.apps = run.env.apps.split(separator: ":", omittingEmptySubsequences: false).map(String.init).filter(Run.isDirectory).flatMap { root in
             find(run, [root, "-maxdepth", "3", "-type", "d", "-name", "*.app", "-prune"]).lines.compactMap { path -> App? in
@@ -48,15 +47,14 @@ extension Leftovers {
     /// `in_owner_place`: places an app keeps its own helpers; /opt/homebrew, ~/.local and scripts are never judged by owner.
     static func inOwnerPlace(_ run: Run, program: String, label: String) -> Bool {
         let home = run.env.home
-        if fnmatch("*/*.app/*", program, 0) == 0 || program.hasPrefix("\(home)/Library/Application Support/")
-            || program.hasPrefix("\(run.env.sysLib)/Application Support/") { return true }
-        guard program.hasPrefix("\(home)/Library/") else { return false }
-        let rest = program.dropFirst(home.count + 9)
+        if fnmatch("*/*.app/*", program, 0) == 0 || startsWith(program, "\(home)/Library/Application Support/")
+            || startsWith(program, "\(run.env.sysLib)/Application Support/") { return true }
+        guard startsWith(program, "\(home)/Library/") else { return false }
+        let rest = String(decoding: program.utf8.dropFirst(home.utf8.count + 9), as: UTF8.self)
         let folder = lc(String(rest.prefix { $0 != "/" }))
         return lc(label).split(separator: ".", omittingEmptySubsequences: false).contains { same(String($0), folder) }
     }
 
-    /// The launch agents and daemons a glob finds, in bash's order.
     static func startupFiles(_ run: Run) -> [String] {
         let sys = run.env.sysLib
         return glob("\(run.env.home)/Library/LaunchAgents", "*.plist") + glob("\(sys)/LaunchAgents", "*.plist") + glob("\(sys)/LaunchDaemons", "*.plist")
@@ -67,7 +65,6 @@ extension Leftovers {
         return name.hasSuffix(".plist") ? String(name.dropLast(6)) : name
     }
 
-    /// `leftovers_scan`, once per run.
     static func scan(_ run: Run, _ state: State) {
         guard !state.scanned else { return }
         state.scanned = true
@@ -76,7 +73,7 @@ extension Leftovers {
             guard isFile(file), !Run.isSymlink(file) else { continue }
             let base = plistName(file)
             if base.hasPrefix("com.apple.") || base == Env.schedLabel { continue }
-            let system = file.hasPrefix(run.env.sysLib + "/")
+            let system = startsWith(file, run.env.sysLib + "/")
             func add(_ label: String, _ program: String, _ reason: Orphan.Reason, _ vendor: String, _ signer: String = "") {
                 state.orphans.append(Orphan(plist: file, label: label, program: program, reason: reason, system: system, vendor: vendor,
                                             name: signer.isEmpty ? capitalized(lastComponent(vendor)) : signer))
@@ -115,7 +112,6 @@ extension Leftovers {
         return Awk.upper(String(first)) + String(String.UnicodeScalarView(text.unicodeScalars.dropFirst()))
     }
 
-    /// The uchg flag `stat -f %Sf` shows.
     static func locked(_ file: String) -> Bool {
         var info = stat()
         return lstat(file, &info) == 0 && info.st_flags & UInt32(UF_IMMUTABLE) != 0

@@ -12,7 +12,6 @@ extension Leftovers {
         public let system: Bool
         public let vendor: String
         public var name: String
-        /// O_DIR: the program's own folder, set when the entry becomes a candidate.
         public var folder = ""
     }
 
@@ -38,7 +37,6 @@ extension Leftovers {
         public internal(set) var data: [AppData] = []
         /// O_ALLOW: the only paths a picked leftover may move to the Trash.
         public internal(set) var allow = ""
-        /// LO_TTY: questions can be asked, so system items and containers are offered.
         public let interactive: Bool
 
         init(interactive: Bool) { self.interactive = interactive }
@@ -61,7 +59,6 @@ extension Leftovers {
         }))
     }
 
-    /// What `plutil -lint` accepts, parsed; nil when it does not.
     static func plist(_ file: String) -> Any? {
         guard let data = FileManager.default.contents(atPath: file) else { return nil }
         return try? PropertyListSerialization.propertyList(from: data, format: nil)
@@ -103,7 +100,6 @@ extension Leftovers {
 
     static func holds(_ text: String, _ part: String) -> Bool { Data(text.utf8).range(of: Data(part.utf8)) != nil }
 
-    /// `codesign -dv --verbose=2 <path> 2>&1`, one line each.
     static func codesign(_ run: Run, _ path: String) -> [String] {
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { return [] }
@@ -116,7 +112,6 @@ extension Leftovers {
         return Bash.lines(String(decoding: data, as: UTF8.self))
     }
 
-    /// `team_of`: the signing team, empty when unsigned.
     static func teamOf(_ run: Run, _ path: String) -> String {
         codesign(run, path).lazy.filter { $0.hasPrefix("TeamIdentifier=") }.map { String($0.dropFirst(15)) }.first { $0 != "not set" } ?? ""
     }
@@ -124,7 +119,6 @@ extension Leftovers {
     private static let authority = try! NSRegularExpression(pattern: "^Authority=Developer ID Application: (.*) \\([A-Z0-9]*\\)$")
     private static let company = try! NSRegularExpression(pattern: ",? (Inc\\.?|LLC|Ltd\\.?)$")
 
-    /// `signer_of`: the developer's name from the signature, without Inc, LLC or Ltd.
     static func signerOf(_ run: Run, _ path: String) -> String {
         for line in codesign(run, path) {
             let range = NSRange(location: 0, length: (line as NSString).length)
@@ -135,13 +129,11 @@ extension Leftovers {
         return ""
     }
 
-    /// `find <args>` as a tool: its lines and exit status.
     static func find(_ run: Run, _ arguments: [String]) -> (status: Int32, lines: [String]) {
         let result = run.shell.capture(["find"] + arguments)
         return (result.status, Bash.lines(result.output).filter { !$0.isEmpty })
     }
 
-    /// `[ -e ]`, `[ -f ]`: the path or what its symlink points at.
     static func exists(_ path: String) -> Bool {
         var info = stat()
         return !path.isEmpty && stat(path, &info) == 0

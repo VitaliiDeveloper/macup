@@ -10,20 +10,18 @@ extension Leftovers {
                                     "spelling", "spotlight", "suggestions", "translation", "trial", "weather", "webkit"]
     static let genericWords = " app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
 
-    /// What a folder name is checked against: the installed apps' names and Apple's own.
     struct Names {
         let apps: Set<[UInt8]>
         let apple: Set<[UInt8]>
     }
 
-    /// `data_cands`.
     static func registerData(_ run: Run, _ state: State) {
         let names = Names(apps: Set(appNames(state).map { Array($0.utf8) }), apple: Set(appleNames(run).map { Array($0.utf8) }))
         let vendors = sortedUnique(state.orphans.filter { $0.reason != .broken && !$0.vendor.isEmpty }.map { ($0.vendor, $0.name) }, key: \.0)
         let i18n = run.out.i18n
         for (vendor, name) in vendors where !vendorInstalled(state, vendor) {
-            var seen = Set<String>()
-            let found = dataPaths(run, state, names, vendor).filter { seen.insert($0).inserted }
+            var seen = Set<[UInt8]>()
+            let found = dataPaths(run, state, names, vendor).filter { seen.insert(Array($0.utf8)).inserted }
             guard !found.isEmpty else { continue }
             let paths = found.joined(separator: "\n")
             let index = state.data.count
@@ -45,7 +43,6 @@ extension Leftovers {
         }
     }
 
-    /// `data_paths`.
     static func dataPaths(_ run: Run, _ state: State, _ names: Names, _ vendor: String) -> [String] {
         let library = "\(run.env.home)/Library", support = "\(library)/Application Support"
         var paths: [String] = [], ids: [String] = []
@@ -77,7 +74,6 @@ extension Leftovers {
         return paths
     }
 
-    /// `app_names`.
     static func appNames(_ state: State) -> Set<String> {
         Set(state.apps.flatMap { app -> [String] in
             let file = basename(app.path)
@@ -98,17 +94,15 @@ extension Leftovers {
         return names
     }
 
-    /// `name_ok`: a folder named like this may belong to the deleted app, not to another app or to macOS.
     static func nameOK(_ names: Names, _ name: String) -> Bool {
         !name.isEmpty && !holds(genericWords, " \(name) ") && !names.apps.contains(Array(name.utf8)) && !names.apple.contains(Array(name.utf8))
     }
 
-    /// `by_name`: entries of a folder named like this, ignoring case, unless an installed app keeps files there.
     static func byName(_ run: Run, _ state: State, _ names: Names, _ folder: String, _ name: String) -> [String] {
         glob(folder, "*").filter { exists($0) && !Run.isSymlink($0) && same(lc(basename($0)), name) && !held(run, state, names, $0) }
     }
 
-    /// `held`: a name inside the folder is an installed app's bundle id or app name, or the folder cannot all be read.
+    /// A folder that cannot all be read counts as held.
     static func held(_ run: Run, _ state: State, _ names: Names, _ folder: String) -> Bool {
         let listing = find(run, [folder, "-maxdepth", "3"])
         guard listing.status == 0 else { return true }

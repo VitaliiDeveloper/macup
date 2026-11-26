@@ -1,10 +1,8 @@
 import Darwin
 import Foundation
 
-/// Background programs of deleted apps and their data (clean.orphan_agents, clean.orphan_data), and the startup section.
 /// What is registered here is cleaned only when a person picks it; moving it to the Trash comes with the pick (phase 3).
 public enum Leftovers {
-    /// `leftovers_cands`.
     static func registerCandidates(_ run: Run) {
         guard run.taskAllowed("clean.orphan_agents") || run.taskAllowed("clean.orphan_data") else { return }
         let state = state(run)
@@ -37,13 +35,11 @@ public enum Leftovers {
         run.candidates.list[last].leftoverPaths = orphan.plist + (folder.isEmpty ? "" : "\n" + folder)
     }
 
-    /// `lo_total`: every leftover entry together, each folder once.
     static func total(_ run: Run) -> Int64 {
         let paths = run.candidates.list.filter { $0.task.hasPrefix("clean.orphan_") }.map { $0.leftoverPaths + "\n" }.joined()
         return run.kbl(outer(paths))
     }
 
-    /// `outer`: the paths without those inside another one of them.
     static func outer(_ paths: String) -> String {
         let sorted = Set(Bash.lines(paths).filter { !$0.isEmpty }).sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
         var kept = Set<String>(), out: [String] = []
@@ -59,7 +55,6 @@ public enum Leftovers {
         return out.joined(separator: "\n")
     }
 
-    /// `lo_kind`: a short name of what it is.
     static func kind(_ run: Run, _ orphan: Orphan) -> String { run.out.i18n.translate(kindKey(orphan)) }
 
     private static func kindKey(_ orphan: Orphan) -> String {
@@ -69,7 +64,6 @@ public enum Leftovers {
         return text.contains("update") || text.contains("keystone") ? "update program" : "background program"
     }
 
-    /// `lo_info`: the What, Why and Safe lines.
     static func about(_ run: Run, _ orphan: Orphan) -> [String] {
         let i18n = run.out.i18n
         var lines: [String] = []
@@ -90,12 +84,10 @@ public enum Leftovers {
         return lines
     }
 
-    /// `lo_dir`: the program's own folder one level below the vendor's (…/Application Support/Perplexity/CometUpdater);
-    /// empty when there is none.
     static func ownFolder(_ run: Run, _ program: String) -> String {
         let home = run.env.home
-        for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where program.hasPrefix(base + "/") {
-            let rest = program.dropFirst(base.count + 1)
+        for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where startsWith(program, base + "/") {
+            let rest = String(decoding: program.utf8.dropFirst(base.utf8.count + 1), as: UTF8.self)
             guard rest.filter({ $0 == "/" }).count >= 2 else { return "" }   // right in the vendor folder: that folder may hold other data
             let parts = rest.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
             let vendorFolder = "\(base)/\(parts[0])", folder = "\(vendorFolder)/\(parts[1])"
@@ -108,13 +100,11 @@ public enum Leftovers {
         orphan.plist.contains("/LaunchDaemons/") ? "system" : "gui/\(getuid())"
     }
 
-    /// `lo_helper`: a system service's privileged helper.
     static func helper(_ run: Run, _ orphan: Orphan) -> String {
         let path = "\(run.env.sysLib)/PrivilegedHelperTools/\(orphan.label)"
         return orphan.system && !orphan.label.isEmpty && isFile(path) && !Run.isSymlink(path) ? path : ""
     }
 
-    /// `sudo_cmds`: what removing a system item runs.
     static func sudoCommands(_ run: Run, _ orphan: Orphan) -> [String] {
         var lines: [String] = []
         if !orphan.label.isEmpty { lines.append("sudo launchctl bootout \(domain(orphan))/\(orphan.label)") }
@@ -128,7 +118,6 @@ public enum Leftovers {
         orphan.reason == .missing || (orphan.reason == .gone && !teamOf(run, orphan.program).isEmpty)
     }
 
-    /// The startup section of report.sh.
     static func startup(_ run: Run) {
         guard run.task("check.startup") else { return }
         let out = run.out

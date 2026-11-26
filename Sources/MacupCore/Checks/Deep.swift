@@ -9,9 +9,9 @@ extension Checks {
         out.beginSection("Deep scan")
         out.step("Measuring your home folder (can take a few minutes)")
         out.info("Largest folders in your home:")
-        for (size, path) in largest(run, glob(home, "*") + glob(home, ".[!.]*"), 12) { out.sub("\(Size.hum(size))  \(paths.tildify(path))") }
+        for (size, path) in largest(run, Names.glob(home, "*") + Names.glob(home, ".[!.]*"), 12) { out.sub("\(Size.hum(size))  \(paths.tildify(path))") }
         out.info("Largest folders in Application Support (mostly app data, not caches):")
-        for (size, path) in largest(run, glob(home + "/Library/Application Support", "*"), 10) {
+        for (size, path) in largest(run, Names.glob(home + "/Library/Application Support", "*"), 10) {
             out.sub("\(Size.hum(size))  \(path.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? path)")
         }
         downloads(run)

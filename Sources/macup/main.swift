@@ -11,6 +11,7 @@ do {
     FileHandle.standardError.write(Data((Env.Failure.noHome.message + "\n").utf8))
     exit(1)
 }
+Names.setLocale(env)
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()

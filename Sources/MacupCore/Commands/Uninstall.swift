@@ -87,7 +87,7 @@ enum Uninstall {
 
     /// Up to three other names in the folder, as `"$dir"/* "$dir"/.[!.]*` lists them, joined with ", ".
     private static func neighbours(_ dir: String) -> String {
-        let names = (Checks.glob(dir, "*") + Checks.glob(dir, ".[!.]*")).map { String($0.dropFirst(dir.count + 1)) }
+        let names = (Names.glob(dir, "*") + Names.glob(dir, ".[!.]*")).map { String($0.dropFirst(dir.count + 1)) }
         return names.filter { $0 != "macup" }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
     }
 

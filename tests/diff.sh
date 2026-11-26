@@ -412,6 +412,23 @@ jb-clean-open|jb|$jb_deep|clean --level standard --only clean.jetbrains
 jb-clean-lsof-fails|jb|FAKE_LSOF_FAIL=1|clean --level standard --only clean.jetbrains
 jb-clean-no-lsof|jb|PATH=$work/nolsof:/usr/bin:/bin|clean --level standard --only clean.jetbrains"
 
+# names in the locale's order: the report tidy-up (ls -r) and bash's globs, in UTF-8 and in C
+CASES="$CASES"'
+names-tidy-utf8|names_tidy|LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=|check --only check.disk|pipe
+names-tidy-c|names_tidy|LC_ALL=C|check --only check.disk|pipe
+names-glob-utf8|names_glob|TMPDIR=@H/tmp/ LANG=en_US.UTF-8 LC_ALL= LC_COLLATE= ANSWERS=n|uninstall|tty
+names-glob-uk|names_glob|TMPDIR=@H/tmp/ LANG=uk_UA.UTF-8 LC_ALL= LC_COLLATE= ANSWERS=n|uninstall|tty
+names-glob-c|names_glob|TMPDIR=@H/tmp/ LC_ALL=C ANSWERS=n|uninstall|tty'
+# two reports from the same second, keep_reports = 2: the tidy-up keeps the first ls -r lists. They are links, which the
+# files list shows even in the log folder
+fix_names_tidy(){ local log="$1/Library/Logs/macup" name; mkdir -p "$log" "$1/kept" "$1/.config/macup"; printf 'keep_reports = 2\n' >"$1/.config/macup/config"
+  for name in macup_2026-11-01_10-00-00.md macup_2026-11-01_10-00-00_4242.md; do echo "# $name" >"$1/kept/$name"; ln -s "../../../kept/$name" "$log/$name"; done; }
+# uninstall shows the first three other names in each PATH folder: strcoll ties Cyrillic names, and e with a decomposed é
+# (as Finder writes it), so bash's qsort decides their order
+fix_names_glob(){ local name; fix_cmd_uninstall "$1"
+  for name in ärger Éclair Zed "$(printf 'e\314\201')" e; do : >"$1/.local/bin/$name"; done
+  for name in Їжак яблуко Дім ґанок; do : >"$1/.npm-global/bin/$name"; done; }
+
 # what may differ between two runs: dates and times, durations, report names, temporary paths, pids; on a terminal the
 # transient step and tick lines, and the extra \r a terminal adds to a newline when a long write fills it; the script's name
 # in bash's own diagnostics (the Swift build runs it as /dev/fd/N)
@@ -427,6 +444,12 @@ norm(){ # file home
     s/\bpid \d+/pid N/g;
     s{^(?:/dev/fd/\d+|\S*macup): line (\d+): }{macup: line $1: }mg;
   ' "$1" | sed "s|$2|HOME|g"
+}
+
+# a run that printed the harness's own error (script, env, perl, macup_run, bash unable to open the build) compared nothing:
+# script on macOS 27 once failed every terminal run that way, the same for both builds
+harness_error(){ # output-file
+  grep -aE '^(script|env|perl|/bin/bash|[^[:space:]]*macup_run|[^[:space:]]*diff\.sh)(: line [0-9]+)?: ' "$1" | head -1
 }
 
 type_answers(){ # a/b output-file done-file
@@ -482,9 +505,12 @@ while IFS='|' read -r name fix envs args modes <&3; do
       run swift "$lang" "$tty" "$fix" "$envs" $args
       bad=""
       for kind in out rc report files; do cmp -s "$work/bash.$kind" "$work/swift.$kind" || bad="$bad $kind"; done
+      for build in bash swift; do error=$(harness_error "$work/$build.out"); [ -z "$error" ] || bad="$bad harness:$build"; done
       if [ -z "$bad" ]; then echo "SAME $name $lang $tty"
       else failed=1; echo "DIFF $name $lang $tty:$bad"
-        for kind in $bad; do diff "$work/bash.$kind" "$work/swift.$kind" | head -10 | sed 's/^/    /'; done
+        for kind in $bad; do
+          case "$kind" in harness:*) harness_error "$work/${kind#harness:}.out" ;; *) diff "$work/bash.$kind" "$work/swift.$kind" | head -10 ;; esac | sed 's/^/    /'
+        done
       fi
     done
   done

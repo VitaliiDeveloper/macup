@@ -9,5 +9,6 @@ enum Cleaners {
         for row in CacheTables.folders where row.tool.isEmpty || run.shell.have(row.tool) {
             Cleanup.registerFolder(run, task: row.task, level: row.level, label: row.label, path: paths.expand(row.folder), busy: row.busy)
         }
+        jetbrains(run)
     }
 }

@@ -74,7 +74,7 @@ public enum OneOff {
         return 0
     }
 
-    /// A tool in the foreground, with macup's terminal; its exit status, 127 when it is not there.
+    /// 127 and bash's message when the tool is not there.
     static func runTool(_ argv: [String], _ shell: Shell) -> Int32 {
         guard let pid = shell.spawn(argv) else {
             Shell.writeText("macup: \(argv.first ?? ""): command not found\n", to: 2)

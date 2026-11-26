@@ -260,9 +260,11 @@ cmd-last-none|||last
 cmd-last|cmd_reports||last
 cmd-last-uncut|cmd_reports_uk||last
 cmd-last-empty|reports||last
+cmd-last-utf8|cmd_reports_uk|LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=|last
 cmd-reports|cmd_reports||reports
 cmd-reports-none|||reports
 cmd-reports-json|cmd_reports||reports --json
+cmd-reports-json-utf8|cmd_reports|LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=|reports --json
 cmd-reports-json-none|||--json reports
 cmd-reports-kept|cmd_reports_kept||reports
 cmd-reports-latin1|cmd_reports_latin1|MACUP_LANG=|reports
@@ -295,6 +297,7 @@ cmd-newer-no-repo|cmd_remote_newer|MACUP_REPO=__REPO__|check --only check.self_u
 cmd-newer-skipped|cmd_remote_newer||check --only check.disk
 cmd-uninstall-nothing|cmd_tmp|TMPDIR=@H/tmp/|uninstall
 cmd-uninstall-yes|cmd_uninstall|TMPDIR=@H/tmp/|uninstall --yes
+cmd-uninstall-yes-utf8|cmd_uninstall|TMPDIR=@H/tmp/ LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=|uninstall --yes
 cmd-uninstall-yes-self|cmd_uninstall_self|TMPDIR=@H/tmp/ MACUP_AT=@H/.local/bin/macup|uninstall --yes --no-color
 cmd-uninstall-yes-brew|cmd_uninstall_brew|TMPDIR=@H/tmp/ MACUP_AT=@H/brew/bin/macup|uninstall -y
 cmd-uninstall-asked-no|cmd_uninstall|TMPDIR=@H/tmp/ ANSWERS=n|uninstall|tty
@@ -324,7 +327,7 @@ fix_cmd_history_flat(){ local state="$1/Library/Application Support/macup" day; 
 fix_cmd_reports(){ local log="$1/Library/Logs/macup"; mkdir -p "$log"
   printf '# macup report — 2026-11-01 10:00\n\nMode: check · macup 2.9.2 · took 0m 5s\n\n## System\n\n✓ fine\n\n## Command output\n\n~~~~\n==> brew\n~~~~\n' >"$log/macup_2026-11-01_10-00-00.md"
   printf '# Звіт macup — 2026-11-02 11:30\n\nРежим: all+deep · macup 2.9.2 · took 1m 0s\n\n## Система\n' >"$log/macup_2026-11-02_11-30-00.md"
-  printf 'no header\n' >"$log/macup_2026-11-03_09-15-00_4242.md"; blob "$log/blobs" 16; mv "$log/blobs/blob" "$log/macup_2026-11-01_10-00-00.log"
+  printf 'no header\n' | tee "$log/macup_2026-11-03_09-15-00.md" "$log/macup_2026-11-03_09-15-00-x.md" >"$log/macup_2026-11-03_09-15-00_4242.md"; blob "$log/blobs" 16; mv "$log/blobs/blob" "$log/macup_2026-11-01_10-00-00.log"
   : >"$log/schedule.log"; touch -t 202611031000 "$log"/macup_2026-11-0[13]*; touch -t 202611021130 "$log/macup_2026-11-02_11-30-00.md"; }
 fix_cmd_reports_uk(){ fix_cmd_reports "$1"; touch -t 202611011000 "$1/Library/Logs/macup"/macup_2026-11-0[13]*; }
 fix_cmd_reports_kept(){ fix_cmd_reports "$1"; mkdir -p "$1/.config/macup"; printf 'keep_reports_days = 007\nkeep_reports = 0\n' >"$1/.config/macup/config"; }
@@ -343,7 +346,7 @@ fix_cmd_stamp_stale(){ fix_cmd_stamp_fresh "$1"; touch -t 202001010000 "$1/Libra
 fix_cmd_uninstall(){ local home=$1
   mkdir -p "$home/tmp" "$home/.local/bin" "$home/.npm-global/bin" "$home/.config/macup" "$home/Library/Logs/macup" "$home/Library/Application Support/macup" \
     "$home/Library/Caches/macup" "$home/Library/LaunchAgents"
-  printf '#!/bin/bash\n# macup\nMACUP_VERSION="2.9.0"\n' | tee "$home/.local/bin/macup" >"$home/.npm-global/bin/macup"; : >"$home/.npm-global/bin/other"; printf 'language = en\n' >"$home/.config/macup/config"
+  printf '#!/bin/bash\n# macup\nMACUP_VERSION="2.9.0"\n' | tee "$home/.local/bin/macup" >"$home/.npm-global/bin/macup"; : >"$home/.npm-global/bin/other"; : >"$home/.npm-global/bin/_under"; : >"$home/.npm-global/bin/#x"; : >"$home/.npm-global/bin/Beta"; printf 'language = en\n' >"$home/.config/macup/config"
   blob "$home/Library/Logs/macup" 40; echo h >"$home/Library/Application Support/macup/history.csv"; : >"$home/Library/Caches/macup/cask.json"
   printf 'alias ll=ls\n\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\nexport EDITOR=vim' >"$home/.zshrc"
   printf '# macup\nexport PATH="$HOME/.npm-global/bin:$PATH"\n' >"$home/.bash_profile"
@@ -379,14 +382,20 @@ norm(){ # file home
 }
 
 type_answers(){ # a/b output-file done-file
-  local answer list=() size=0
+  local answer list=() size=0 now end=$((SECONDS + 300))   # past the end the input closes: a question too many reads nothing
   IFS=/ read -ra list <<<"$1"
   for answer in ${list[@]+"${list[@]}"}; do
-    # typed once the output has grown since the last answer (its echo) and ends with a question: "[y/N] ", "Choose [1]: ", "[1]:"
-    until [ -e "$3" ] || { [ "$(wc -c <"$2")" -gt "$size" ] && tail -c 2 "$2" | grep -qE '[]:] ?$'; }; do sleep 0.1; done
-    size=$(wc -c <"$2"); printf '%s\n' "$answer"   # measured while macup waits: a fast build answers before a later wc
+    # typed once the output has grown since the last answer (its echo), ends with a question ("[y/N] ", "Choose [1]: ", "[1]:")
+    # and stays so for a moment: bash writes "removes:" and its newline apart
+    while :; do
+      { [ -e "$3" ] || [ $SECONDS -gt $end ]; } && return
+      now=$(wc -c <"$2")
+      if [ "$now" -gt "$size" ] && tail -c 2 "$2" | grep -qE '[]:] ?$'; then sleep 0.3; [ "$(wc -c <"$2")" = "$now" ] && break
+      else sleep 0.1; fi
+    done
+    size=$now; printf '%s\n' "$answer"
   done
-  until [ -e "$3" ] || [ ! -d "${3%/*}" ]; do sleep 0.1; done   # the work folder goes when diff.sh ends
+  until [ -e "$3" ] || [ ! -d "${3%/*}" ] || [ $SECONDS -gt $end ]; do sleep 0.1; done   # the work folder goes when diff.sh ends
 }
 
 run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,files}
@@ -402,7 +411,8 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
     runs_done="$work/done.$runs.$build.$tty"
     script -q /dev/null env "${vars[@]}" tests/macup_run "$@" < <(type_answers "$answers" "$out.out" "$runs_done") >"$out.out" 2>&1; echo $? >"$out.rc"
     : >"$runs_done"
-  else env "${vars[@]}" tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
+  else   # a session of its own: no /dev/tty either, as in CI, even when diff.sh runs from a terminal
+    env "${vars[@]}" perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die "$ARGV[0]: $!\n"' tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
   local report; report=$(ls -t "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
   if [ -n "$report" ]; then norm "$report" "$home" >"$out.report"; else : >"$out.report"; fi
   norm "$out.out" "$home" >"$out.norm"; mv "$out.norm" "$out.out"

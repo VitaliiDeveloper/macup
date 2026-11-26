@@ -2,11 +2,9 @@ import Foundation
 
 /// `macup config` and `macup lang` (commands.sh `open_conf`, `choose_lang`).
 enum ConfigLang {
-    /// Creates the config when there is none; opens it in the editor on a terminal, else prints its path.
     static func open(_ context: OneOff.Context) -> Int32 {
         let env = context.env
-        var info = stat()
-        if !(stat(env.conf, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG) {
+        if !Files.isRegular(env.conf) {
             try? FileManager.default.createDirectory(atPath: env.confDir, withIntermediateDirectories: true)
             try? Config.defaultText(lang: context.lang).write(toFile: env.conf, atomically: false, encoding: .utf8)
             context.out.write(context.i18n.format("Created %s", env.paths.tildify(env.conf)) + "\n")
@@ -19,7 +17,6 @@ enum ConfigLang {
         return 0
     }
 
-    /// Sets `language` in the config, from the argument or from a question on the terminal.
     static func choose(_ context: OneOff.Context) -> Int32 {
         let out = context.out
         var code = context.arguments.langArg

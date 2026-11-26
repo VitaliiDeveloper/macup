@@ -32,7 +32,8 @@ enum History {
             return (1...8).contains(level) ? bars[Int(level) - 1] : ""
         }.joined()
         // awk's h() sets a global b, the same name the bold colour came in as: the line starts with the last FREED in bytes
-        let clobbered = awkString(abs(Awk.number(shown[shown.count - 1][9])) * 1024)
+        let freed = shown[shown.count - 1][9]
+        let clobbered = awkString((Awk.lessThanZero(freed) ? -Awk.number(freed) : Awk.number(freed)) * 1024)
         let trend = Awk.unescape(i18n.translate("Free space trend:"))
         out += "\n\(clobbered)\(trend)\(colors.reset) \(line)  (\(hum(low)) … \(hum(high)))\n"
         return out
@@ -40,7 +41,7 @@ enum History {
 
     static func json(_ context: OneOff.Context) -> String {
         guard let records = records(context.env.history) else { return "{\"schema\":1,\"runs\":[]}\n" }
-        func number(_ value: String) -> String { value.isEmpty ? "null" : awkString(Awk.number(value)) }
+        func number(_ value: String) -> String { value.isEmpty ? "null" : awkString(Awk.number(value) + 0) }
         let runs = records.map(fields).map { field in
             "{\"date\":\"\(field[0])\",\"mode\":\"\(field[1])\",\"free_kb\":\(number(field[2])),\"total_kb\":\(number(field[3]))," +
                 "\"memory_free_pct\":\(number(field[4])),\"swap_mb\":\(number(field[5])),\"battery_cycles\":\(number(field[6]))," +
@@ -49,16 +50,13 @@ enum History {
         return "{\"schema\":1,\"runs\":[" + runs.joined(separator: ",") + "]}\n"
     }
 
-    /// The lines of a file that `[ -s ]` finds, as awk reads them; nil when it is missing or empty.
+    /// nil where `[ -s ]` is false.
     private static func records(_ path: String) -> [String]? {
         var info = stat()
         guard stat(path, &info) == 0, info.st_size > 0, let data = FileManager.default.contents(atPath: path) else { return nil }
-        var lines = Bash.lines(String(decoding: data, as: UTF8.self))
-        if lines.last == "" { lines.removeLast() }
-        return lines
+        return Files.records(data).map { String(decoding: $0, as: UTF8.self) }
     }
 
-    /// $1 … $11 of a record split at commas; a field that is not there is "".
     private static func fields(_ record: String) -> [String] {
         var parts = record.isEmpty ? [] : record.unicodeScalars.split(separator: ",", omittingEmptySubsequences: false).map { String(String.UnicodeScalarView($0)) }
         while parts.count < 11 { parts.append("") }
@@ -79,9 +77,9 @@ enum History {
         return strcmp(left, right) < 0
     }
 
-    /// A number as awk prints it with %s: whole numbers as integers, the rest with CONVFMT (%.6g).
+    /// A number as awk prints it with %s: a whole number with %.30g, the rest with CONVFMT (%.6g).
     static func awkString(_ value: Double) -> String {
-        if value == value.rounded(.towardZero), abs(value) < 9.2e18 { return String(Int64(value)) }
-        return Awk.format("%.6g", value)
+        var whole = 0.0
+        return Awk.format(modf(value, &whole) == 0 ? "%.30g" : "%.6g", value)
     }
 }

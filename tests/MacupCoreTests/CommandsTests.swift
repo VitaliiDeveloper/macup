@@ -82,7 +82,7 @@ final class CommandsTests: XCTestCase {
         try process.run()
         let awk = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
-        XCTAssertEqual(values.map { History.awkString(Awk.number($0)) }.joined(separator: "\n") + "\n", awk)
+        XCTAssertEqual(values.map { History.awkString(Awk.number($0) + 0) }.joined(separator: "\n") + "\n", awk)
     }
 
     func testVersionLineIsSeds() throws {

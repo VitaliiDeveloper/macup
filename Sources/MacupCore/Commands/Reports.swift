@@ -6,11 +6,11 @@ enum Reports {
     /// `macup last`: the newest report without its command output, which can be thousands of lines of brew.
     static func last(_ context: OneOff.Context) -> Data {
         let mds = markdown(context.env.logDir)
-        guard let newest = mds.max(by: { older($0, than: $1) }) else {
+        let order = Files.order(context.env)
+        guard let newest = mds.max(by: { older($0, than: $1, order) }) else {
             return Data((context.i18n.translate("No reports yet. Run: macup check") + "\n").utf8)
         }
-        var lines = (FileManager.default.contents(atPath: newest) ?? Data()).split(separator: 0x0A, omittingEmptySubsequences: false)
-        if lines.last?.isEmpty == true { lines.removeLast() }
+        let lines = Files.records(FileManager.default.contents(atPath: newest) ?? Data())
         var kept = lines.count, cut = false
         for (index, line) in lines.enumerated() where line.starts(with: Data("## ".utf8)) && index + 2 < lines.count && lines[index + 2] == Data("~~~~".utf8) {
             kept = index; cut = true
@@ -22,10 +22,9 @@ enum Reports {
         return out
     }
 
-    /// `macup reports [clean|open]`; returns the exit status.
     static func run(_ context: OneOff.Context) -> Int32 {
         let env = context.env, i18n = context.i18n, out = context.out
-        let dir = env.logDir, mds = markdown(dir).sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
+        let dir = env.logDir, mds = markdown(dir).sorted(by: Files.order(env))
         let kb = du(ownFiles(dir), context.shell)
         switch context.arguments.repArg {
         case "": break
@@ -65,17 +64,13 @@ enum Reports {
         return 0
     }
 
-    /// What `"$LOGDIR"/macup_*.md` matches, as paths.
     private static func markdown(_ dir: String) -> [String] {
         names(dir).filter { $0.hasPrefix("macup_") && $0.hasSuffix(".md") }.map { "\(dir)/\($0)" }
     }
 
-    /// `find "$LOGDIR" -maxdepth 1 -type f \( -name 'macup_*.md' -o -name 'macup_*.log' \)`.
     private static func ownFiles(_ dir: String) -> [String] {
-        names(dir).filter { $0.hasPrefix("macup_") && ($0.hasSuffix(".md") || $0.hasSuffix(".log")) }.map { "\(dir)/\($0)" }.filter { path in
-            var info = stat()
-            return lstat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-        }
+        names(dir).filter { $0.hasPrefix("macup_") && ($0.hasSuffix(".md") || $0.hasSuffix(".log")) }.map { "\(dir)/\($0)" }
+            .filter { Files.isRegular($0, followingLinks: false) }
     }
 
     private static func names(_ dir: String) -> [String] {
@@ -83,10 +78,10 @@ enum Reports {
     }
 
     /// `ls -t` order: the newer file first, the same time by name.
-    private static func older(_ left: String, than right: String) -> Bool {
+    private static func older(_ left: String, than right: String, _ order: (String, String) -> Bool) -> Bool {
         let leftTime = mtime(left), rightTime = mtime(right)
         if leftTime != rightTime { return leftTime < rightTime }
-        return right.utf8.lexicographicallyPrecedes(left.utf8)
+        return order(right, left)
     }
 
     private static func mtime(_ path: String) -> Double {
@@ -95,7 +90,7 @@ enum Reports {
         return Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1e9
     }
 
-    /// `du -k files… | awk '{s+=$1} END{print s+0}'`: du is the tool that knows the size on disk. Nothing to measure is 0.
+    /// du is the tool that knows the size on disk.
     private static func du(_ files: [String], _ shell: Shell) -> Int64 {
         guard !files.isEmpty else { return 0 }
         let sum = Bash.lines(shell.capture(["du", "-k"] + files).output).reduce(0.0) { $0 + Awk.number(Awk.firstField($1)) }
@@ -105,7 +100,7 @@ enum Reports {
     /// `report_mode`: what line 3 says after "Mode: " (check, all, clean+deep, …), nil when it says nothing sed would match.
     static func mode(_ path: String) -> String? {
         guard let data = FileManager.default.contents(atPath: path) else { return nil }
-        let lines = data.split(separator: 0x0A, omittingEmptySubsequences: false)
+        let lines = Files.records(data)
         guard lines.count > 2, let line = String(data: lines[2], encoding: .utf8), let colon = line.firstIndex(of: ":") else { return nil }
         let rest = line[line.index(after: colon)...]
         guard rest.hasPrefix(" ") else { return nil }

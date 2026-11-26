@@ -26,9 +26,7 @@ public enum Version {
         let env = run.env
         guard !env.repo.hasPrefix("__") else { return "" }
         let stamp = env.stateDir + "/last_version_check"
-        var info = stat()
-        let isFile = stat(stamp, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-        if !isFile || !run.shell.capture(["find", stamp, "-mtime", "+6"]).output.isEmpty {
+        if !Files.isRegular(stamp) || !run.shell.capture(["find", stamp, "-mtime", "+6"]).output.isEmpty {
             let remote = run.shell.capture(["curl", "-fsS", "--max-time", "4", env.raw + "/main/macup"]).output
             let version = Bash.lines(remote).lazy.compactMap(versionLine).first ?? ""
             if !version.isEmpty { try? Bash.echo(version).write(toFile: stamp, atomically: false, encoding: .utf8) }
@@ -45,7 +43,7 @@ public enum Version {
         return String(line[line.index(line.startIndex, offsetBy: prefix.count)..<quote]) + String(line[line.index(after: quote)...])
     }
 
-    /// `update_cmd`: how this install gets a newer macup.
+    /// `update_cmd`.
     static func updateCommand(_ run: Run) -> String {
         SelfPath.brewPrefix(SelfPath.current()).isEmpty ? "macup self-update" : "brew upgrade macup"
     }

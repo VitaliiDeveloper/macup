@@ -4,7 +4,6 @@ import Foundation
 /// anything else the help.
 public enum Menu {
     public enum Choice: Equatable {
-        /// A one-off choice ran; the exit status.
         case done(Int32)
         /// The word that starts the run picked (check, all, update, clean, --deep): bash's menu sets what that word sets.
         case run(String)

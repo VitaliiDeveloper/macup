@@ -9,7 +9,7 @@ enum Uninstall {
         let target = SelfPath.isCheckout(SelfPath.dirname(selfPath)) ? "" : selfPath
         var programs: [String] = []
         for file in [target, "\(env.home)/.local/bin/macup", "\(env.home)/.npm-global/bin/macup", "/usr/local/bin/macup", "/opt/homebrew/bin/macup"]
-        where !file.isEmpty && isFile(file) && SelfPath.brewPrefix(file).isEmpty && SelfPath.isMacup(file) && !programs.contains(file) {
+        where !file.isEmpty && Files.isRegular(file) && SelfPath.brewPrefix(file).isEmpty && SelfPath.isMacup(file) && !programs.contains(file) {
             programs.append(file)
         }
         let dirs = [env.confDir, env.stateDir, env.cacheDir, env.logDir].filter(Run.isDirectory)
@@ -20,12 +20,12 @@ enum Uninstall {
             if dir.hasSuffix(":$PATH\"") { dir = String(dir.dropLast(7)) }
             if let home = dir.range(of: "$HOME") { dir.replaceSubrange(home, with: env.home) }
             // the line also serves whatever else lives in that folder
-            let others = neighbours(dir)
+            let others = neighbours(dir, Files.order(env))
             if others.isEmpty { pathLines.append((rc, line)) }
             else { kept.append(i18n.format("Kept: the PATH line in %s, because %s also has %s", paths.tildify(rc), paths.tildify(dir), others)) }
         }
         let temporary = temporaryFiles(env.tmpDir)
-        let schedule = isFile(env.schedPlist)
+        let schedule = Files.isRegular(env.schedPlist)
 
         out.write(i18n.translate("macup uninstall removes:") + "\n")
         if !brewPrefix.isEmpty { out.write("  · brew uninstall macup\n") }
@@ -46,7 +46,7 @@ enum Uninstall {
 
         // rm as a tool: it goes on past what it cannot remove and says why, as bash's did
         let remove = { (argv: [String], stderr: Shell.Out) in _ = context.shell.spawn(argv, stderr: stderr).map(Shell.wait) }
-        if isFile(env.schedPlist) {
+        if Files.isRegular(env.schedPlist) {
             let quiet = { (argv: [String]) -> Int32 in context.shell.spawn(argv, stderr: .null).map(Shell.wait) ?? 127 }
             if quiet(["launchctl", "bootout", "gui/\(getuid())/\(Env.schedLabel)"]) != 0 { _ = quiet(["launchctl", "unload", env.schedPlist]) }
             remove(["rm", "-f", env.schedPlist], .inherit)
@@ -72,16 +72,11 @@ enum Uninstall {
         out.write(i18n.translate("Removed.") + "\n")
     }
 
-    private static func isFile(_ path: String) -> Bool {
-        var info = stat()
-        return stat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-    }
-
     /// The `export PATH="…"` line the installer put right after a "# macup" line; nil when there is none.
     private static func installerLine(_ rc: String) -> Data? {
         guard let data = FileManager.default.contents(atPath: rc) else { return nil }
         var previous = Data()
-        for line in records(data) {
+        for line in Files.records(data) {
             if previous == marker, line.starts(with: Data("export PATH=\"".utf8)) { return line }
             previous = line
         }
@@ -91,35 +86,30 @@ enum Uninstall {
     private static let marker = Data("# macup".utf8)
 
     /// Up to three other names in the folder, as `"$dir"/* "$dir"/.[!.]*` lists them, joined with ", ".
-    private static func neighbours(_ dir: String) -> String {
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
+    private static func neighbours(_ dir: String, _ order: (String, String) -> Bool) -> String {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).sorted(by: order)
         let visible = names.filter { !$0.hasPrefix(".") }, hidden = names.filter { $0.hasPrefix(".") && !$0.hasPrefix("..") && $0.count > 1 }
         return (visible + hidden).filter { $0 != "macup" }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
     }
 
-    /// Temp files of interrupted runs: macup.XXXXXX, macup.XXXXXX.*, macup-lang.XXXXXX, regular files only.
     private static func temporaryFiles(_ tmpDir: String) -> [String] {
-        func alnum(_ text: Substring) -> Bool { text.count == 6 && text.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)) } }
+        func alnum(_ text: Substring) -> Bool { text.unicodeScalars.count == 6 && text.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)) } }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: tmpDir)) ?? []
         return names.filter { name in
             guard name != "macup.sha256" else { return false }
-            if name.hasPrefix("macup-lang.") { return name.dropFirst(11).count == 6 }
+            if name.hasPrefix("macup-lang.") { return name.unicodeScalars.count == 17 }
             guard name.hasPrefix("macup.") else { return false }
             let rest = name.dropFirst(6)
             return alnum(rest) || (rest.count >= 7 && alnum(rest.prefix(6)) && rest.dropFirst(6).hasPrefix("."))
-        }.map { "\(tmpDir)/\($0)" }.filter { path in
-            var info = stat()
-            return lstat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
-        }
+        }.map { "\(tmpDir)/\($0)" }.filter { Files.isRegular($0, followingLinks: false) }
     }
 
-    /// Takes out the "# macup" line and the PATH line after it, and the blank line the installer wrote before them.
-    /// The file is rewritten in place, so its permissions and a symlink to it stay.
+    /// In place, so the file's permissions and a symlink to it stay.
     private static func removeInstallerLine(_ rc: String, _ line: Data) {
         guard let data = FileManager.default.contents(atPath: rc) else { return }
         // awk -v reads escapes in the line it is given
         let pathLine = line.contains(0x5C) ? Data(Awk.unescape(String(decoding: line, as: UTF8.self)).utf8) : line
-        let lines = records(data)
+        let lines = Files.records(data)
         var kept: [Data] = [], index = 0
         while index < lines.count {
             if lines[index] == marker, index + 1 < lines.count, lines[index + 1] == pathLine {
@@ -134,12 +124,5 @@ enum Uninstall {
         defer { try? handle.close() }
         try? handle.truncate(atOffset: 0)
         try? handle.write(contentsOf: kept.reduce(Data()) { $0 + $1 + [0x0A] })
-    }
-
-    /// The lines of a file as awk reads them: a last newline ends a record, it does not start one.
-    private static func records(_ data: Data) -> [Data] {
-        var lines = data.split(separator: 0x0A, omittingEmptySubsequences: false).map { Data($0) }
-        if lines.last?.isEmpty == true { lines.removeLast() }
-        return lines
     }
 }

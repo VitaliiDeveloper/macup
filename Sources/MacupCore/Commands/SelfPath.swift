@@ -18,7 +18,6 @@ public enum SelfPath {
         return path
     }
 
-    /// A source checkout: its macup is the build output, not an install.
     static func isCheckout(_ dir: String) -> Bool {
         var isDir: ObjCBool = false
         return FileManager.default.fileExists(atPath: dir + "/build.sh", isDirectory: &isDir) && !isDir.boolValue

@@ -64,6 +64,7 @@ report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 # the same in a step the Swift build runs itself: Ctrl-C while brew downloads, and a kill that waits for the step to end
 home="$work/intb"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; fakes "$work/intbin" brew sudo df
 brew_env=(HOME="$home" MACUP_PATH=keep PATH="$work/intbin:$PATH")   # started straight from here, so the pid is macup's
+# shellcheck disable=SC2034  # waits, counts nothing
 brew_started(){ local tries; for tries in $(seq 1 100); do grep -q '^brew update' "$home/brew.log" 2>/dev/null && return; sleep 0.2; done; }
 set -m; env "${brew_env[@]}" FAKE_BREW_SLEEP=30 macup_run update --only update.brew --no-color </dev/null >"$work/intb.out" 2>&1 & pid=$!; set +m
 brew_started; kill -INT -- -"$pid" 2>/dev/null; wait "$pid"; rc=$?

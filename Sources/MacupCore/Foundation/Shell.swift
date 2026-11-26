@@ -99,11 +99,17 @@ public final class Shell {
 
     /// Waits for a tool; its exit status as bash gives it (128 + signal when a signal ended it).
     public static func wait(_ pid: pid_t) -> Int32 {
+        let ended = waitForSignal(pid)
+        return ended.signal.map { 128 + $0 } ?? ended.status
+    }
+
+    /// The exit status, or the signal that ended the tool: the two can share a number.
+    static func waitForSignal(_ pid: pid_t) -> (status: Int32, signal: Int32?) {
         var st: Int32 = 0
-        while waitpid(pid, &st, 0) < 0 { if errno != EINTR { return 127 } }
+        while waitpid(pid, &st, 0) < 0 { if errno != EINTR { return (127, nil) } }
         Interrupt.check()
-        if st & 0x7F == 0 { return (st >> 8) & 0xFF }
-        return 128 + (st & 0x7F)
+        if st & 0x7F == 0 { return ((st >> 8) & 0xFF, nil) }
+        return (128 + (st & 0x7F), st & 0x7F)
     }
 
     /// A tool's standard output, its standard error dropped (`$(tool 2>/dev/null)`, trailing newlines kept).
@@ -129,12 +135,15 @@ public final class Shell {
         return result.stopped ? 124 : result.status
     }
 
-    func timed(_ seconds: Int, _ argv: [String], stdin: Input, stdout: Out, stderr: Out) -> (status: Int32, stopped: Bool) {
+    func timed(_ seconds: Int, _ argv: [String], stdin: Input, stdout: Out, stderr: Out) -> (status: Int32, signal: Int32?, stopped: Bool) {
         guard let pid = spawn(argv, stdin: stdin, stdout: stdout, stderr: stderr) else {
             notFound(argv, stderr: stderr)
-            return (127, false)
+            return (127, nil, false)
         }
-        guard seconds > 0 else { return (Shell.wait(pid), false) }
+        guard seconds > 0 else {
+            let ended = Shell.waitForSignal(pid)
+            return (ended.status, ended.signal, false)
+        }
         let ended = DispatchSemaphore(value: 0)
         let stopped = ManagedFlag()
         let watchdog = Thread { [self] in
@@ -146,10 +155,10 @@ public final class Shell {
             all.forEach { kill($0, SIGKILL) }
         }
         watchdog.start()
-        let rc = Shell.wait(pid)
+        let result = Shell.waitForSignal(pid)
         ended.signal()
         ended.signal()
-        return (rc, stopped.isSet)
+        return (result.status, result.signal, stopped.isSet)
     }
 
     /// The process and every process below it, from `ps -Ao pid=,ppid=` (as core.sh's tl finds them).

@@ -76,9 +76,9 @@ public enum MainPass {
         if !run.reportDone {
             let i18n = run.out.i18n
             var text = "# " + i18n.format("macup report — %s", args: [Run.date("%Y-%m-%d %H:%M")]) + "\n\n"
-            text += i18n.format("Mode: %s · macup %s · took %s", args: [run.mode, Env.version, run.took]) + "\n\n"
+            text += i18n.format("Mode: %s · macup %s · took %s", args: [run.mode, Env.version, Run.duration(run.seconds)]) + "\n\n"
             text += "**" + i18n.translate("Interrupted: this report is incomplete.") + "**\n\n"
-            run.writeReport(text)
+            run.writeReport(text, sayingSedErrors: false)
         }
         let colors = run.out.colors
         Shell.writeText("\n\(colors.yellow)\(run.out.i18n.format("Interrupted. Report: %s", args: [run.env.paths.tildify(run.report.path)]))\(colors.reset)\n", to: 2)
@@ -88,12 +88,12 @@ public enum MainPass {
 
 extension Run {
     /// In place and through a symlink, as `>"$REPORT"` writes it.
-    func writeReport(_ header: String) {
+    func writeReport(_ header: String, sayingSedErrors: Bool) {
         let body = FileManager.default.contents(atPath: report.body) ?? Data()
         let descriptor = open(report.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
         guard descriptor >= 0 else { return }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        try? handle.write(contentsOf: Data(header.utf8) + body + Data(Summary.rawSection(self).utf8))
+        try? handle.write(contentsOf: Data(header.utf8) + body + Summary.rawSection(self, sayingSedErrors: sayingSedErrors))
     }
 
     func end(_ status: Int32) -> Never {

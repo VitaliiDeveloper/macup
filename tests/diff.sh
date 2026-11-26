@@ -53,6 +53,8 @@ brew-update|brew||update --only update.brew
 brew-update-current|brewcurrent||update --only update.brew
 brew-upgrade-fails|brew|FAKE_BREW_FAIL=1 FAKE_SUDO_RC=0|update --only update.brew
 brew-timeout|brew|MACUP_STEP_SECS=2 FAKE_BREW_SLEEP=30|update --only update.brew
+brew-not-utf8|brew|FAKE_BREW_BYTES=1|update --only update.brew
+brew-not-utf8-c|brew|FAKE_BREW_BYTES=1 LC_ALL=C|update --only update.brew
 dd-check|dd||check --only clean.derived_data|pipe
 dd-check-json|dd||check --only clean.derived_data --json
 dd-clean|dd||clean --only clean.derived_data

@@ -10,8 +10,14 @@ public enum Interrupt {
 
     public static func install(_ handler: @escaping () -> Never, shell: Shell) {
         action = handler
-        shell.signalsToReset = signals
-        for number in signals {
+        // like bash, a signal ignored when macup started (nohup, a background job) stays ignored, for its tools too
+        let handled = signals.filter { number in
+            var current = sigaction()
+            return sigaction(number, nil, &current) == 0
+                && unsafeBitCast(current.__sigaction_u.__sa_handler, to: Int.self) != unsafeBitCast(SIG_IGN, to: Int.self)
+        }
+        shell.signalsToReset = handled
+        for number in handled {
             signal(number, SIG_IGN)   // a dispatch source only sees a signal that does not kill the process first
             let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
             source.setEventHandler { noted.set() }

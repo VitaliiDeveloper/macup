@@ -35,8 +35,8 @@ public extension Shell {
         log.append("$ " + argv.joined(separator: " ") + "\n")
         let result = timed(secs, argv, stdin: .null, stdout: .file(log.raw), stderr: .stdout)
         // bash, which waits for the tool with its own output in the report, says what signal ended it
-        if result.status > 128, result.status - 128 != SIGINT, result.status - 128 != SIGPIPE {
-            log.append(String(cString: strsignal(result.status - 128)) + "\n")
+        if let signal = result.signal, signal != SIGINT, signal != SIGPIPE {
+            log.append(String(cString: strsignal(signal)) + "\n")
         }
         let rc = result.stopped ? 124 : result.status
         beforeWarning()

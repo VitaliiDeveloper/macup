@@ -111,7 +111,7 @@ public final class Run {
 
     var seconds: Int { Int(Date().timeIntervalSince(started)) }
 
-    var took: String { "\(seconds / 60)m \(seconds % 60)s" }
+    static func duration(_ seconds: Int) -> String { "\(seconds / 60)m \(seconds % 60)s" }
 }
 
 public final class SudoKeep {

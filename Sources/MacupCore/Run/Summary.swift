@@ -10,7 +10,7 @@ enum Summary {
         if run.task("check.trends"), !run.previous.isEmpty { trends(run, freeAfter: freeAfter) }
         let newer = run.task("check.self_update") ? Version.newerRelease(run) : ""
         let warnings = out.warnings
-        let took = run.took
+        let seconds = run.seconds, took = Run.duration(seconds)
         let history = [Run.date("%Y-%m-%d %H:%M"), run.mode, String(freeAfter), String(run.diskTotal), run.memFree, String(run.swap),
                        run.batteryCycles, run.batteryMax, String(run.updated.count), String(run.freed), String(warnings.count)].joined(separator: ",")
         if let handle = FileHandle(forWritingAtPath: run.env.history) ?? create(run.env.history) {
@@ -44,12 +44,12 @@ enum Summary {
             text += "- " + i18n.translate("Needs attention: nothing") + "\n"
         }
         if !newer.isEmpty { text += "- " + i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand(run)]) + "\n" }
-        run.writeReport(text)
+        run.writeReport(text, sayingSedErrors: true)
         run.reportDone = true
 
         if let saved = run.quietDescriptor { dup2(saved, 1); close(saved) }
         if run.arguments.json {
-            out.write(json(run, freeAfter: freeAfter, newer: newer) + "\n")
+            out.write(json(run, freeAfter: freeAfter, newer: newer, seconds: seconds) + "\n")
         } else {
             terminal(run, freeAfter: freeAfter, percent: percent, newer: newer, took: took)
         }
@@ -96,9 +96,24 @@ enum Summary {
 
     private static func number(_ text: String) -> Int64 { Int64(text.trimmingCharacters(in: .whitespaces)) ?? 0 }
 
-    static func rawSection(_ run: Run) -> String {
-        guard let raw = FileManager.default.contents(atPath: run.report.raw), !raw.isEmpty else { return "" }
-        return "\n## \(run.out.i18n.translate("Command output"))\n\n~~~~\n" + String(decoding: withoutColors(raw), as: UTF8.self) + "~~~~\n"
+    static func rawSection(_ run: Run, sayingSedErrors: Bool) -> Data {
+        guard var raw = FileManager.default.contents(atPath: run.report.raw), !raw.isEmpty else { return Data() }
+        // in a UTF-8 locale sed stops at the first line that is not UTF-8, and says so
+        if run.env.utf8Locale, let bad = firstLineNotUTF8(raw) {
+            raw = raw.prefix(bad)
+            if sayingSedErrors { Shell.writeText("sed: RE error: illegal byte sequence\n", to: 2) }
+        }
+        return Data("\n## \(run.out.i18n.translate("Command output"))\n\n~~~~\n".utf8) + withoutColors(raw) + Data("~~~~\n".utf8)
+    }
+
+    private static func firstLineNotUTF8(_ data: Data) -> Int? {
+        var start = data.startIndex
+        while start < data.endIndex {
+            let end = data[start...].firstIndex(of: 0x0A) ?? data.endIndex
+            if String(bytes: data[start..<end], encoding: .utf8) == nil { return start - data.startIndex }
+            start = end + 1
+        }
+        return nil
     }
 
     static func withoutColors(_ data: Data) -> Data {
@@ -117,13 +132,13 @@ enum Summary {
         return Data(kept)
     }
 
-    static func json(_ run: Run, freeAfter: Int64, newer: String) -> String {
+    static func json(_ run: Run, freeAfter: Int64, newer: String, seconds: Int) -> String {
         let out = run.out
         let items = out.items.map { item in
             "{\"section\":\"\(JSON.str(item.section))\",\"kind\":\"\(item.kind)\",\"text\":\"\(JSON.str(item.text))\",\"details\":\(JSON.lines(item.details.joined(separator: "\n")))}"
         }.joined(separator: ",")
         let report = JSON.str(run.report.path)
-        return "{\"schema\":1,\"version\":\"\(Env.version)\",\"mode\":\"\(run.mode)\",\"date\":\"\(Run.date("%Y-%m-%d %H:%M"))\",\"seconds\":\(run.seconds),"
+        return "{\"schema\":1,\"version\":\"\(Env.version)\",\"mode\":\"\(run.mode)\",\"date\":\"\(Run.date("%Y-%m-%d %H:%M"))\",\"seconds\":\(seconds),"
             + "\"free_kb\":\(freeAfter),\"total_kb\":\(run.diskTotal),\"freed_kb\":\(run.freed),\"could_free_kb\":\(run.potAuto),"
             + "\"could_free_more_kb\":\(run.potMore),\"to_trash_kb\":\(run.potTrash),"
             + "\"updated\":\(JSON.array(run.updated)),\"skipped_open\":\(JSON.array(run.skipped)),\"needs_attention\":\(JSON.array(out.warnings)),"

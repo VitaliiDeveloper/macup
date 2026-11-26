@@ -38,14 +38,14 @@ FAKE
 snap=0; while [ "$snap" -lt "${FAKE_SNAPS:-0}" ]; do snap=$((snap + 1)); echo "com.apple.TimeMachine.2026-11-0$snap-101010.local"; done
 FAKE
       # Homebrew: every call is logged in the home; outdated answers from $HOME/.fake/brew-{formulae,casks,greedy},
-      # `update` sleeps FAKE_BREW_SLEEP seconds, `upgrade` exits with FAKE_BREW_FAIL
+      # `update` prints a line that is not UTF-8 with FAKE_BREW_BYTES and sleeps FAKE_BREW_SLEEP seconds, `upgrade` exits with FAKE_BREW_FAIL
       brew) cat <<'FAKE' ;;
 #!/bin/bash
 echo "brew $* NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE:-}" >>"$HOME/brew.log"
 case "$1" in
   --repository) echo "$HOME/.fake/brewrepo" ;;
   --cache) echo "$HOME/.fake/brewcache" ;;
-  update) echo '==> Updating Homebrew...'; [ -z "${FAKE_BREW_SLEEP:-}" ] || exec sleep "$FAKE_BREW_SLEEP" ;;   # exec: no shell left to report the kill
+  update) echo '==> Updating Homebrew...'; [ -z "${FAKE_BREW_BYTES:-}" ] || printf 'caf\351 is not UTF-8\nafter it\n'; [ -z "${FAKE_BREW_SLEEP:-}" ] || exec sleep "$FAKE_BREW_SLEEP" ;;   # exec: no shell left to report the kill
   upgrade) printf '==> Upgrading \033[1m2\033[0m outdated packages\r\n'; exit "${FAKE_BREW_FAIL:-0}" ;;
   outdated) case "$*" in *greedy*) list=greedy ;; *--cask*) list=casks ;; *) list=formulae ;; esac; cat "$HOME/.fake/brew-$list" 2>/dev/null ;;
 esac

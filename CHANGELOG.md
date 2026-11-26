@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+For developers:
+
+- **The Python code is in a real file.** The 13 Python snippets that lived as strings inside `src/cleaners.sh`, `src/tools.sh` and `src/updates.sh` are now functions in `src/py/macup_helpers.py`, run as `python3 -c "$MACUP_PY" <command> args…` with the same input and output. `build.sh` embeds the file into `macup` (a `@py` line, like `@i18n`), checks that it compiles for Python 3.9 and `--check` covers it, so `macup` is still one file and still runs without Python. No change in what macup does.
+- **`tests/test_helpers.py`** (plain unittest, the stock `/usr/bin/python3` is enough) tests which editor workspaces count as gone, the Chromium and Electron cache scan and version parsing. `tests/run.sh` runs it, and ruff or pyflakes when one is installed; CI runs both.
+
 ## 2.9.2 — 2026-11-25
 
 New:

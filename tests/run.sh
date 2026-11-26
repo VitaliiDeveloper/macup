@@ -35,6 +35,11 @@ deleted(){ # fixture-dir macup-args… → files the run deleted
 /bin/bash -n macup && /bin/bash -n install.sh && pass syntax || fail syntax
 if command -v shellcheck >/dev/null; then shellcheck -s bash -S warning macup install.sh && pass shellcheck || fail shellcheck; fi
 python3 tests/translations.py >/dev/null && pass translations || { fail translations; python3 tests/translations.py | head; }
+if command -v python3 >/dev/null; then   # macup runs without python3; its Python helpers are tested where there is one
+  python3 tests/test_helpers.py >"$W/py.out" 2>&1 && pass "python helpers" || { fail "python helpers"; tail -20 "$W/py.out"; }
+  if command -v ruff >/dev/null; then ruff check -q --select F src/py tests/*.py && pass ruff || fail ruff
+  elif python3 -m pyflakes --version >/dev/null 2>&1; then python3 -m pyflakes src/py tests/*.py && pass pyflakes || fail pyflakes; fi
+fi
 
 # --- nothing changes without a command
 H="$W/h"; mkdir -p "$H"

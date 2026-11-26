@@ -114,23 +114,7 @@ for ds in "$DEV/Xcode/"*DeviceSupport; do
 done
 # --- simulators, only when you pick them: runtimes (A), erasing one (B), unused ones (C). Running ones are left alone.
 if have xcrun && have python3 && { task_allowed clean.sim_runtimes || task_allowed clean.sim_erase || task_allowed clean.sim_unused; }; then
-  SIMS=$( { xcrun simctl list devices -j 2>/dev/null; echo '@@'; xcrun simctl runtime list -j 2>/dev/null; } | python3 -c '
-import json, sys
-dev_raw, rt_raw = sys.stdin.read().split("@@", 1)
-try: devs = json.loads(dev_raw).get("devices", {})
-except Exception: devs = {}
-try: rts = json.loads(rt_raw)
-except Exception: rts = {}
-for rid, ds in devs.items():
-    for d in ds:
-        print("D", d.get("udid", ""), d.get("state", ""), rid, d.get("name", "").replace("\t", " "), sep="\t")
-for uid, r in rts.items():
-    if not r.get("deletable", True): continue
-    ds = devs.get(r.get("runtimeIdentifier", ""), [])
-    booted = any(d.get("state") == "Booted" for d in ds)
-    plat = r.get("runtimeIdentifier", "").split(".")[-1].split("-")[0]
-    print("R", uid, int(r.get("sizeBytes", 0)) // 1024, (r.get("lastUsedAt") or "-")[:10], len(ds), int(booted), plat, r.get("version", "?"), sep="\t")
-' 2>/dev/null)
+  SIMS=$( { xcrun simctl list devices -j 2>/dev/null; echo '@@'; xcrun simctl runtime list -j 2>/dev/null; } | python3 -c "$MACUP_PY" sim-list 2>/dev/null)
   T=$(printf '\t')
   printf '%s\n' "$SIMS" | while IFS="$T" read -r k uid kb last n booted plat ver; do
     if [ "$k" = R ] && [ "$booted" = 0 ]; then
@@ -231,21 +215,7 @@ EOF2
 fi
 # --- provisioning profiles past their date sign nothing; Xcode downloads the ones it manages again
 if task_allowed clean.profiles && have python3; then
-  L=$(python3 - "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" <<'PY' 2>/dev/null
-import datetime, os, plistlib, sys
-now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-for d in sys.argv[1:]:
-    if not os.path.isdir(d) or os.path.islink(d): continue
-    for n in sorted(os.listdir(d)):
-        p = os.path.join(d, n)
-        if not n.endswith((".mobileprovision", ".provisionprofile")) or os.path.islink(p) or not os.path.isfile(p): continue
-        try:
-            raw = open(p, "rb").read(); a = raw.index(b"<?xml"); b = raw.index(b"</plist>", a) + 8
-            exp = plistlib.loads(raw[a:b]).get("ExpirationDate")
-        except Exception: continue   # unreadable: not ours to judge
-        if isinstance(exp, datetime.datetime) and exp.replace(tzinfo=None) < now: print(p)
-PY
-)
+  L=$(python3 -c "$MACUP_PY" profiles-expired "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" </dev/null 2>/dev/null)
   [ -n "$L" ] && CL_KEY=profiles cand clean.profiles 1 "$(_f 'Expired provisioning profiles (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 # without Full Disk Access the terminal cannot even list the Trash: say so instead of a silent 0
@@ -435,43 +405,7 @@ if task_allowed clean.editor_workspaces && have python3; then
 while IFS='|' read -r folder name; do
   ED_A="$HOME/Library/Application Support/$folder"; ED_WS="$ED_A/User/workspaceStorage"
   [ -d "$ED_WS" ] && [ ! -L "$ED_WS" ] && [ ! -L "$ED_A" ] && [ ! -L "$ED_A/User" ] || continue
-  L=$(python3 - "$ED_WS" "$HOME" <<'PY' 2>/dev/null
-import json, os, sys, urllib.parse
-ws, home = sys.argv[1], sys.argv[2]
-for d in sorted(os.listdir(ws)):
-    p = os.path.join(ws, d)
-    if os.path.islink(p) or not os.path.isdir(p):
-        continue
-    try:
-        with open(os.path.join(p, "workspace.json"), encoding="utf-8") as f:
-            j = json.load(f)
-    except Exception:
-        continue
-    u = j.get("folder") or j.get("workspace") or ""
-    if not isinstance(u, str) or not u.startswith("file://"):
-        continue
-    u = urllib.parse.urlparse(u)
-    if u.netloc not in ("", "localhost"):
-        continue
-    w = urllib.parse.unquote(u.path)
-    if not w.startswith(home + "/") or "/../" in w or os.path.lexists(w):
-        continue
-    # iCloud Drive and cloud providers hide folders while signed out; under Library nothing is a project
-    if w.startswith(home + "/Library/"):
-        continue
-    # gone only if the deepest folder still there is a real one on the home folder's disk: a symlink on the way may lead to an unmounted disk
-    cur, ok = home, True
-    for part in w[len(home) + 1:].split("/"):
-        nxt = os.path.join(cur, part)
-        if os.path.islink(nxt):
-            ok = False; break
-        if not os.path.isdir(nxt):
-            break
-        cur = nxt
-    if ok and os.stat(cur).st_dev == os.stat(home).st_dev:
-        print(p)
-PY
-)
+  L=$(python3 -c "$MACUP_PY" editor-workspaces "$ED_WS" "$HOME" </dev/null 2>/dev/null)
   [ -n "$L" ] || continue
   CL_MANUAL=1 CL_KEY="ws|$folder" cand clean.editor_workspaces 3 "$(_f '%s: data of workspaces whose folder is gone (%s)' "$name" "$(cnt "$L")")" "$(kbl "$L")" trash "$L" "/$name.app/Contents/|user-data-dir=$ED_A( --|/|$)"
 done <<EOF2
@@ -507,50 +441,7 @@ EOF2
 # .app or an updater's folder: ShipIt and Sparkle keep downloaded updates there until they are installed.
 # Skipped while any process has a file open in the app's folders (lsof); the tables still give the known names.
 if have python3 && { task_allowed clean.editors || task_allowed clean.browsers; }; then
-  GEN=$(NAMES=$ELECTRON_CACHES APPS=$ELECTRON_APPS BRS=$BROWSERS COVERED=$COVERED python3 - "$HOME/Library/Application Support" "$HOME/Library/Caches" <<'PY' 2>/dev/null
-import os, sys
-A, K = sys.argv[1], sys.argv[2]
-names = set(os.environ["NAMES"].split("|"))
-covered = [c for c in os.environ["COVERED"].split("\n") if c]
-apps = dict(l.split("|", 1) for l in os.environ["APPS"].split("\n") if "|" in l)
-browsers = {d: f[0] for f in (l.split("|") for l in os.environ["BRS"].split("\n")) if len(f) > 2 for d in f[2].split(";")}
-has = lambda p, n: os.path.exists(os.path.join(p, n))
-def chromium(p):
-    return has(p, "Local State") or (has(p, "Preferences") and any(has(p, n) for n in ("Cookies", "TransportSecurity", "Network Persistent State", "DIPS")))
-groups = {}
-def record(root, path):
-    if any(path == c or path.startswith(c + "/") for c in covered): return
-    top = os.path.relpath(path, root).split(os.sep)[0]
-    prof = os.path.dirname(path)
-    aprof = prof if root == A else os.path.join(A, os.path.relpath(prof, K))
-    udr = aprof
-    while udr.startswith(A + os.sep) and not has(udr, "Local State"): udr = os.path.dirname(udr)
-    key = os.path.relpath(udr, A) if udr.startswith(A + os.sep) else top
-    if key.endswith("/User Data"): key = key[: -len("/User Data")]
-    if top in apps: kind, name = "app", apps[top]
-    else:
-        name = browsers.get(key) or browsers.get(top) or (key.replace("/", " ") if key.count("/") < 2 else top)
-        browser = path.endswith("/cache2") or has(aprof, "History") or has(aprof, "Default/History") or has(udr, "Default/History")
-        kind = "browser" if browser else "app"
-    g = groups.setdefault((kind, name), (set(), {os.path.join(A, top), os.path.join(K, top)}))
-    g[0].add(path)
-for root in (A, K):
-    for dp, dns, _ in os.walk(root):
-        depth = 0 if dp == root else os.path.relpath(dp, root).count(os.sep) + 1
-        keep = []
-        for d in dns:
-            p = os.path.join(dp, d)
-            if os.path.islink(p) or d.endswith((".app", ".ShipIt")) or d == "org.sparkle-project.Sparkle": continue
-            if depth == 0 and (d.startswith("com.apple.") or d == "macup"): continue
-            if d in names or (d == "cache2" and root == K):
-                if depth > 0 and (root == K or (d != "cache2" and chromium(dp))): record(root, p)
-                continue
-            if depth < 5: keep.append(d)
-        dns[:] = keep
-for (kind, name), (paths, opened) in sorted(groups.items()):
-    print("3" if kind == "browser" else "1", kind, name, "\x1f".join(sorted(opened)), "\x1f".join(sorted(paths)), sep="\t")
-PY
-)
+  GEN=$(NAMES=$ELECTRON_CACHES APPS=$ELECTRON_APPS BRS=$BROWSERS COVERED=$COVERED python3 -c "$MACUP_PY" electron-caches "$HOME/Library/Application Support" "$HOME/Library/Caches" </dev/null 2>/dev/null)
   while IFS=$'\t' read -r lv kind name opened paths; do
     [ -n "$paths" ] || continue
     L=$(printf '%s' "$paths" | tr '\037' '\n'); O=$(printf '%s' "$opened" | tr '\037' '\n')

@@ -282,4 +282,5 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 
 | Phase | Unit | Branch | PR | State |
 |---|---|---|---|---|
-| 0 | foundation and harness | `swift/foundation` | | in progress |
+| 0 | foundation and harness | `swift/foundation` | #9 | merged (0ee1899) |
+| 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | | in progress |

@@ -6,8 +6,11 @@ if task check.sizes; then
   elif [ "$s" -gt 0 ]; then info 'Xcode Archives: %s' "$(hum "$s")"; fi
   kb_get "$DEV/CoreSimulator/Devices"; s=$KB; [ "$s" -gt 0 ] && info 'Simulator devices: %s (Xcode → Window → Devices and Simulators)' "$(hum "$s")"
   s=$(kb "$HOME/.pub-cache");          [ "$s" -gt 0 ] && info 'Flutter pub-cache: %s (full reset: dart pub cache clean)' "$(hum "$s")"
-  s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)")
+  s=$(kbl "$HOME/.codex/sessions"$'\n'"$HOME/.codex/archived_sessions"$'\n'"$(ls -d "$HOME/.codex/"*.sqlite 2>/dev/null)"$'\n'"$HOME/.codex/sqlite")
   [ "$s" -ge 102400 ] && info 'Codex chat history: %s (not a cache; delete old chats in Codex itself)' "$(hum "$s")"
+  s=$(kb "$HOME/.claude/projects"); [ "$s" -ge 102400 ] && info 'Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default)' "$(hum "$s")"
+  # the virtual machine Cowork runs in: a whole disk that Claude.app downloads again when it is gone
+  s=$(kb "$HOME/Library/Application Support/Claude/vm_bundles"); [ "$s" -ge 1048576 ] && info 'Claude Cowork virtual machine: %s (not a cache; Claude.app downloads it again if it is removed)' "$(hum "$s")"
   s=$(kbl "$HOME/.cache/huggingface"$'\n'"$HOME/.ollama/models"$'\n'"$HOME/.lmstudio/models")
   [ "$s" -ge 102400 ] && info 'AI models (Hugging Face, Ollama, LM Studio): %s' "$(hum "$s")"
   s=$(kbl "$HOME/Library/Android/sdk"$'\n'"$HOME/.android/avd")

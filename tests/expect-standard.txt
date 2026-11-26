@@ -12,3 +12,4 @@
 ./.cargo/git/checkouts/repo-1/abc/blob
 ./.cargo/git/db/repo-1/blob
 ./Library/Caches/Cypress/13.1.0/Cypress/blob
+./.codex/cache/remote_plugin_catalog/old.json

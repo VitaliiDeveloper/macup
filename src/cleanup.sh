@@ -5,7 +5,7 @@
 #   1 safe        rebuilds itself, nothing to notice
 #   2 standard    downloaded again on next use (time, traffic)
 #   3 aggressive  apps get slower for a while or sign you out
-C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0
+C_N=0; COVERED=""; DID_CLEAN=0; POT_AUTO=0; POT_MORE=0; POT_TRASH=0
 C_TASK=(); C_BUSY=(); C_LVL=(); C_AUTO=(); C_LBL=(); C_KB=(); C_KIND=(); C_PATHS=(); C_PROC=(); C_MDIR=(); C_OPEN=(); C_KEY=(); C_INFO=(); C_SUDO=()
 # Build folders macup may delete inside project_dirs, each only next to the file that makes it again.
 ARTIFACT_NAMES='node_modules Pods .build .dart_tool .next target build'
@@ -23,7 +23,20 @@ artifact_ok(){ # path → true when it is a build folder with its build file nex
   esac
 }
 # Only these places, and never these names, whatever a cleaner asks for.
+# The few paths inside ~/.claude and an editor's User folder that a cleaner may take, each exactly one entry deep.
+ai_path(){
+  local r
+  case "$1" in */../*|*/..|*/./*|*/.) return 1 ;; esac
+  case "$1" in
+    "$HOME/.claude/file-history/"*) r=${1#"$HOME/.claude/file-history/"}; case "$r" in ""|*/*|*[!0-9A-Za-z-]*) return 1 ;; esac ;;
+    "$HOME/Library/Application Support/"*/User/workspaceStorage/*) r=${1#"$HOME/Library/Application Support/"}
+      case "$r" in */*/*/*/*|*//*|/*) return 1 ;; esac
+      case "${1##*/}" in ""|.*|*[!0-9A-Za-z-]*) return 1 ;; esac ;;
+    *) return 1 ;;
+  esac
+}
 safe_path(){
+  ai_path "$1" && return 0
   case "$1" in
     "$HOME"/Library/*|"$HOME"/.*) ;;
     *) in_projects "$1" && artifact_ok "$1" || return 1 ;;   # clean.stale_*: a build folder inside project_dirs, nothing else there
@@ -105,7 +118,7 @@ settle(){ # sizes the candidates registered with "?" (their du ran meanwhile) an
   C_N=$j
 }
 cover(){ COVERED="$COVERED$1"$'\n'; }
-cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | cmd (key)
+cand(){ # task level label kb kind paths [proc] [measure-dir] [open-dirs] [info lines] — kind: empty (dirs) | rm (paths) | trash (paths, to the Trash) | cmd (key)
   task_allowed "$1" || return 0
   C_TASK[C_N]=$1; C_LVL[C_N]=$2; C_LBL[C_N]=$3; C_KB[C_N]=$4; C_KIND[C_N]=$5; C_PATHS[C_N]=$6; C_PROC[C_N]=$7; C_MDIR[C_N]=$8; C_OPEN[C_N]=$9; C_INFO[C_N]=${10}
   if task "$1" && [ -z "$CL_MANUAL" ]; then C_AUTO[C_N]=1; else C_AUTO[C_N]=0; fi
@@ -212,6 +225,15 @@ del(){ # one path, re-checked right before deleting; symlinks are never followed
   safe_path "$1" || { echo "macup refused to delete: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
   rm -rf "$1" 2>>"$RAW"
 }
+to_trash_path(){ # one path, re-checked like del, moved into the Trash under a free name
+  local b t i=2
+  [ -L "$1" ] && return 0
+  [ -e "$1" ] || return 0
+  safe_path "$1" || { echo "macup refused to move: $1" >>"$RAW"; REFUSED=$((REFUSED + 1)); return 0; }
+  mkdir -p "$HOME/.Trash"; b=$(basename "$1"); t="$HOME/.Trash/$b"
+  while [ -e "$t" ] || [ -L "$t" ]; do t="$HOME/.Trash/$b $i"; i=$((i + 1)); done
+  mv "$1" "$t" 2>>"$RAW"
+}
 exec_cand(){ # index
   local i=$1 lbl=${C_LBL[$1]} b a d p r
   KBP_N=0
@@ -229,8 +251,8 @@ exec_cand(){ # index
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}") ;;
-    rm)    b=$(kbl "${C_PATHS[i]}"); REFUSED=0
-           while IFS= read -r p; do [ -n "$p" ] && del "$p"; done <<EOF2
+    rm|trash) b=$(kbl "${C_PATHS[i]}"); REFUSED=0
+           while IFS= read -r p; do [ -n "$p" ] || continue; if [ "${C_KIND[i]}" = trash ]; then to_trash_path "$p"; else del "$p"; fi; done <<EOF2
 ${C_PATHS[i]}
 EOF2
            a=$(kbl "${C_PATHS[i]}")
@@ -248,8 +270,10 @@ EOF2
            [ -n "${C_MDIR[i]}" ] && a=$(kbl "${C_MDIR[i]}")
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
-  d=$((b - a)); [ "$d" -lt 0 ] && d=0
-  FREED=$((FREED + d)); DID_CLEAN=1
+  d=$((b - a)); [ "$d" -lt 0 ] && d=0; DID_CLEAN=1
+  # the Trash still holds it: nothing is freed until it is emptied
+  if [ "${C_KIND[i]}" = trash ]; then ok '%s: moved %s to the Trash' "$lbl" "$(hum "$d")"; return 0; fi
+  FREED=$((FREED + d))
   if [ "$d" -ge 1024 ]; then ok '%s: freed %s' "$lbl" "$(hum "$d")"; else ok '%s: cleaned' "$lbl"; fi
 }
 lvl_word(){ case "$1" in 1) _ 'safe' ;; 2) _ 'standard' ;; *) _ 'aggressive' ;; esac; }
@@ -263,7 +287,8 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
     if running "${C_PROC[i]}" || { [ -s "$s" ] && open_in "${C_OPEN[i]}" "$s"; }; then C_BUSY[i]=1; fi
   done
 }
-visible(){ [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
+visible(){ case "${C_TASK[$1]}" in clean.ai_tools|clean.editor_workspaces) return 0 ;; esac   # few, and each worth a look at any size
+  [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
 list_cands(){ # numbered list of what can be cleaned
   local i n=0 tag head=0 ln lc=0
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done

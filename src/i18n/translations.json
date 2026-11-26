@@ -1311,10 +1311,6 @@
     "uk": "Старі версії Antigravity CLI, що лишилися після оновлень",
     "ru": "Старые версии Antigravity CLI, оставшиеся после обновлений"
   },
-  "Codex temporary files and unfinished downloads, old Antigravity CLI versions; chat history is never touched": {
-    "uk": "Тимчасові файли й недокачані завантаження Codex, старі версії Antigravity CLI; історія чатів не чіпається",
-    "ru": "Временные файлы и недокачанные загрузки Codex, старые версии Antigravity CLI; история чатов не трогается"
-  },
   "Global pnpm packages": {
     "uk": "Глобальні pnpm-пакети",
     "ru": "Глобальные pnpm-пакеты"
@@ -1882,5 +1878,53 @@
   "%s: could not remove all of it (see the report)": {
     "uk": "%s: не все вдалося видалити (див. звіт)",
     "ru": "%s: удалить удалось не всё (см. отчёт)"
+  },
+  "Data VS Code, Cursor and similar editors keep for a workspace whose folder is gone, AI chats included (only when you pick it, to the Trash)": {
+    "uk": "Дані, які VS Code, Cursor та схожі редактори зберігають для робочої області, чиєї папки вже немає, разом з AI-чатами (лише якщо вибрати, у Кошик)",
+    "ru": "Данные, которые VS Code, Cursor и похожие редакторы хранят для рабочей области, чьей папки уже нет, вместе с AI-чатами (только если выбрать, в Корзину)"
+  },
+  "Codex plugin backups left by an interrupted update": {
+    "uk": "Резервні копії плагінів Codex після перерваного оновлення",
+    "ru": "Резервные копии плагинов Codex после прерванного обновления"
+  },
+  "Unfinished Codex state writes": {
+    "uk": "Недописані файли стану Codex",
+    "ru": "Недописанные файлы состояния Codex"
+  },
+  "Codex plugin catalogs of accounts unused for 30 days": {
+    "uk": "Каталоги плагінів Codex для акаунтів, не використаних 30 днів",
+    "ru": "Каталоги плагинов Codex для аккаунтов, не использованных 30 дней"
+  },
+  "Old Grok CLI versions left by its updates": {
+    "uk": "Старі версії Grok CLI, що лишилися після оновлень",
+    "ru": "Старые версии Grok CLI, оставшиеся после обновлений"
+  },
+  "Claude Code edit backups of deleted sessions (%s)": {
+    "uk": "Резервні копії правок видалених сесій Claude Code (%s)",
+    "ru": "Резервные копии правок удалённых сессий Claude Code (%s)"
+  },
+  "%s: data of workspaces whose folder is gone (%s)": {
+    "uk": "%s: дані робочих областей, чиїх папок уже немає (%s)",
+    "ru": "%s: данные рабочих областей, чьих папок уже нет (%s)"
+  },
+  "%s: moved %s to the Trash": {
+    "uk": "%s: %s перенесено в Кошик",
+    "ru": "%s: %s перемещено в Корзину"
+  },
+  "Would move to the Trash: ~%s (freed when you empty it)": {
+    "uk": "Перенесе в Кошик: ~%s (місце звільниться, коли його очистиш)",
+    "ru": "Переместит в Корзину: ~%s (место освободится, когда её очистите)"
+  },
+  "Claude Cowork virtual machine: %s (not a cache; Claude.app downloads it again if it is removed)": {
+    "uk": "Віртуальна машина Claude Cowork: %s (це не кеш; Claude.app завантажить її знову, якщо її видалити)",
+    "ru": "Виртуальная машина Claude Cowork: %s (это не кэш; Claude.app скачает её снова, если её удалить)"
+  },
+  "Leftovers of AI coding tools: Codex temporary files, backups and unfinished downloads, old Grok and Antigravity CLI versions, edit backups of deleted Claude Code sessions; chat history is never touched": {
+    "uk": "Залишки AI-інструментів для коду: тимчасові файли, резервні копії й недокачані завантаження Codex, старі версії Grok і Antigravity CLI, резервні копії правок видалених сесій Claude Code; історія чатів не чіпається",
+    "ru": "Остатки AI-инструментов для кода: временные файлы, резервные копии и недокачанные загрузки Codex, старые версии Grok и Antigravity CLI, резервные копии правок удалённых сессий Claude Code; история чатов не трогается"
+  },
+  "Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default)": {
+    "uk": "Історія чатів Claude Code: %s (це не кеш; Claude Code сам видаляє транскрипти, старші за cleanupPeriodDays, типово 30 днів)",
+    "ru": "История чатов Claude Code: %s (это не кэш; Claude Code сам удаляет транскрипты старше cleanupPeriodDays, по умолчанию 30 дней)"
   }
 }

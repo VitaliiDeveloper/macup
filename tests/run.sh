@@ -64,6 +64,25 @@ done
 echo "$got" | grep -E 'codex/sessions|sqlite|gradle.properties|settings.xml|avd|debug.keystore|adbkey|/User/|Backups|Login Data|/History|/Cookies|QtApp|ShipIt|sparkle|Local Storage|elsewhere|Archives|Downloads|Documents|BigApp|com.apple|\.Trash|Code/old|3\.12\.1|3\.13\.1|3\.10\.2|v22\.1\.0|\.m2/|virtualenvs|v21\.2\.5|v21\.7\.0|v23\.|registry/index|location_data|Code/(rs|plain)' \
   && fail "protected files deleted" || pass "protected files survive --level aggressive"
 [ -f "$W/laggressive/elsewhere2/big" ] && [ -f "$W/laggressive/elsewhere/precious" ] && [ -f "$W/laggressive/elsewhere3/Cache/big" ] && pass "symlinked cache targets survive" || fail "symlink target deleted"
+A="$W/laggressive"   # AI tools: what is not a pure cache goes to the Trash; transcripts, live state, the plugin in use and other workspaces stay
+[ -f "$A/.Trash/bbbb-2222/blob" ] && [ -f "$A/.Trash/plugins-backup-Ab12Cd/repo/blob" ] && [ -f "$A/.Trash/..codex-global-state.json.tmp-1784380121760-c8bf" ] && pass "AI tools: backups and unfinished writes go to the Trash" || fail "AI tools: Trash"
+[ -f "$A/.claude/projects/-Users-me-app/aaaa-1111.jsonl" ] && [ -f "$A/.claude/file-history/aaaa-1111/blob" ] && [ -f "$A/.claude/file-history/cccc-3333/blob" ] && [ -f "$A/.claude/history.jsonl" ] \
+  && [ -f "$A/.claude/plugins/cache/mkt/plug/0.8.0/blob" ] && [ -f "$A/.claude/plugins/cache/mkt/plug/1.0.0/blob" ] && [ -f "$A/.claude/plugins/cache/mkt/plug/1.0.1/blob" ] \
+  && [ -f "$A/.grok/downloads/grok-1.0.92-macos-aarch64" ] && [ -f "$A/.grok/downloads/grok-1.0.93-macos-aarch64" ] && [ -f "$A/.codex/.codex-global-state.json" ] && [ -f "$A/.codex/cache/remote_plugin_catalog/fresh.json" ] \
+  && [ -f "$A/Library/Application Support/Code/User/workspaceStorage/abc123/state.vscdb" ] && pass "AI tools: sessions, versions in use and workspaces survive --level aggressive" || fail "AI tools: something in use was deleted"
+H="$W/ai"; tests/fixture.sh "$H"
+FAKE_RUNNING="$H/.local/share/claude/versions/2.1.332" env HOME="$H" /bin/bash "$M" clean --only clean.ai_tools --no-color </dev/null >"$W/ai.out" 2>&1
+[ -f "$H/.claude/file-history/bbbb-2222/blob" ] && [ ! -f "$H/.grok/downloads/grok-1.0.89-macos-aarch64" ] && grep -q 'Claude Code edit backups.*skipped' "$W/ai.out" \
+  && pass "AI tools: Claude Code's leftovers wait while it runs" || fail "AI tools: cleaned while Claude Code runs"
+tests/fixture.sh "$H"   # a check counts what would go to the Trash apart from what it frees
+env HOME="$H" /bin/bash "$M" check --only clean.ai_tools --no-color </dev/null >"$W/ai.out" 2>&1
+grep -q 'Would move to the Trash: ~4 MB' "$W/ai.out" && grep -q 'Could free: ~2[0-9] MB' "$W/ai.out" && pass "AI tools: a check counts the Trash apart" || { fail "AI tools: Trash total"; grep -E 'Could free|Trash' "$W/ai.out"; }
+H2="$W/ai2"; mkdir -p "$H2/.codex/.tmp"; for i in $(seq 1 60); do mkdir -p "$H2/.codex/.tmp/git-$i/refs"; echo ref >"$H2/.codex/.tmp/git-$i/HEAD"; done; find "$H2/.codex/.tmp" -exec touch -t 202401010000 {} +
+env HOME="$H2" /bin/bash "$M" clean --only clean.ai_tools --no-color </dev/null >"$W/ai2.out" 2>&1
+[ -z "$(ls "$H2/.codex/.tmp")" ] && pass "AI tools: many tiny stale Codex git clones go though they are small" || fail "AI tools: tiny git clones stayed"
+tests/fixture.sh "$H"
+FAKE_RUNNING='/Applications/ChatGPT.app/Contents/MacOS/ChatGPT' env HOME="$H" /bin/bash "$M" clean --only clean.ai_tools --no-color </dev/null >"$W/ai.out" 2>&1
+[ -f "$H/.codex/.tmp/plugins-backup-Ab12Cd/repo/blob" ] && [ -f "$H/.codex/.tmp/git-abc/blob" ] && [ ! -f "$H/.claude/file-history/bbbb-2222/blob" ] && pass "AI tools: Codex's leftovers wait while ChatGPT.app runs" || fail "AI tools: cleaned while ChatGPT.app runs"
 
 # --- an app that is open is skipped, and the summary says so
 H="$W/run"; tests/fixture.sh "$H"
@@ -103,6 +122,9 @@ pick '' >/dev/null; n1=$(num 'Xcode DerivedData'); n2=$(num 'SwiftPM cache'); nt
 [ "$(pick "$n1,$n2" | LC_ALL=C sort)" = "$(printf '%s\n' './Library/Caches/org.swift.swiftpm/repos/blob' './Library/Developer/Xcode/DerivedData/App-abc/blob' | LC_ALL=C sort)" ] && pass "pick: numbers delete exactly those" || fail "pick: numbers"
 [ -z "$(pick "$nt" n)" ] && pass "pick: opt-in item needs a yes" || fail "pick: confirmation"
 [ "$(pick "$nt" y)" = "./.Trash/thing/blob" ] && pass "pick: opt-in item after yes" || fail "pick: yes"
+nw=$(num 'data of workspaces whose folder is gone')
+[ -n "$nw" ] && [ "$(pick "$nw" y | LC_ALL=C sort)" = "$(printf '%s\n' './Library/Application Support/Code/User/workspaceStorage/abc123/state.vscdb' './Library/Application Support/Code/User/workspaceStorage/abc123/workspace.json' | LC_ALL=C sort)" ] \
+  && [ -f "$W/p/.Trash/abc123/state.vscdb" ] && pass "pick: a gone workspace's data goes to the Trash; present, unmounted, symlinked and iCloud ones stay" || fail "pick: editor workspaces"
 got=$(PL=uk pick 'безпечна')
 [ "$(echo "$got" | LC_ALL=C sort)" = "$(LC_ALL=C sort <tests/expect-safe.txt)" ] && pass "pick: a level word in the interface language" || { fail "pick: localized level"; diff <(LC_ALL=C sort <tests/expect-safe.txt) <(echo "$got") | head; }
 

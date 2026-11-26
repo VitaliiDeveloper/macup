@@ -387,15 +387,96 @@ if task_allowed clean.playwright; then
   [ -n "$L" ] && CL_KEY=browsers cand clean.playwright 2 "$(_f 'Old Playwright, Puppeteer and Cypress builds (%s)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
 fi
 
-# --- AI tools: only leftovers. Chat history, sessions and databases are never touched.
+# --- AI tools: only leftovers and caches. Chat history, sessions, settings and databases are never touched.
+# Codex runs as the CLI and inside ChatGPT.app; Claude Code as the CLI and inside Claude.app.
+CODEX_BUSY='(^|/)codex(\.js)?( |$)|/(ChatGPT|Codex)\.app/Contents/'
+CLAUDE_BUSY='(^|/)claude( |$)|/\.local/share/claude/versions/|/Claude\.app/Contents/'
 if task_allowed clean.ai_tools; then
 L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -mtime +7 2>/dev/null)
-[ -n "$L" ] && [ "$(kbl "$L")" -ge 1024 ] && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L"
+# each is a few KB, so they are worth it by number, not by size
+[ -n "$L" ] && { [ "$(cnt "$L")" -ge 50 ] || [ "$(kbl "$L")" -ge 1024 ]; } && CL_KEY=codex_tmp cand clean.ai_tools 1 "$(_f 'Codex temporary git clones (%s, older than 7 days)' "$(cnt "$L")")" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
 L=$(find "$HOME/.cache/codex-runtimes" -mindepth 1 -maxdepth 1 -type d -name 'codex-runtime-install-*' -mtime +1 2>/dev/null)
-[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L"
+[ -n "$L" ] && CL_KEY=codex_rt cand clean.ai_tools 1 "$(_ 'Unfinished Codex runtime downloads')" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
+# the old plugin set is kept aside while a new one moves in, and stays only after a crash or a failed rollback (codex-rs/core-plugins/src/startup_sync.rs)
+L=""; [ -d "$HOME/.codex/.tmp/plugins" ] && L=$(find "$HOME/.codex/.tmp" -mindepth 1 -maxdepth 1 -type d -name 'plugins-backup-*' -mtime +7 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_pbak cand clean.ai_tools 1 "$(_ 'Codex plugin backups left by an interrupted update')" "$(kbl "$L")" trash "$L" "$CODEX_BUSY"
+# ChatGPT.app writes its state to a temporary file and renames it; one a week old was never renamed
+L=$(find "$HOME/.codex" -mindepth 1 -maxdepth 1 -type f -name '..codex-global-state.json*.tmp-*' -mtime +7 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_gs cand clean.ai_tools 1 "$(_ 'Unfinished Codex state writes')" "$(kbl "$L")" trash "$L" "$CODEX_BUSY"
+# the catalog is fetched again after 3 hours (codex-rs/core-plugins/src/remote/catalog_cache.rs): one untouched for 30 days is for an account no longer used
+L=$(find "$HOME/.codex/cache/remote_plugin_catalog" -mindepth 1 -maxdepth 1 -type f -name '*.json' -mtime +30 2>/dev/null)
+[ -n "$L" ] && CL_KEY=codex_cat cand clean.ai_tools 2 "$(_ 'Codex plugin catalogs of accounts unused for 30 days')" "$(kbl "$L")" rm "$L" "$CODEX_BUSY"
 # agy update keeps the replaced binary next to the new one
 L=$(find "$HOME/.local/bin" -maxdepth 1 -type f -name 'agy.*.old' 2>/dev/null)
 [ -n "$L" ] && CL_KEY=agy_old cand clean.ai_tools 1 "$(_ 'Old Antigravity CLI versions left by its updates')" "$(kbl "$L")" rm "$L"
+# grok update downloads each version next to the last one and points ~/.grok/bin at the new one; an hour-old file is no download in progress
+GROK_DL="$HOME/.grok/downloads"
+if [ -d "$GROK_DL" ] && [ ! -L "$GROK_DL" ] && [ ! -L "$HOME/.grok" ]; then
+  use=$(for l in "$HOME/.grok/bin"/*; do [ -L "$l" ] && readlink "$l"; done | sed 's|.*/||' | grep .)
+  L=""; [ -n "$use" ] && L=$(find "$GROK_DL" -mindepth 1 -maxdepth 1 -type f -name 'grok-*' -mmin +60 2>/dev/null | while IFS= read -r f; do
+    printf '%s\n' "$use" | grep -qxF -- "${f##*/}" || printf '%s\n' "$f"; done)
+  [ -n "$L" ] && CL_KEY=grok_old cand clean.ai_tools 1 "$(_ 'Old Grok CLI versions left by its updates')" "$(kbl "$L")" rm "$L" '(^|/)(grok|agent)( |$)|/\.grok/downloads/'
+fi
+if [ -d "$HOME/.claude" ] && [ ! -L "$HOME/.claude" ]; then
+  # rewind needs the session's transcript; without it in ~/.claude/projects the edit backups have no use. No transcripts at all: nothing goes.
+  CC_FH="$HOME/.claude/file-history"; CC_PR="$HOME/.claude/projects"
+  if [ -d "$CC_FH" ] && [ ! -L "$CC_FH" ] && [ -d "$CC_PR" ] && [ ! -L "$CC_PR" ]; then
+    ids=$(find "$CC_PR" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' 2>/dev/null | sed 's|.*/||; s|\.jsonl$||')
+    L=""; [ -n "$ids" ] && L=$(find "$CC_FH" -mindepth 1 -maxdepth 1 -type d -mtime +7 2>/dev/null | while IFS= read -r d; do
+      printf '%s\n' "$ids" | grep -qxF -- "${d##*/}" || printf '%s\n' "$d"; done)
+    [ -n "$L" ] && CL_KEY=claude_fh cand clean.ai_tools 1 "$(_f 'Claude Code edit backups of deleted sessions (%s)' "$(cnt "$L")")" "$(kbl "$L")" trash "$L" "$CLAUDE_BUSY"
+  fi
+fi
+fi
+
+# --- editors: what VS Code, Cursor and the like keep for a workspace whose folder is gone, AI chats of that project included.
+# Only folders in the home folder count: an unmounted disk looks the same as a deleted folder. Only on a pick, to the Trash.
+if task_allowed clean.editor_workspaces && have python3; then
+while IFS='|' read -r folder name; do
+  ED_A="$HOME/Library/Application Support/$folder"; ED_WS="$ED_A/User/workspaceStorage"
+  [ -d "$ED_WS" ] && [ ! -L "$ED_WS" ] && [ ! -L "$ED_A" ] && [ ! -L "$ED_A/User" ] || continue
+  L=$(python3 - "$ED_WS" "$HOME" <<'PY' 2>/dev/null
+import json, os, sys, urllib.parse
+ws, home = sys.argv[1], sys.argv[2]
+for d in sorted(os.listdir(ws)):
+    p = os.path.join(ws, d)
+    if os.path.islink(p) or not os.path.isdir(p):
+        continue
+    try:
+        with open(os.path.join(p, "workspace.json"), encoding="utf-8") as f:
+            j = json.load(f)
+    except Exception:
+        continue
+    u = j.get("folder") or j.get("workspace") or ""
+    if not isinstance(u, str) or not u.startswith("file://"):
+        continue
+    u = urllib.parse.urlparse(u)
+    if u.netloc not in ("", "localhost"):
+        continue
+    w = urllib.parse.unquote(u.path)
+    if not w.startswith(home + "/") or "/../" in w or os.path.lexists(w):
+        continue
+    # iCloud Drive and cloud providers hide folders while signed out; under Library nothing is a project
+    if w.startswith(home + "/Library/"):
+        continue
+    # gone only if the deepest folder still there is a real one on the home folder's disk: a symlink on the way may lead to an unmounted disk
+    cur, ok = home, True
+    for part in w[len(home) + 1:].split("/"):
+        nxt = os.path.join(cur, part)
+        if os.path.islink(nxt):
+            ok = False; break
+        if not os.path.isdir(nxt):
+            break
+        cur = nxt
+    if ok and os.stat(cur).st_dev == os.stat(home).st_dev:
+        print(p)
+PY
+)
+  [ -n "$L" ] || continue
+  CL_MANUAL=1 CL_KEY="ws|$folder" cand clean.editor_workspaces 3 "$(_f '%s: data of workspaces whose folder is gone (%s)' "$name" "$(cnt "$L")")" "$(kbl "$L")" trash "$L" "/$name.app/Contents/|user-data-dir=$ED_A( --|/|$)"
+done <<EOF2
+$ELECTRON_APPS
+EOF2
 fi
 
 # --- editors and Electron apps (ELECTRON_APPS), browsers (BROWSERS)
@@ -508,7 +589,9 @@ settle
 for ((i = 0; i < C_N; i++)); do
   visible "$i" && [ "${C_BUSY[i]:-0}" = 0 ] || continue
   case "${C_TASK[i]}" in clean.orphan_*) continue ;; esac   # counted together below: their entries can share a folder
-  if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
+  # what goes to the Trash frees nothing until the Trash is emptied
+  if [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ] && [ "${C_KIND[i]}" = trash ]; then POT_TRASH=$((POT_TRASH + C_KB[i]))
+  elif [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$LEVEL" ]; then POT_AUTO=$((POT_AUTO + C_KB[i])); else POT_MORE=$((POT_MORE + C_KB[i])); fi
 done
 POT_MORE=$((POT_MORE + $(lo_total)))
 if CLEAN && [ -n "$PICK" ]; then

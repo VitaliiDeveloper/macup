@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.9.2 — 2026-11-25
+
+New:
+
+- **Leftovers of AI coding tools.** `clean.ai_tools` also takes, each only once it is provably unused:
+  - old Grok CLI versions in `~/.grok/downloads` that `~/.grok/bin` no longer points at (each is about 180 MB);
+  - Codex's backup of an old plugin set that an interrupted update left in `~/.codex/.tmp`, and state files ChatGPT.app began writing and never finished (to the Trash);
+  - Codex plugin catalogs of an account unused for 30 days (standard; the catalog is fetched again after 3 hours);
+  - edit backups (`~/.claude/file-history`) of Claude Code sessions whose transcript is gone, so rewind can no longer use them (to the Trash).
+  Claude Code's leftovers wait while Claude Code or Claude.app runs, Codex's while Codex or ChatGPT.app runs. `~/.claude` stays closed to every other cleaner; chat history, transcripts, settings, `history.jsonl` and databases are never touched. Stale Codex git clones in `~/.codex/.tmp` go from 50 on, however small: each takes a few KB, so the old 1 MB floor let hundreds pile up. Folders the tools prune themselves are left to them: Claude Code's `session-env`, `shell-snapshots`, `debug` and the plugin versions it gave up (after 14 days, never while a session uses one), and obsolete editor extensions.
+- **What goes to the Trash is counted apart.** A check says "Would move to the Trash" for it instead of adding it to "Could free": the space comes back only when the Trash is emptied. `--json` has it as `to_trash_kb`.
+- **The report measures Claude's Cowork virtual machine** (`vm_bundles`, often 10 GB) Claude Code's chat history (`~/.claude/projects`), and counts `~/.codex/sqlite` into Codex's history. Neither is deleted.
+- **`clean.editor_workspaces`:** what VS Code, Cursor and similar editors keep for a workspace whose folder in your home folder is gone, AI chats of that project included. Only when you pick it, to the Trash; a folder behind a symlink, on another disk, in iCloud Drive or a cloud provider's folder does not count, since those only look gone while unmounted or signed out. Shown at any size.
+
 ## 2.9.1 — 2026-11-21
 
 Fixes:

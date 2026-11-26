@@ -302,6 +302,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 ## Follow-ups queued
 
 - [ ] After wave A: move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Also set LC_CTYPE with LC_COLLATE (from `Env.lcCtype`'s decision): with LC_CTYPE "C" strcoll orders `a é b B e` where bash's glob and `sort` give `a b B e é` (found by the leftovers unit). Owner: the commands unit's session; it blocks the leftovers unit's non-ASCII sort test.
+- [ ] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs.
 - [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
 - [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
@@ -315,8 +316,9 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | #10 | merged (d4b13c9) |
 | 2A | checks | `swift/checks` | #11 | merged (cbe2a53) |
 | 2A | updates | `swift/updates` | #12 | merged (1dcd8b2) |
-| 2A | commands | `swift/commands` | #13 | in review |
+| 2A | commands | `swift/commands` | #13 | merged (cac5a4d) |
 | 2A | `check.macos_updates` | `swift/macos-updates` | #14 | in review |
-| 2B | tools | `swift/tools` | | in progress |
-| 2B | cleaners (registration) | `swift/cleaners` | | in progress |
-| 2B | leftovers (registration, startup) | `swift/leftovers` | | in progress |
+| 2B | tools | `swift/tools` | #17 | in progress |
+| 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | in review |
+| 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |
+| 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | in progress |

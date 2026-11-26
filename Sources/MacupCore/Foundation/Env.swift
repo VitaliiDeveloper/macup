@@ -47,14 +47,14 @@ public struct Env {
         } else {
             path = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(userPath)"
         }
-        repo = vars["MACUP_REPO"].flatMap { $0.isEmpty ? nil : $0 } ?? "VitaliiDeveloper/macup"
-        langHook = vars["MACUP_LANG"].flatMap { $0.isEmpty ? nil : $0 }
+        repo = Env.nonEmpty(vars, "MACUP_REPO") ?? "VitaliiDeveloper/macup"
+        langHook = Env.nonEmpty(vars, "MACUP_LANG")
         noColor = !(vars["NO_COLOR"] ?? "").isEmpty
-        stepSecsHook = vars["MACUP_STEP_SECS"].flatMap { $0.isEmpty ? nil : $0 }
-        apps = vars["MACUP_APPS"].flatMap { $0.isEmpty ? nil : $0 } ?? "/Applications:\(home)/Applications"
-        sysLib = vars["MACUP_SYSLIB"].flatMap { $0.isEmpty ? nil : $0 } ?? "/Library"
-        tmpDir = vars["TMPDIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "/tmp"
-        confDir = (vars["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? "\(home)/.config") + "/macup"
+        stepSecsHook = Env.nonEmpty(vars, "MACUP_STEP_SECS")
+        apps = Env.nonEmpty(vars, "MACUP_APPS") ?? "/Applications:\(home)/Applications"
+        sysLib = Env.nonEmpty(vars, "MACUP_SYSLIB") ?? "/Library"
+        tmpDir = Env.nonEmpty(vars, "TMPDIR") ?? "/tmp"
+        confDir = (Env.nonEmpty(vars, "XDG_CONFIG_HOME") ?? "\(home)/.config") + "/macup"
         conf = confDir + "/config"
         stateDir = "\(home)/Library/Application Support/macup"
         cacheDir = "\(home)/Library/Caches/macup"
@@ -71,16 +71,24 @@ public struct Env {
 
     /// core.sh exports LC_CTYPE=en_US.UTF-8 when the locale is not UTF-8, so tools count characters, not bytes.
     public var lcCtype: String? {
-        let locale = vars["LC_ALL"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LC_CTYPE"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LANG"] ?? ""
-        for marker in ["UTF-8", "utf-8", "UTF8", "utf8"] where locale.contains(marker) { return nil }
+        let locale = Env.nonEmpty(vars, "LC_ALL") ?? Env.nonEmpty(vars, "LC_CTYPE") ?? vars["LANG"] ?? ""
+        for marker in Env.utf8Markers where locale.contains(marker) { return nil }
         return "en_US.UTF-8"
     }
 
     /// The tools run in a UTF-8 locale: core.sh makes LC_CTYPE one, unless LC_ALL overrides it with another.
     public var utf8Locale: Bool {
-        guard let all = vars["LC_ALL"], !all.isEmpty else { return true }
-        return ["UTF-8", "utf-8", "UTF8", "utf8"].contains { all.contains($0) }
+        guard let all = Env.nonEmpty(vars, "LC_ALL") else { return true }
+        return Env.utf8Markers.contains { all.contains($0) }
     }
+
+    /// The variable when it is set and not empty, as bash's ${VAR:-default} reads it.
+    static func nonEmpty(_ vars: [String: String], _ key: String) -> String? {
+        guard let value = vars[key], !value.isEmpty else { return nil }
+        return value
+    }
+
+    private static let utf8Markers = ["UTF-8", "utf-8", "UTF8", "utf8"]
 
     /// The environment of the tools macup runs.
     public var childVars: [String: String] {

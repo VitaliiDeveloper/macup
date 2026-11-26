@@ -166,12 +166,7 @@ public struct Config {
     }
 
     /// grep -qE "^[[:space:]]*key[[:space:]]*="
-    func setsKey(_ line: String, _ key: String) -> Bool {
-        var scalars = Substring(line).unicodeScalars.drop(while: isSpace)
-        guard scalars.starts(with: key.unicodeScalars) else { return false }
-        scalars = scalars.dropFirst(key.unicodeScalars.count).drop(while: isSpace)
-        return scalars.first == "="
-    }
+    func setsKey(_ line: String, _ key: String) -> Bool { match(line, key) != nil }
 }
 
 /// What `load_conf` reads: the config's values with the command line's on top.

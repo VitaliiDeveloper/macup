@@ -77,15 +77,6 @@ public final class Output {
         Bash.substitution(i18n.format(fmt, args: args))
     }
 
-    private func line(_ mark: String, _ color: String, _ text: String) {
-        flush()
-        write("\(colors.cl)  \(color)\(mark)\(colors.reset) \(text)\n")
-    }
-
-    private func item(_ kind: String, _ text: String) {
-        if json { items.append(Item(section: section, kind: kind, text: text)) }
-    }
-
     public func ok(_ fmt: String, _ args: String...) { ok(fmt, args: args) }
     public func info(_ fmt: String, _ args: String...) { info(fmt, args: args) }
     public func warn(_ fmt: String, _ args: String...) { warn(fmt, args: args) }
@@ -93,24 +84,19 @@ public final class Output {
     /// A step that did not do its job: the run ends with exit status 3.
     public func err(_ fmt: String, _ args: String...) { err(fmt, args: args) }
 
-    public func ok(_ fmt: String, args: [String]) {
-        let text = message(fmt, args)
-        line("✓", colors.green, text); md("- ✅ \(text)"); item("ok", text)
-    }
+    public func ok(_ fmt: String, args: [String]) { emit("ok", "✓", colors.green, "✅ ", fmt, args) }
+    public func info(_ fmt: String, args: [String]) { emit("info", "·", colors.dim, "", fmt, args) }
+    public func warn(_ fmt: String, args: [String]) { emit("warn", "!", colors.yellow, "⚠️ ", fmt, args) }
+    public func fail(_ fmt: String, args: [String]) { emit("fail", "✗", colors.red, "❌ ", fmt, args) }
 
-    public func info(_ fmt: String, args: [String]) {
+    /// One line on the terminal, in the report and, with --json, in the items; warn and fail also count as warnings.
+    private func emit(_ kind: String, _ mark: String, _ color: String, _ badge: String, _ fmt: String, _ args: [String]) {
         let text = message(fmt, args)
-        line("·", colors.dim, text); md("- \(text)"); item("info", text)
-    }
-
-    public func warn(_ fmt: String, args: [String]) {
-        let text = message(fmt, args)
-        line("!", colors.yellow, text); md("- ⚠️ \(text)"); warnings.append(text); item("warn", text)
-    }
-
-    public func fail(_ fmt: String, args: [String]) {
-        let text = message(fmt, args)
-        line("✗", colors.red, text); md("- ❌ \(text)"); warnings.append(text); item("fail", text)
+        flush()
+        write("\(colors.cl)  \(color)\(mark)\(colors.reset) \(text)\n")
+        md("- \(badge)\(text)")
+        if kind == "warn" || kind == "fail" { warnings.append(text) }
+        if json { items.append(Item(section: section, kind: kind, text: text)) }
     }
 
     public func err(_ fmt: String, args: [String]) {
@@ -122,7 +108,7 @@ public final class Output {
     public func sub(_ text: String) {
         flush()
         write("      \(colors.dim)\(text)\(colors.reset)\n")
-        md("    - \(text)"); detail(text)
+        mdonly(text)
     }
 
     /// A line under the last one in the report and --json only.

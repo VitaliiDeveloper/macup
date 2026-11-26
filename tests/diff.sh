@@ -132,6 +132,8 @@ fix_emptycode(){ mkdir -p "$1/Code/notes"; }
 # updates unit
 # The updaters are answering fakes in the fake home (tests/fakes.sh): its .fake/bin, the shared fakes and /usr/bin and
 # /bin are all PATH holds, so no real npm, mas or download is ever reached. calls.log in the home lists what was run.
+# The bash build reads npm's, the plugins' and the catalog's JSON only with the Command Line Tools' python3: these cases
+# need them (without, bash skips those sections, an intended difference).
 upd_path="PATH=@H/.fake/bin:$work/bin:/usr/bin:/bin"
 upd_simple=update.pipx,update.uv,update.rustup,update.omz,update.gh_ext,update.pnpm,update.bun,update.deno,update.cargo,update.mise,update.asdf,update.editor_ext,update.gcloud,update.dotnet,update.composer,update.gem
 CASES+="

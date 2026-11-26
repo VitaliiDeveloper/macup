@@ -43,7 +43,11 @@ extension Updates {
             }
             // sudo forgets the password after 5 minutes and one install (Xcode) takes longer, so it would ask again for the next app
             run.sudo.keepAlive()
-            if shell.tick("App Store \(number)/\(count): \(app)", ["mas", "upgrade", id], log: log, output: out) == 0 {
+            let outside = shell.vars["RUN_SECS"]
+            shell.vars["RUN_SECS"] = String(log.runSeconds ?? log.stepSeconds)   // bash's `RUN_SECS=… tick` exports it to mas
+            let status = shell.tick("App Store \(number)/\(count): \(app)", ["mas", "upgrade", id], log: log, output: out)
+            shell.vars["RUN_SECS"] = outside
+            if status == 0 {
                 out.ok("%s: %s", "App Store", app)
                 run.doneUpdate("%s: %s", "App Store", app)
             } else {

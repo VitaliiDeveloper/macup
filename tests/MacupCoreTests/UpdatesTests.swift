@@ -185,6 +185,12 @@ final class UpdatesTests: XCTestCase {
         for (line, expected) in zip(lines, bash) { XCTAssertEqual(Updates.masLine(line), expected, line) }
     }
 
+    func testSecondFieldAsAwkFindsIt() throws {
+        let cases = [("007 old\n7 seven\nweb aaa", "7"), ("1e1 ten\n10 other", "10"), ("web aaa\npdf bbb\nweb ccc", "web"), ("a\\tb x", "a\\tb"), ("x 1", "y"), ("", "a")]
+        let bash = try BashOracle.run(cases.map { "printf '%s\\n' \(BashOracle.quoted($0.0)) | awk -v n=\(BashOracle.quoted($0.1)) '$1==n{print $2}'" })
+        for (item, expected) in zip(cases, bash) { XCTAssertEqual(Updates.secondField(of: item.1, in: item.0), expected, "\(item)") }
+    }
+
     func testNewestVersionedFormulaAsSortFindsIt() throws {
         let lists = [["node@9", "node@18", "node@24", "node@22"], ["python@3.9", "python@3.12", "python@3.10"], ["node@20"], ["a@1.2.10", "a@1.2.9", "a@1.10"]]
         let bash = try BashOracle.run(lists.map { "printf '%s\\n' \($0.joined(separator: " ")) | sort -t@ -k2 -V | tail -1" })

@@ -113,8 +113,11 @@ enum Updates {
             shell.vars["PWD"] = saved.pwd
             shell.vars["OLDPWD"] = saved.oldpwd
         }
+        // bash keeps the PWD it was given only when it names the folder it started in
+        var given = stat(), current = stat()
+        let pwdValid = saved.pwd.map { $0.hasPrefix("/") && stat($0, &given) == 0 && stat(".", &current) == 0 && given.st_dev == current.st_dev && given.st_ino == current.st_ino } ?? false
+        shell.vars["OLDPWD"] = pwdValid ? saved.pwd : herePath
         guard chdir(run.env.home) == 0 else { return 1 }
-        shell.vars["OLDPWD"] = saved.pwd ?? herePath
         var parts: [Substring] = []   // cd's logical path: no "//", "." or ".."
         for part in run.env.home.split(separator: "/") where part != "." {
             if part == ".." { _ = parts.popLast() } else { parts.append(part) }
@@ -147,7 +150,11 @@ enum Updates {
     /// `printf '%s\n' "$list" | awk -v n="$name" '$1==n{print $2}'`: the second field of the lines that start with that name.
     static func secondField(of name: String, in list: String) -> String {
         let wanted = Awk.unescape(name)
-        return Bash.substitution(Bash.lines(list).filter { Awk.firstField($0) == wanted }.map { Awk.field($0, 2) }.joined(separator: "\n"))
+        // awk compares as numbers when both sides look like numbers
+        func same(_ field: String) -> Bool {
+            Awk.isNumber(field) && Awk.isNumber(wanted) ? Awk.number(field) == Awk.number(wanted) : field.unicodeScalars.elementsEqual(wanted.unicodeScalars)
+        }
+        return Bash.substitution(Bash.lines(list).filter { same(Awk.firstField($0)) }.map { Awk.field($0, 2) }.joined(separator: "\n"))
     }
 
     /// `head -N | paste -sd, - | sed 's/,/, /g'`, and "+M" for the lines left out.

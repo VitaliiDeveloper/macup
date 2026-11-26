@@ -25,6 +25,7 @@ for cases in tests/diff_cases/*.sh; do
   # shellcheck source=/dev/null
   . "$cases"
 done
+
 # tools unit
 # shellcheck source=tests/diff_tools.sh
 . tests/diff_tools.sh

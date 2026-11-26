@@ -150,7 +150,7 @@ tools_now=$(date +%s)
 tools_ago(){ date -u -r $((tools_now - $1 * 86400)) "+%Y-%m-%d %H:%M:%S${2:-.00 +0000}"; }
 tools_ips(){ # file app bug_type days-ago procPath
   printf '{"app_name":"%s","timestamp":"%s","bug_type":"%s","name":"%s"}\n{"procPath":"%s","procName":"%s"}\n' "$2" "$(tools_ago "$4")" "$3" "$2" "$5" "$2" >"$1"; }
-fix_crashes(){ local reports="$1/Library/Logs/DiagnosticReports" index app
+fix_crashes(){ local reports="$1/Library/Logs/DiagnosticReports" index
   mkdir -p "$reports/Retired"
   for index in 1 2; do
     tools_ips "$reports/Crashy App-2026-11-2$index-10000$index.ips" 'Crashy App' 309 1 '\/Applications\/Crashy App.app\/Contents\/MacOS\/Crashy App'

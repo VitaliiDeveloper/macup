@@ -23,7 +23,7 @@ enum Tools {
         let out = run.out
         out.step("Checking MCP servers")
         // from $HOME: the list depends on the current folder (local-scope servers)
-        let answer = inHome(run, orElse: (status: Int32(1), text: "")) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
+        let answer = inHome(run, orElse: (status: Int32(1), text: "", utf8: true)) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
         let list = Bash.lines(Bash.substitution(noColor(answer.text)))
         let total = list.filter { matches(mcpLine, $0) }.count
         let bad = list.filter { matches(mcpBad, $0) }
@@ -210,14 +210,15 @@ enum Tools {
 
     // MARK: helpers
 
-    /// `$(tl seconds tool… 2>…)`: what the tool printed, trailing newlines kept, and its status (124 when it was stopped,
-    /// 127 when it is not there); `input`, when given, is what it reads.
+    /// `$(tl seconds tool… 2>…)`: what the tool printed, trailing newlines kept, its status (124 when it was stopped,
+    /// 127 when it is not there) and whether the output is UTF-8, which Python insists on; `input`, when given, is what it reads.
     static func capture(_ shell: Shell, _ seconds: Int, _ argv: [String], stdin: Shell.Input = .inherit, stderr: Shell.Out = .null,
-                        input: String? = nil) -> (status: Int32, text: String) {
+                        input: String? = nil) -> (status: Int32, text: String, utf8: Bool) {
         var output: [Int32] = [0, 0], feed: [Int32] = [-1, -1]
-        guard pipe(&output) == 0 else { return (127, "") }
+        guard pipe(&output) == 0 else { return (127, "", true) }
         var source = stdin
-        if let input, pipe(&feed) == 0 {
+        if let input {
+            guard pipe(&feed) == 0 else { close(output[0]); close(output[1]); return (127, "", true) }
             source = .fd(feed[0])
             _ = fcntl(feed[1], F_SETNOSIGPIPE, 1)   // a tool that ends without reading all of it must not take macup along
             let writer = feed[1]
@@ -234,7 +235,7 @@ enum Tools {
         close(output[1])
         if feed[0] >= 0 { close(feed[0]) }
         drained.wait()
-        return (status, String(decoding: data, as: UTF8.self))
+        return (status, String(decoding: data, as: UTF8.self), String(data: data, encoding: .utf8) != nil)
     }
 
     /// `(cd "$HOME" && …)`, as Updates.inHome has it for a step, around any work: PWD and OLDPWD as cd leaves them.

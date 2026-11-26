@@ -108,6 +108,16 @@ final class ToolsTests: XCTestCase {
         let code = "import os, sys\nfor p in sys.argv[1:]: print(os.path.realpath(p)); print(os.path.normpath(p)); print(os.path.dirname(p)); print(os.path.basename(p))"
         let swift = paths.map { [PythonPath.realpath($0), PythonPath.normpath($0), PythonPath.dirname($0), PythonPath.basename($0)].joined(separator: "\n") }
         XCTAssertEqual(swift.joined(separator: "\n"), try python(["-c", code] + paths))
+        try write("", "bin/plain")
+        try write("", "bin/tool", executable: true)
+        try FileManager.default.createDirectory(atPath: home + "/bin/folder", withIntermediateDirectories: true)
+        let names = ["tool", "plain", "folder", "ls", "/bin/ls", "bin/tool", "nope"], searches = ["", ":", "/bin", "\(home)/bin", "/nope:\(home)/bin"]
+        let whichCode = "import os, shutil, sys\nos.chdir(sys.argv[1])\nfor p in sys.argv[2:]:\n  for n in \(names): print(shutil.which(n, path=p) is not None)"
+        let here = FileManager.default.currentDirectoryPath
+        FileManager.default.changeCurrentDirectoryPath(home)
+        defer { FileManager.default.changeCurrentDirectoryPath(here) }
+        let found = searches.flatMap { search in names.map { PythonPath.which($0, path: search) ? "True" : "False" } }
+        XCTAssertEqual(found.joined(separator: "\n"), try python(["-c", whichCode, home] + searches))
     }
 
     func testCrashesAsPythonCountsThem() throws {

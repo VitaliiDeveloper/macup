@@ -95,7 +95,7 @@ extension Tools {
                 let interpreter: String
                 if PythonPath.basename(first) == "env" {
                     let rest = head.dropFirst().filter { !starts($0, "-") && !$0.unicodeScalars.contains("=") }
-                    guard let wanted = rest.first, shell.which(wanted) == nil else { continue }
+                    guard let wanted = rest.first, !PythonPath.which(wanted, path: shell.vars["PATH"]) else { continue }
                     interpreter = wanted
                 } else if access(first, X_OK) == 0 {
                     continue
@@ -178,6 +178,18 @@ enum PythonPath {
         let joined = parts.map { String(String.UnicodeScalarView($0)) }.joined(separator: "/")
         let result = String(repeating: "/", count: slashes) + joined
         return result.isEmpty ? "." : result
+    }
+
+    /// `shutil.which(name) is not None`: an executable that is not a folder, looked up in PATH unless the name has a slash;
+    /// an empty PATH finds nothing, an empty entry is the current folder.
+    static func which(_ name: String, path: String?) -> Bool {
+        func runnable(_ file: String) -> Bool {
+            var info = stat()
+            return stat(file, &info) == 0 && access(file, X_OK) == 0 && info.st_mode & S_IFMT != S_IFDIR
+        }
+        if name.unicodeScalars.contains("/") { return runnable(name) }
+        guard let path, !path.isEmpty else { return false }
+        return path.unicodeScalars.split(separator: ":", omittingEmptySubsequences: false).contains { runnable(join(String(String.UnicodeScalarView($0)), name)) }
     }
 
     static func readlink(_ path: String) -> String {

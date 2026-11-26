@@ -3,8 +3,8 @@
 # Sourced by tests/diff.sh: the tools unit's cases (tools.sh: MCP servers, brew doctor, Xcode, versions, commands, Docker,
 # GitHub CLI, signing certificates, crashes). The tools are answering fakes in the fake home (tests/fakes.sh); what is not
 # faked is the Mac's own (python3, openssl, /usr/bin, the real /opt/homebrew/bin and /usr/local/bin the commands check scans).
-# A tool that hangs costs its whole limit in every run: only docker info (20 seconds) really hangs; for the others a fake
-# exits 124, which both builds read as stopped.
+# A tool that hangs costs its whole limit in every run: only docker info and gh auth status (20 seconds) really hang; for
+# claude mcp list (120) and brew doctor (240) a fake exits 124, which both builds read as stopped.
 tools_path="PATH=@H/.fake/bin:$work/bin:/usr/bin:/bin"
 tools_ids=check.mcp,check.brew_doctor,check.xcode,check.devtools,check.commands,check.docker,check.gh,check.certs,check.crashes
 CASES="$CASES
@@ -39,6 +39,7 @@ tool-gh-ok|ghok|$tools_path|check --only check.gh
 tool-gh-config-dir|ghdir|$tools_path GH_CONFIG_DIR=@H/ghdir|check --only check.gh
 tool-gh-xdg|ghxdg|$tools_path XDG_CONFIG_HOME=@H/xdg|check --only check.gh
 tool-gh-empty|ghempty|$tools_path|check --only check.gh
+tool-gh-hangs|ghslow|$tools_path|check --only check.gh|pipe
 tool-certs|certs|$tools_path|check --only check.certs
 tool-certs-none|certsnone|$tools_path|check --only check.certs
 tool-crashes|crashes|$tools_path|check --only check.crashes
@@ -114,6 +115,7 @@ fix_gh(){ tools_fakes "$1" gh; mkdir -p "$1/.config/gh"; echo 'github.com:' >"$1
 fix_ghok(){ fix_gh "$1"; answer "$1" gh auth "$(printf 'github.com\n  ✓ Logged in to github.com account someone (keyring)')"; rm "$1/.fake/gh/auth.then"; }
 fix_ghdir(){ fix_gh "$1"; mkdir -p "$1/ghdir"; mv "$1/.config/gh/hosts.yml" "$1/ghdir/"; }
 fix_ghxdg(){ fix_gh "$1"; mkdir -p "$1/xdg"; mv "$1/.config/gh" "$1/xdg/"; }
+fix_ghslow(){ fix_gh "$1"; rm "$1/.fake/gh/auth.then"; echo 30 >"$1/.fake/gh/auth.sleep"; }
 fix_ghempty(){ fix_gh "$1"; : >"$1/.config/gh/hosts.yml"; }
 
 # signing certificates made once per run of this script: a fake security lists identities and hands out the certificates

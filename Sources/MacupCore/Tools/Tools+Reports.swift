@@ -5,8 +5,9 @@ import Foundation
 extension Tools {
     // signing certificates: Xcode says nothing until the build fails on the day one expires
     static func certs(_ run: Run) {
-        let identities = capture(run.shell, 0, ["security", "find-identity", "-v", "-p", "codesigning"]).text
-        let expiring = expiringCertificates(identities, shell: run.shell)
+        let identities = capture(run.shell, 0, ["security", "find-identity", "-v", "-p", "codesigning"])
+        guard identities.utf8 else { return }   // Python cannot read it and stops
+        let expiring = expiringCertificates(identities.text, shell: run.shell)
         guard !expiring.isEmpty else { return }
         run.out.warn("Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts", String(Run.count(expiring)))
         run.lines(expiring)
@@ -17,23 +18,30 @@ extension Tools {
     static func expiringCertificates(_ identities: String, shell: Shell) -> String {
         let names = Set(all(quoted, in: identities, group: 1).map { Array($0.unicodeScalars) })
         guard !names.isEmpty else { return "" }
-        let pems = all(certificate, in: capture(shell, 0, ["security", "find-certificate", "-a", "-p"], stdin: .null).text, group: 0)
+        let keychain = capture(shell, 0, ["security", "find-certificate", "-a", "-p"], stdin: .null)
+        guard keychain.utf8 else { return "" }
+        let pems = all(certificate, in: keychain.text, group: 0)
+        var failed = false
         func openssl(_ pem: String, _ arguments: [String]) -> (status: Int32, text: String) {
-            capture(shell, 0, ["openssl", "x509", "-noout"] + arguments, input: pem)
+            let answer = capture(shell, 0, ["openssl", "x509", "-noout"] + arguments, input: pem)
+            if !answer.utf8 { failed = true }
+            return (answer.status, answer.text)
         }
         var newest: [[Unicode.Scalar]: (end: time_t, pem: String)] = [:]
         for pem in pems {
             // one field per line: a comma in the name stays
-            let name = Array(pythonStrip(all(commonName, in: openssl(pem, ["-subject", "-nameopt", "multiline"]).text, group: 1).first ?? "").unicodeScalars)
+            let subject = openssl(pem, ["-subject", "-nameopt", "multiline"]).text
+            let name = Array(pythonStrip(all(commonName, in: subject, group: 1).first ?? "").unicodeScalars)
             guard names.contains(name), openssl(pem, ["-checkend", "0"]).status == 0 else { continue }
             let notAfter = pythonStrip(openssl(pem, ["-enddate"]).text).unicodeScalars.split(separator: "=", omittingEmptySubsequences: false)
             guard notAfter.count > 1, let end = certificateDate(String(String.UnicodeScalarView(notAfter[1]))) else { return "" }
             // renewed in Xcode: same name, the newer one counts
             if newest[name].map({ end > $0.end }) ?? true { newest[name] = (end, pem) }
         }
-        return newest.keys.sorted { $0.lexicographicallyPrecedes($1) }
+        let soon = newest.keys.sorted { $0.lexicographicallyPrecedes($1) }
             .filter { openssl(newest[$0]!.pem, ["-checkend", String(30 * 86400)]).status != 0 }
             .map { String(String.UnicodeScalarView($0)) }.joined(separator: "\n")
+        return failed ? "" : soon
     }
 
     private static let quoted = try! NSRegularExpression(pattern: "\"([^\"]+)\"")

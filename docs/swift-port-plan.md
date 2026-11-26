@@ -89,6 +89,7 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
   - `stale_project_days` written with leading zeros ("007") shows as 7 in the `--deep` tip;
   - a `grep -q` under pipefail that SIGPIPE could turn into "no" gives the intended answer;
   - xargs batch sizes for the old Downloads follow BSD xargs approximately, which decides only how du counts a hard link shared across batches.
+- Found in wave A, updates unit (PR #12): a step-timeout warning in a step run from the home folder (agent skills, each Claude Code plugin update) counts once in the summary, `--json` and history, and the section header prints once; bash runs those steps in a subshell, loses the warning from the counts and can print the header twice.
 
 ## Layout
 
@@ -312,5 +313,5 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 0 | foundation and harness | `swift/foundation` | #9 | merged (0ee1899) |
 | 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | #10 | merged (d4b13c9) |
 | 2A | checks | `swift/checks` | #11 | merged (cbe2a53) |
-| 2A | updates | `swift/updates` | | in progress |
+| 2A | updates | `swift/updates` | #12 | merged (1dcd8b2) |
 | 2A | commands | `swift/commands` | | in progress |

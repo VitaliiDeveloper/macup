@@ -5,7 +5,6 @@
 cd "$(dirname "$0")/.." || exit 1
 W=$(mktemp -d "${TMPDIR:-/tmp}/macup-leftovers.XXXXXX"); trap 'chflags -R nouchg "$W" 2>/dev/null; rm -rf "$W"' EXIT
 F=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; F=1; }
-M="$PWD/macup"
 
 mkdir -p "$W/bin"
 cat >"$W/bin/pgrep" <<'FAKE'
@@ -61,6 +60,7 @@ cat >"$W/bin/osascript" <<'FAKE'
 exit 0
 FAKE
 chmod +x "$W/bin/"*; export PATH="$W/bin:$PATH" MACUP_PATH=keep   # the fakes above win over Homebrew's tools
+ln -s "$PWD/tests/macup_run" "$W/bin/macup_run"   # the build under test (MACUP_BUILD, MACUP_BIN from tests/run.sh)
 
 app(){ # dir bundle-id
   mkdir -p "$1/Contents/MacOS"
@@ -98,7 +98,7 @@ lo(){ # dir macup-args… — runs macup on that fake home and Mac
   env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
     "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
     "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
-    "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" "$@"
+    "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" macup_run "$@"
 }
 
 # --- check.startup reports exactly the leftovers
@@ -120,7 +120,7 @@ pk(){ # dir answer confirm [command run before answering] — interactive check 
     | script -q /dev/null env FAKE_OPEN="${FAKE_OPEN:-}" FAKE_LSOF_PAD="${FAKE_LSOF_PAD:-}" FAKE_LOADED="${FAKE_LOADED:-}" FAKE_SUDO_FAIL="${FAKE_SUDO_FAIL:-}" HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$(printf '%s\n' \
       "$H/Library/Application Support/Perplexity|7S8W4W365S|Perplexity AI Inc." \
       "$H/Library/Application Support/iStat Helper|NF7JU763MN|ImageTasks Inc" \
-      "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" /bin/bash "$M" check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
+      "$H/Apps/iStat.app|NF7JU763MN|ImageTasks Inc")" macup_run check --only "${PK_ONLY:-clean.orphan_agents}" --no-color >"$out" 2>&1
 }
 nm(){ tr -d '\r' <"$1" | grep -E "^ +[0-9]+ .*$2" | head -1 | awk '{print $1}'; }
 AS="Library/Application Support"
@@ -200,7 +200,7 @@ sys_home "$H"; lo "$H" check --only check.startup,clean.orphan_agents --no-color
 
 # --- Background Task Management is never read: sfltool dumpbtm asks for an administrator password (SecurityAgent)
 H="$W/bt"; leftovers_home "$H"
-(sleep 1; until_done "$H.out") | script -q /dev/null env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" /bin/bash "$M" check --only check.startup --no-color >"$H.out" 2>&1
+(sleep 1; until_done "$H.out") | script -q /dev/null env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" macup_run check --only check.startup --no-color >"$H.out" 2>&1
 [ ! -e "$H/sfltool.log" ] && pass "btm: sfltool is never run, so no password dialog" || fail "btm: sfltool was run"
 
 # --- review findings: a folder is never taken by mistake
@@ -222,7 +222,7 @@ rv_home "$H"; PK_ONLY=clean.orphan_agents,clean.orphan_data,check.startup pk "$H
 [ -f "$H/.Trash/com.flat.updater.plist" ] && [ -f "$H/Library/Application Support/Flat/Profile/data" ] && pass "review: a program right in the vendor folder takes only its plist" || { fail "review: vendor folder taken"; ls "$H/.Trash"; }
 [ -f "$H/.Trash/com.valvesoftware.steamold.plist" ] && [ -f "$H/Library/Application Support/Steam/SteamApps/steamclean" ] && pass "review: a missing program takes only its plist" || { fail "review: missing took a folder"; ls "$H/.Trash"; }
 H="$W/cs"; leftovers_home "$H"; for f in "$H"/Library/LaunchAgents/*; do case "$f" in *steamclean*) ;; *) chflags nouchg "$f"; rm -f "$f" ;; esac; done
-env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$H/Library/Application Support/Steam|MXGJJ98X76|Valve Corporation" /bin/bash "$M" check --only check.startup --no-color </dev/null >/dev/null 2>&1
+env HOME="$H" MACUP_APPS="$H/Apps" MACUP_SYSLIB="$H/SysLib" FAKE_SIGN="$H/Library/Application Support/Steam|MXGJJ98X76|Valve Corporation" macup_run check --only check.startup --no-color </dev/null >/dev/null 2>&1
 ! grep -q "$H/Apps" "$H/codesign.log" 2>/dev/null && pass "review: no codesign of every app when the vendor alone settles it" || fail "review: codesign ran on apps"
 H="$W/op"; data_home "$H"; PK_ONLY=clean.orphan_data pk "$H" '' ''; nd=$(nm "$H.out" 'data of a deleted app')
 data_home "$H"; FAKE_OPEN="$H/Library/Application Support/Comet/Default/History" PK_ONLY=clean.orphan_data pk "$H" "$nd" y

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds the single-file bash `macup` from src/, then the Swift binary, which carries that script. Edit src/, then run ./build.sh.
 #   ./build.sh --check   fails if a built file is out of date (macup, macup.sha256, Sources/macup/Generated) or the package does not build
+#   MACUP_NO_SWIFT=1     only the bash script (CI's lint job, on Linux)
 # None of the built files is committed on swift/main: CI builds them.
 # Translations live in src/i18n/translations.json ({"English": {"uk": …, "ru": …}}) and are
 # embedded at build time, so macup itself needs no JSON parser.
@@ -74,11 +75,14 @@ PY
 if [ "${1:-}" = --check ]; then
   cmp -s "$tmp" macup || { echo "macup is out of date: run ./build.sh" >&2; exit 1; }
   [ "$(cat macup.sha256 2>/dev/null)" = "$SUM" ] || { echo "macup.sha256 is out of date: run ./build.sh" >&2; exit 1; }
-  for f in "$gen"/*.swift; do cmp -s "$f" "$GEN/${f##*/}" || { echo "$GEN/${f##*/} is out of date: run ./build.sh" >&2; exit 1; }; done
-  swift build -q || { echo "the Swift package does not build" >&2; exit 1; }
+  if [ -z "${MACUP_NO_SWIFT:-}" ]; then
+    for f in "$gen"/*.swift; do cmp -s "$f" "$GEN/${f##*/}" || { echo "$GEN/${f##*/} is out of date: run ./build.sh" >&2; exit 1; }; done
+    swift build -q || { echo "the Swift package does not build" >&2; exit 1; }
+  fi
   echo "macup is up to date"
 else
   cp "$tmp" macup; chmod 755 macup; echo "$SUM" >macup.sha256; echo "built macup ($(wc -l <macup | tr -d ' ') lines)"
+  [ -n "${MACUP_NO_SWIFT:-}" ] && exit 0
   mkdir -p "$GEN"
   for f in "$gen"/*.swift; do cmp -s "$f" "$GEN/${f##*/}" || cp "$f" "$GEN/${f##*/}"; done   # unchanged files keep their date: no rebuild
   swift build -q && echo "built $(swift build --show-bin-path)/macup"

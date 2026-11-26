@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]   # a release tag points at a commit main already ran
+    branches: [main, "swift/**"]   # a release tag points at a commit main already ran; swift/main is tested as merged
   pull_request:
   schedule:
     - cron: "17 6 * * 1"   # weekly, to catch macOS runner changes
@@ -18,33 +18,59 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - name: Build the bash script
+        run: MACUP_NO_SWIFT=1 ./build.sh
       - name: ShellCheck
         run: |
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
-          shellcheck -s bash -S warning macup install.sh build.sh tests/*.sh tools/*.sh
+          # every tracked script, so a file that goes away leaves no stale name here; src/*.sh are parts of macup
+          git ls-files -z '*.sh' ':!src/' tests/macup_run | xargs -0 shellcheck -s bash -S warning macup
       - name: Python helpers
         run: |
-          python3 tests/test_helpers.py
-          pipx run ruff check --select F src/py tests/*.py
+          [ ! -f tests/test_helpers.py ] || python3 tests/test_helpers.py
+          pipx run ruff check --select F $(git ls-files '*.py')
 
-  macos:
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build (the bash script, then the Swift package)
+        run: |
+          swift --version
+          ./build.sh
+      - name: XCTest
+        run: swift test
+      - name: Universal release build
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          b="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/macup"
+          a=$(lipo -archs "$b"); echo "$a"
+          case " $a " in *" x86_64 "*) ;; *) exit 1 ;; esac
+          case " $a " in *" arm64 "*) ;; *) exit 1 ;; esac
+          "$b" version
+
+  suite-bash:
     strategy:
       fail-fast: false
       matrix:
         os: [macos-26, macos-15]   # the current macOS and the one before, Apple silicon
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      - name: Build
+        run: ./build.sh
       - name: Syntax check with the stock macOS bash 3.2
         run: |
           /bin/bash --version | head -1
           /bin/bash -n macup
           /bin/bash -n install.sh
-      - name: Tests (fake home folders only)
+      - name: Tests on the bash build (fake home folders only)
         run: tests/run.sh
       - name: Install from the checkout
         run: /bin/bash ./install.sh --yes --lang en --projects "~/work"
@@ -74,3 +100,35 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           for l in uk ru en; do macup lang $l; macup tasks --no-color | head -4; macup help | head -3; done
           MACUP_LANG=uk macup check --no-color --only check.system,check.disk,check.memory
+
+  suite-swift:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: |
+          ./build.sh
+          swift build -c release
+      - name: Tests on the Swift build (fake home folders only)
+        run: MACUP_BUILD=swift MACUP_BIN="$(swift build -c release --show-bin-path)/macup" tests/run.sh
+      - name: A dry run through the binary
+        run: |
+          b="$(swift build -c release --show-bin-path)/macup"
+          "$b" version
+          "$b" check --no-color --skip check.macos_updates,update.skills
+          "$b" history
+
+  diff:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: ./build.sh
+      - name: The bash and the Swift build give the same results
+        run: tests/diff.sh

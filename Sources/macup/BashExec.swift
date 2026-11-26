@@ -5,11 +5,13 @@ import Foundation
 /// execve, not a child process, so macup keeps its pid (the lock, the watchdogs, the suite's kill), its terminal and its
 /// exit status; nothing is left in the temp folder.
 enum BashExec {
-    static func run(_ argv: [String]) -> Never {
+    static func run() -> Never {
         let fd = scriptDescriptor()
         setenv("MACUP_SELF", selfPath(), 1)
-        let args = ["/bin/bash", "/dev/fd/\(fd)"] + argv
-        let cArgs = args.map { strdup($0) } + [nil]
+        // the arguments as the C strings macup got: a Swift String would replace bytes that are not UTF-8
+        var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup("/bin/bash"), strdup("/dev/fd/\(fd)")]
+        for i in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[i]) }
+        cArgs.append(nil)
         execv("/bin/bash", cArgs)
         fail("cannot run /bin/bash: \(String(cString: strerror(errno)))")
     }

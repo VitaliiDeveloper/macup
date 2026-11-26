@@ -13,7 +13,7 @@ do {
 }
 switch Router.route(argv, env: env) {
 case .bash:
-    BashExec.run(argv)
+    BashExec.run()
 case .swift(let a):
     exit(OneOff.run(a, env: env, translations: Translations.json))
 }

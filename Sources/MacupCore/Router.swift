@@ -29,8 +29,10 @@ public enum Router {
             if command == .tasks, settings().bashArithmeticFails { return .bash }
             return .swift(arguments)
         }
-        // no command word: a run (check, all, update, clean, or --deep alone); without one, the menu or the help
-        guard arguments.action != nil || arguments.deep, ported.contains("run") else { return .bash }
+        // no command word and no run: the menu on a terminal (its choice 8 loads the config), the help anywhere else
+        if arguments.action == nil, !arguments.deep { return ported.contains("menu") && !settings().bashArithmeticFails ? .swift(arguments) : .bash }
+        // a run: check, all, update, clean, or --deep alone
+        guard ported.contains("run") else { return .bash }
         // the deep scan is no task; --pick and the pick at the end of a check on a terminal come with phase 3
         if arguments.deep, !ported.contains("deep") { return .bash }
         if !arguments.pick.isEmpty, !ported.contains("pick") { return .bash }

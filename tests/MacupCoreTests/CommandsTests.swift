@@ -1,0 +1,101 @@
+import Foundation
+import XCTest
+@testable import MacupCore
+
+/// The one-off commands' pure pieces against the bash functions they replace (commands.sh).
+final class CommandsTests: XCTestCase {
+    private let folder = NSTemporaryDirectory() + "macup-commands-\(UUID().uuidString)"
+
+    override func setUpWithError() throws { try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true) }
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(atPath: folder) }
+
+    /// A one-line function of commands.sh, e.g. `report_mode(){ …; }`.
+    private func oneLiner(_ name: String) -> String {
+        BashOracle.read("src/commands.sh").components(separatedBy: "\n").first { $0.hasPrefix("\(name)(){") }! + "\n"
+    }
+
+    func testReportDateIsBashs() throws {
+        let paths = ["/Users/me/Library/Logs/macup/macup_2026-11-01_10-00-00.md", "/Users/me/Library/Logs/macup/macup_2026-11-01_10-00-00_4242.md",
+                     "/x/macup_odd.md", "/x/macup_2026_1.md", "/a/macup_x/macup_2026-01-02_03-04-05.md", "/x/macup_-n_1-2.md"]
+        let bash = try BashOracle.run(paths.map { "report_date \(BashOracle.quoted($0))" }, prelude: oneLiner("report_date"))
+        XCTAssertEqual(paths.map(Reports.date), bash)
+    }
+
+    func testReportModeIsBashs() throws {
+        let thirdLines = ["Mode: check · macup 2.9.2 · took 0m 5s", "Режим: all+deep · macup 2.9.2", "Mode: Check · macup 2.9.2", "Mode:check · macup 2",
+                          "Mode: check · macupx", "a: b: check · macup 1", "Mode:  check · macup 1", "Mode: clean · macup "]
+        var files: [String] = []
+        for (index, line) in thirdLines.enumerated() {
+            let file = "\(folder)/report\(index).md"
+            try "# title\n\n\(line)\nmore\n".write(toFile: file, atomically: true, encoding: .utf8)
+            files.append(file)
+        }
+        let short = "\(folder)/short.md"
+        try "# title\n\n".write(toFile: short, atomically: true, encoding: .utf8)
+        files += [short, "\(folder)/missing.md"]
+        let bash = try BashOracle.run(files.map { "report_mode \(BashOracle.quoted($0))" }, prelude: oneLiner("report_mode"))
+        XCTAssertEqual(files.map { Reports.mode($0) ?? "" }, bash)
+    }
+
+    func testBrewPrefixIsBashs() throws {
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: "\(folder)/brew/Cellar/macup/1.0/bin", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: "\(folder)/brew/bin", withIntermediateDirectories: true)
+        try "MACUP_VERSION=\"1.0\"\n".write(toFile: "\(folder)/brew/Cellar/macup/1.0/bin/macup", atomically: true, encoding: .utf8)
+        try fm.createSymbolicLink(atPath: "\(folder)/brew/bin/macup", withDestinationPath: "../Cellar/macup/1.0/bin/macup")
+        try fm.createSymbolicLink(atPath: "\(folder)/brew/bin/other", withDestinationPath: "\(folder)/elsewhere/macup")
+        let paths = ["/opt/homebrew/Cellar/macup/2.9.2/bin/macup", "/usr/local/opt/macup/bin/macup", "/opt/macup/bin/macup", "/Cellar/macup/x",
+                     "\(folder)/brew/bin/macup", "\(folder)/brew/bin/other", "\(folder)/plain", "/a/Cellar/macup/b/Cellar/macup/c"]
+        let bash = try BashOracle.run(paths.map { "brew_prefix \(BashOracle.quoted($0))" }, prelude: BashOracle.function("brew_prefix", in: "src/commands.sh"))
+        XCTAssertEqual(paths.map(SelfPath.brewPrefix), bash)
+    }
+
+    func testMacupIsRecognisedByItsVersionLine() throws {
+        let cases: [(String, Data, Bool)] = [("script", Data("#!/bin/bash\n# macup\nMACUP_VERSION=\"2.9.2\"\n".utf8), true),
+                                             ("first", Data("MACUP_VERSION=1".utf8), true),
+                                             ("indented", Data("#!/bin/bash\n MACUP_VERSION=1\n".utf8), false),
+                                             ("binary", Data([0xCF, 0xFA, 0xED, 0xFE, 0x00, 0x0A]) + Data("MACUP_VERSION=\"2.9.2\"".utf8), true),
+                                             ("other", Data("#!/bin/sh\necho MACUP_VERSION=1\n".utf8), false)]
+        for (name, contents, expected) in cases {
+            try contents.write(to: URL(fileURLWithPath: "\(folder)/\(name)"))
+            XCTAssertEqual(SelfPath.isMacup("\(folder)/\(name)"), expected, name)
+        }
+        XCTAssertFalse(SelfPath.isMacup("\(folder)/missing"))
+    }
+
+    func testCheckoutAndDirname() throws {
+        try FileManager.default.createDirectory(atPath: "\(folder)/src", withIntermediateDirectories: true)
+        XCTAssertFalse(SelfPath.isCheckout(folder))
+        try "".write(toFile: "\(folder)/build.sh", atomically: true, encoding: .utf8)
+        XCTAssertTrue(SelfPath.isCheckout(folder))
+        XCTAssertEqual(["/a/b", "/a", "a", "/"].map(SelfPath.dirname), ["/a", "/", ".", "/"])
+    }
+
+    func testNumbersPrintAsAwkPrintsThem() throws {
+        let values = ["0", "-3", "1500.5", "1e3", "0x10", "11.25", "123456789012", "-0", "2.5e-7", "abc", " 42"]
+        let script = "BEGIN{" + values.map { "printf \"%s\\n\", \"\($0)\" + 0;" }.joined() + "}"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/awk")
+        process.arguments = [script]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let awk = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        XCTAssertEqual(values.map { History.awkString(Awk.number($0)) }.joined(separator: "\n") + "\n", awk)
+    }
+
+    func testAnswersThatMeanYes() {
+        XCTAssertEqual(["y", "Y", "т", "Т", "д", "Д", "yes", "n", ""].map(Terminal.isYes), [true, true, true, true, true, true, false, false, false])
+    }
+
+    func testTheMenuRoutesWhenPorted() throws {
+        let home = "\(folder)/home"
+        let environment = try Env(["HOME": home, "PATH": "/usr/bin:/bin", "MACUP_LANG": "en"])
+        XCTAssertEqual(Router.route(["--no-color"], env: environment, ported: ["menu"]), .swift(try Arguments.parse(["--no-color"])))
+        XCTAssertEqual(Router.route([], env: environment, ported: ["run"]), .bash)
+        try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
+        try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Router.route([], env: environment, ported: ["menu"]), .bash, "the tasks of choice 8 load a config bash cannot compute")
+    }
+}

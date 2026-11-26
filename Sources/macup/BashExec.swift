@@ -6,11 +6,11 @@ import MacupCore
 /// execve, not a child process, so macup keeps its pid (the lock, the watchdogs, the suite's kill), its terminal and its
 /// exit status; nothing is left in the temp folder.
 enum BashExec {
-    static func run() -> Never {
+    static func run(prepending words: [String] = []) -> Never {
         let fd = scriptDescriptor()
-        setenv("MACUP_SELF", selfPath(), 1)
+        setenv("MACUP_SELF", SelfPath.current(), 1)
         // the arguments as the C strings macup got: a Swift String would replace bytes that are not UTF-8
-        var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup("/bin/bash"), strdup("/dev/fd/\(fd)")]
+        var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup("/bin/bash"), strdup("/dev/fd/\(fd)")] + words.map { strdup($0) }
         for index in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[index]) }
         cArgs.append(nil)
         execv("/bin/bash", cArgs)
@@ -44,23 +44,6 @@ enum BashExec {
         guard fd >= 0 else { fail("no descriptor for the script: \(String(cString: strerror(errno)))") }
         close(readDescriptor)
         return fd
-    }
-
-    /// The path this binary was started by, as the bash build's $0 was: the path the shell found in PATH, a symlink kept as
-    /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at). Not resolved to the real file.
-    /// A binary in a checkout's .build is the build output, like ./macup there: it is named as ./macup, so uninstall leaves it.
-    static func selfPath() -> String {
-        var size: UInt32 = 0
-        _NSGetExecutablePath(nil, &size)
-        var buf = [CChar](repeating: 0, count: Int(size) + 1)
-        guard _NSGetExecutablePath(&buf, &size) == 0 else { return CommandLine.arguments[0] }
-        let path = String(cString: buf)
-        if let range = path.range(of: "/.build/", options: .backwards) {
-            let checkout = String(path[..<range.lowerBound])
-            let fm = FileManager.default
-            if fm.fileExists(atPath: checkout + "/build.sh"), fm.fileExists(atPath: checkout + "/src") { return checkout + "/macup" }
-        }
-        return path
     }
 
     private static func fail(_ msg: String) -> Never {

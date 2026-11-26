@@ -1,0 +1,133 @@
+@testable import MacupCore
+@testable import macup
+import XCTest
+
+final class RoutingTests: XCTestCase {
+    func env(_ extra: [String: String] = [:]) throws -> Env {
+        var vars = ["HOME": NSTemporaryDirectory() + "macup-none-\(UUID().uuidString)", "PATH": "/usr/bin:/bin"]
+        for (key, value) in extra { vars[key] = value }
+        return try Env(vars)
+    }
+
+    func testParseMirrorsArgumentsSh() throws {
+        var arguments = try Arguments.parse(["check", "--skip", "a", "--skip=b", "--only", "c", "--lang", "ua", "--no-color", "tasks"])
+        XCTAssertEqual(arguments.command, .tasks)
+        XCTAssertEqual(arguments.action, "check")
+        XCTAssertTrue(arguments.dry)
+        XCTAssertEqual(arguments.cliSkip, ",a,b")
+        XCTAssertEqual(arguments.cliOnly, ",c")
+        XCTAssertEqual(arguments.lang, .uk)
+        XCTAssertTrue(arguments.noColor)
+
+        arguments = try Arguments.parse(["schedule", "weekly", "lang", "--json", "reports", "clean", "help", "version"])
+        XCTAssertEqual(arguments.command, .version, "the last command word wins")
+        XCTAssertEqual(arguments.schedArg, "weekly")
+        XCTAssertEqual(arguments.langArg, "", "lang takes no option as its word")
+        XCTAssertEqual(arguments.repArg, "clean")
+        XCTAssertTrue(arguments.json && arguments.quiet)
+
+        arguments = try Arguments.parse(["--skip"])
+        XCTAssertEqual(arguments.cliSkip, ",", "an option at the end takes an empty value")
+
+        arguments = try Arguments.parse(["tasks", "--pick", "k1, k2"])
+        XCTAssertEqual(arguments.pick, ",,k1,k2,")
+        XCTAssertEqual(arguments.cliOnly, "clean.*")
+        XCTAssertEqual(arguments.action, "clean")
+        XCTAssertFalse(arguments.dry || arguments.doUpdate)
+
+        XCTAssertThrowsError(try Arguments.parse(["--level", "huge", "help"]))
+        XCTAssertThrowsError(try Arguments.parse(["--lang"]))
+        XCTAssertThrowsError(try Arguments.parse(["help", "bogus"])) { XCTAssertEqual($0 as? Arguments.Failure, .unknownCommand("bogus")) }
+        XCTAssertEqual(try Arguments.parse(["--level=aggressive"]).level, 3)
+    }
+
+    func testRoutes() throws {
+        let environment = try env()
+        func route(_ line: String) -> String {
+            switch Router.route(line.split(separator: " ").map(String.init), env: environment) {
+            case .bash: return "bash"
+            case .swift(let arguments): return arguments.command?.rawValue ?? "run"
+            }
+        }
+        XCTAssertEqual(route("help"), "help")
+        XCTAssertEqual(route("help --lang ru --no-color"), "help")
+        XCTAssertEqual(route("version"), "version")
+        XCTAssertEqual(route("-v"), "version")
+        XCTAssertEqual(route("tasks --json"), "tasks")
+        XCTAssertEqual(route("check tasks"), "tasks", "a one-off command runs before the check")
+        XCTAssertEqual(route("self-update"), "self_update")
+        XCTAssertEqual(route("schedule weekly"), "schedule")
+        for line in ["", "check", "all --only check.disk", "--deep", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
+                  "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
+            XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
+        }
+    }
+
+    func testConfigBashCannotComputeGoesToBash() throws {
+        let environment = try env()
+        try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: environment.home) }
+        try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Router.route(["tasks"], env: environment), .bash)
+        XCTAssertNotEqual(Router.route(["help"], env: environment), .bash)
+        try "step_timeout_minutes = 010\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+        XCTAssertNotEqual(Router.route(["tasks"], env: environment), .bash)
+    }
+
+    func testRunsRouteOnlyWhenEveryTaskIsPorted() throws {
+        let environment = try env()
+        let ported: Set<String> = ["run", "help"]
+        func route(_ argv: [String], _ tasks: Set<String>) -> Bool {
+            if case .swift = Router.route(argv, env: environment, ported: ported, portedTasks: tasks) { return true }
+            return false
+        }
+        XCTAssertTrue(route(["check", "--only", "check.disk"], ["check.disk"]))
+        XCTAssertFalse(route(["check", "--only", "check.disk,check.memory"], ["check.disk"]))
+        XCTAssertFalse(route(["check", "--only", "chek.disk"], ["check.disk"]), "an unknown id goes to bash, which says so")
+        XCTAssertFalse(route(["check"], ["check.disk"]))
+        XCTAssertTrue(route(["check"], Set(Tasks.all.filter(\.on).map(\.id))), "a full check once every default task is ported")
+        XCTAssertFalse(route([], Set(Tasks.all.map(\.id))), "no command: the menu or the help, still bash")
+    }
+
+    func testEnvironment() throws {
+        XCTAssertThrowsError(try Env(["HOME": ""]))
+        XCTAssertThrowsError(try Env(["HOME": "/"]))
+        XCTAssertThrowsError(try Env(["HOME": "relative"]))
+        var environment = try Env(["HOME": "/h", "PATH": "/usr/bin"])
+        XCTAssertEqual(environment.path, "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/h/.local/bin:/h/.npm-global/bin:/h/.cargo/bin:/usr/bin")
+        XCTAssertEqual(environment.userPath, "/usr/bin")
+        XCTAssertEqual(environment.conf, "/h/.config/macup/config")
+        XCTAssertEqual(environment.lcCtype, "en_US.UTF-8")
+        XCTAssertEqual(environment.apps, "/Applications:/h/Applications")
+        XCTAssertEqual(environment.raw, "https://raw.githubusercontent.com/VitaliiDeveloper/macup")
+        environment = try Env(["HOME": "/h", "PATH": "/x", "MACUP_PATH": "keep", "XDG_CONFIG_HOME": "/xdg", "LANG": "uk_UA.UTF-8", "MACUP_REPO": "me/fork",
+                     "NO_COLOR": "", "MACUP_LANG": "", "TMPDIR": "/t/"])
+        XCTAssertEqual(environment.path, "/x")
+        XCTAssertEqual(environment.conf, "/xdg/macup/config")
+        XCTAssertNil(environment.lcCtype)
+        XCTAssertEqual(environment.repo, "me/fork")
+        XCTAssertFalse(environment.noColor, "an empty NO_COLOR is no NO_COLOR")
+        XCTAssertNil(environment.langHook)
+        XCTAssertEqual(environment.tmpDir, "/t/")
+    }
+
+    func testHelpIsUsage() throws {
+        for lang in Lang.allCases {
+            for (colors, colorPrelude) in [(Colors.off, "B=; N="), (Colors.on, "B=$'\\033[1m'; N=$'\\033[0m'")] {
+                let prelude = "MACUP_VERSION=\(Env.version); MSG_LANG=\(lang.rawValue); \(colorPrelude)\n" + BashOracle.read("src/help.sh")
+                let got = try BashOracle.run(["usage; printf x"], home: "/Users/h.x", prelude: prelude)
+                XCTAssertEqual(Help.text(lang: lang, colors: colors, conf: "~/.config/macup/config") + "x", got[0], "help \(lang)")
+            }
+        }
+    }
+
+    func testVersionIsCoreSh() {
+        XCTAssertTrue(BashOracle.read("src/core.sh").contains("\nMACUP_VERSION=\"\(Env.version)\"\n"))
+    }
+
+    /// The binary carries exactly the bash build next to it and the translations.
+    func testGeneratedSourcesAreCurrent() {
+        XCTAssertEqual(LegacyScript.text, BashOracle.read("macup"), "run ./build.sh")
+        XCTAssertEqual(Translations.json, BashOracle.read("src/i18n/translations.json"), "run ./build.sh")
+    }
+}

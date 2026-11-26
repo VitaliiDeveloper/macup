@@ -24,7 +24,8 @@ final class NamesTests: XCTestCase {
     static let export = BashOracle.read("src/core.sh").components(separatedBy: "\n").first { $0.contains("export LC_CTYPE=") }!
 
     override func tearDown() {
-        Names.setLocale(try! Env(ProcessInfo.processInfo.environment))
+        Names.bashLocale = nil
+        Names.toolLocale = nil
     }
 
     /// Swift's == takes é and e + U+0301 as one string: the tools print bytes.

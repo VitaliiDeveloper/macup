@@ -125,7 +125,8 @@ final class LeftoversTests: XCTestCase {
 
     func testVendorListSortsAsSort() throws {
         let lines = ["b|2", "a|1", "b|1", "B|3", "é|4", "e|5"]
-        let bash = try BashOracle.run(["printf '%s\\n' \(lines.map(BashOracle.quoted).joined(separator: " ")) | sort -u -t'|' -k1,1"])
+        let locale = ProcessInfo.processInfo.environment.filter { ["LANG", "LC_ALL", "LC_COLLATE"].contains($0.key) }   // the collation Swift sorts in
+        let bash = try BashOracle.run(["printf '%s\\n' \(lines.map(BashOracle.quoted).joined(separator: " ")) | sort -u -t'|' -k1,1"], env: locale)
         let pairs = lines.map { line -> (String, String) in let parts = line.split(separator: "|"); return (String(parts[0]), String(parts[1])) }
         XCTAssertEqual(Leftovers.sortedUnique(pairs, key: \.0).map { "\($0.0)|\($0.1)" }.joined(separator: "\n"), bash[0])
     }

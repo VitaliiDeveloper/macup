@@ -50,6 +50,26 @@ enum BashOracle {
         return lines.prefix(while: { $0 != "}" }).joined(separator: "\n") + "\n}\n"
     }
 
+    /// macup_helpers.py `command args…` with this input: what it prints (as `$(…)` keeps it) and whether it ended well.
+    static func python(_ command: String, _ arguments: [String], input: String = "", home: String, env extra: [String: String] = [:]) throws -> (output: String, ok: Bool) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [repo + "/src/py/macup_helpers.py", command] + arguments
+        var env = ["HOME": home, "PATH": "\(home)/bin:/usr/bin:/bin", "LC_CTYPE": "en_US.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"]
+        for (key, value) in extra { env[key] = value }
+        process.environment = env
+        let stdout = Pipe(), stdin = Pipe()
+        process.standardOutput = stdout
+        process.standardInput = stdin
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        stdin.fileHandleForWriting.write(Data(input.utf8))
+        try stdin.fileHandleForWriting.close()
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\\n+$", with: "", options: .regularExpression), process.terminationStatus == 0)
+    }
+
     /// A value as a single-quoted bash word.
     static func quoted(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }

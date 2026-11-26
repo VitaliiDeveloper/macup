@@ -76,6 +76,12 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
 **Intended differences** are listed here and nowhere else. Each one is a deliberate change, has a test, and goes into the 3.0.0 CHANGELOG:
 
 - Sections that bash runs only `if have python3` (npm globals, skills, plugins, simulators, outdated apps, the Electron layout scan, editor workspaces) run on every Mac in Swift.
+- Found in phase 1 (PR #10), accepted as they are:
+  - a run killed by a signal it does not trap (SIGKILL from the watchdog, a crash) prints `Killed: 9`, not bash's long job line;
+  - a malformed line in history.csv reads as 0 instead of aborting the run;
+  - when no temporary file can be made, the run exits 1 instead of going on without a report body;
+  - tools no longer inherit `MACUP_SELF`, `SHLVL`, `_` or fds 3 and 4;
+  - `sw_vers` and `xcode-select -p` run only when something uses them.
 
 ## Layout
 
@@ -179,8 +185,9 @@ Within a wave, a unit that needs a foundation change stops and asks the coordina
 
 ### Phase 3: exec and pick (one session)
 
+- Phase 1 already ported, for `clean.derived_data`: `exec_cand` for the `empty` kind, `del`, `running`, the process part of `mark_busy`, `visible`, `list_cands`, `json_cands`.
 - **The code that deletes files:**
-  - `exec_cand` and `run_key` (with the `orph:`, `odata:` and `devc:` keys that point into the leftovers state);
+  - `exec_cand` for the `rm`, `trash` and `cmd` kinds, and `run_key` (with the `orph:`, `odata:` and `devc:` keys that point into the leftovers state);
   - `del`, `to_trash_path`, the leftovers `to_trash` with its allow list;
   - busy detection (`running`, `lsof_snap`, `open_in`, `mark_busy`);
   - `visible`, `list_cands`, the pick, confirmations, `--pick`.
@@ -283,4 +290,7 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 | Phase | Unit | Branch | PR | State |
 |---|---|---|---|---|
 | 0 | foundation and harness | `swift/foundation` | #9 | merged (0ee1899) |
-| 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | | in progress |
+| 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | #10 | merged (d4b13c9) |
+| 2A | checks | `swift/checks` | | in progress |
+| 2A | updates | `swift/updates` | | in progress |
+| 2A | commands | `swift/commands` | | in progress |

@@ -5,9 +5,9 @@ import Foundation
 extension Tools {
     // signing certificates: Xcode says nothing until the build fails on the day one expires
     static func certs(_ run: Run) {
-        let identities = capture(run.shell, 0, ["security", "find-identity", "-v", "-p", "codesigning"])
-        guard identities.utf8 else { return }   // Python cannot read it and stops
-        let expiring = expiringCertificates(identities.text, shell: run.shell)
+        let identities = capture(run.shell, 0, ["security", "find-identity", "-v", "-p", "codesigning"]).data
+        guard let text = String(data: identities, encoding: .utf8) else { return }   // Python cannot read it and stops
+        let expiring = expiringCertificates(text, shell: run.shell)
         guard !expiring.isEmpty else { return }
         run.out.warn("Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts", String(Run.count(expiring)))
         run.lines(expiring)
@@ -18,14 +18,13 @@ extension Tools {
     static func expiringCertificates(_ identities: String, shell: Shell) -> String {
         let names = Set(all(quoted, in: identities, group: 1).map { Array($0.unicodeScalars) })
         guard !names.isEmpty else { return "" }
-        let keychain = capture(shell, 0, ["security", "find-certificate", "-a", "-p"], stdin: .null)
-        guard keychain.utf8 else { return "" }
-        let pems = all(certificate, in: keychain.text, group: 0)
+        guard let keychain = String(data: capture(shell, 0, ["security", "find-certificate", "-a", "-p"], stdin: .null).data, encoding: .utf8) else { return "" }
+        let pems = all(certificate, in: keychain, group: 0)
         var failed = false
         func openssl(_ pem: String, _ arguments: [String]) -> (status: Int32, text: String) {
             let answer = capture(shell, 0, ["openssl", "x509", "-noout"] + arguments, input: pem)
-            if !answer.utf8 { failed = true }
-            return (answer.status, answer.text)
+            guard let text = String(data: answer.data, encoding: .utf8) else { failed = true; return (answer.status, "") }
+            return (answer.status, text)
         }
         var newest: [[Unicode.Scalar]: (end: time_t, pem: String)] = [:]
         for pem in pems {
@@ -67,7 +66,7 @@ extension Tools {
             guard fields.count > 1 else { continue }
             // awk '$1 == "A" {n=$2; $1=$2=""; sub(/^ +/,""); printf "%s ×%d\n", $0, n}'
             if fields[0] == "A" { apps.append(fields.dropFirst(2).joined(separator: " ") + " ×" + String(Awk.int(Awk.number(fields[1])))) }
-            if fields[0] == "S" { system = fields[1] }
+            if fields[0] == "S" { system += (system.isEmpty ? "" : "\n") + fields[1] }
         }
         let shown = apps.prefix(5).joined(separator: ",").replacingOccurrences(of: ",", with: ", ", options: .literal)
         if !shown.isEmpty { run.out.info("Crashed 3 or more times in the last 7 days: %s", shown) }
@@ -82,10 +81,14 @@ extension Tools {
         var home = String(String.UnicodeScalarView(givenHome.unicodeScalars.reversed().drop(while: { $0 == "/" }).reversed()))
         if home.isEmpty { home = "/" }
         let folder = home + "/Library/Logs/DiagnosticReports"
-        func reports(_ folder: String, _ suffix: String) -> [String] {
-            ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).filter { !starts($0, ".") && $0.unicodeScalars.reversed().starts(with: suffix.unicodeScalars.reversed()) }.map { folder + "/" + $0 }
+        // glob.glob: the home folder's name is part of the pattern too
+        func reports(_ pattern: String) -> [String] {
+            var found = glob_t()
+            defer { globfree(&found) }
+            guard glob(pattern, GLOB_NOESCAPE, nil, &found) == 0 else { return [] }
+            return (0..<Int(found.gl_pathc)).compactMap { found.gl_pathv[$0].map { String(cString: $0) } }
         }
-        let files = (reports(folder, ".ips") + reports(folder + "/Retired", ".ips") + reports(folder, ".crash") + reports(folder + "/Retired", ".crash")).sorted(by: Updates.codePointOrder)
+        let files = ["/*.ips", "/Retired/*.ips", "/*.crash", "/Retired/*.crash"].flatMap { reports(folder + $0) }.sorted(by: Updates.codePointOrder)
         var seen = Set<[Unicode.Scalar]>(), apps: [(name: [Unicode.Scalar], count: Int)] = [], system = 0
         for file in files {
             let base = PythonPath.basename(file)

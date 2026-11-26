@@ -17,9 +17,13 @@ tool-mcp-none|mcpnone|$tools_path|check --only check.mcp
 tool-mcp-fails|mcpfails|$tools_path|check --only check.mcp
 tool-mcp-timeout|mcptimeout|$tools_path|check --only check.mcp
 tool-mcp-from-home|mcpquiet|$tools_path|check --only check.mcp
+tool-mcp-bytes|mcpbytes|$tools_path|check --only check.mcp
+tool-mcp-bytes-c|mcpbytes|$tools_path LC_ALL=C|check --only check.mcp
 tool-doctor|doctor|$tools_path|check --only check.brew_doctor
 tool-doctor-ok|doctorok|$tools_path|update --only check.brew_doctor
 tool-doctor-timeout|doctorslow|$tools_path|check --only check.brew_doctor
+tool-doctor-bytes|doctorbytes|$tools_path|check --only check.brew_doctor
+tool-doctor-bytes-c|doctorbytes|$tools_path LC_ALL=C|check --only check.brew_doctor
 tool-xcode|xcode|$tools_path|check --only check.xcode
 tool-xcode-json|xcode|$tools_path|check --only check.xcode --json
 tool-xcode-clt|xcodeclt|$tools_path|check --only check.xcode
@@ -55,6 +59,10 @@ fix_mcpok(){ tools_fakes "$1" claude; answer "$1" claude 'mcp list' "$(printf 'f
 fix_mcpnone(){ tools_fakes "$1" claude; answer "$1" claude 'mcp list' 'No MCP servers configured. Use `claude mcp add` to add a server.'; }
 fix_mcpfails(){ fix_mcp "$1"; echo 1 >"$1/.fake/claude/mcp list.rc"; answer "$1" claude 'mcp list' 'Error: config is not valid JSON'; }
 fix_mcptimeout(){ fix_mcp "$1"; echo 124 >"$1/.fake/claude/mcp list.rc"; }
+# bytes that are not UTF-8: in a UTF-8 locale nocolor's sed stops at that line; the report keeps brew's bytes; NULs go
+fix_mcpbytes(){ tools_fakes "$1" claude
+  printf 'figma: https://mcp.figma.com/mcp - \033[32m✓ Connected\033[0m\ncaf\351: npx caf\351 - ✓ Connected\nlinear: npx linear - ✗ Failed to connect\n' >"$1/.fake/claude/mcp list"; }
+fix_doctorbytes(){ tools_fakes "$1" brew; printf 'Warning: caf\351 is not UTF-8\n  a\000b\nWarning: second\n\n' >"$1/.fake/brew/doctor"; }
 fix_mcpquiet(){ tools_fakes "$1" claude; }   # no answer: calls.log says the list was asked from the home folder
 
 fix_doctor(){ tools_fakes "$1" brew
@@ -69,18 +77,18 @@ tools_runtimes='{"B2":{"platformIdentifier":"com.apple.platform.iphonesimulator"
 "D4":{"platformIdentifier":"com.apple.platform.appletvsimulator","version":"18.2","sizeBytes":123456789}}'
 fix_xcode(){ tools_fakes "$1" xcode-select xcodebuild xcrun; mkdir -p "$1/Xcode.app/Contents/Developer"
   answer "$1" xcode-select -p "$1/Xcode.app/Contents/Developer"; answer "$1" xcodebuild -version "$(printf 'Xcode 16.1\nBuild version 16B40')"
-  answer "$1" xcrun simctl "$tools_runtimes"; }
-fix_xcodeclt(){ fix_xcode "$1"; : >"$1/.fake/xcodebuild/-version"; echo 1 >"$1/.fake/xcodebuild/-version.rc"; answer "$1" xcrun simctl '{}'; }
-fix_xcodebroken(){ fix_xcode "$1"; answer "$1" xcode-select -p "$1/no/such/Developer"; echo 2 >"$1/.fake/xcode-select/-p.rc"; answer "$1" xcrun simctl '{"x": '; }
+  answer "$1" xcrun 'simctl runtime list -j' "$tools_runtimes"; }
+fix_xcodeclt(){ fix_xcode "$1"; : >"$1/.fake/xcodebuild/-version"; echo 1 >"$1/.fake/xcodebuild/-version.rc"; answer "$1" xcrun 'simctl runtime list -j' '{}'; }
+fix_xcodebroken(){ fix_xcode "$1"; answer "$1" xcode-select -p "$1/no/such/Developer"; echo 2 >"$1/.fake/xcode-select/-p.rc"; answer "$1" xcrun 'simctl runtime list -j' '{"x": '; }
 
 fix_devtools(){ tools_fakes "$1" swift pod flutter node ruby codex
   answer "$1" swift --version "$(printf 'Apple Swift version 6.0.3 (swiftlang-6.0.3.1.10 clang-1600.0.30.1)\nTarget: arm64-apple-macosx15.0')"
   echo 'echo "swift-driver version: 1.115.1 " >&2' >"$1/.fake/swift/--version.then"
   answer "$1" pod --version 1.16.2
   answer "$1" flutter --version "$(printf 'Flutter 3.24.5 • channel stable • https://github.com/flutter/flutter.git\nFramework • revision dec2ee5c1f')"
-  answer "$1" node --version v22.11.0; answer "$1" ruby -e 3.3.6; answer "$1" codex --version 'codex-cli 0.58.0'; }
+  answer "$1" node --version v22.11.0; answer "$1" ruby '-e print RUBY_VERSION' 3.3.6; answer "$1" codex --version 'codex-cli 0.58.0'; }
 fix_devtoolsbroken(){ fix_devtools "$1"; answer "$1" swift --version 'error: unable to find a toolchain'; answer "$1" flutter --version ''
-  answer "$1" node --version v; answer "$1" codex --version ''; answer "$1" pod --version ''; echo 1 >"$1/.fake/pod/--version.rc"; answer "$1" ruby -e ''; }
+  answer "$1" node --version v; answer "$1" codex --version ''; answer "$1" pod --version ''; echo 1 >"$1/.fake/pod/--version.rc"; answer "$1" ruby '-e print RUBY_VERSION' ''; }
 
 # scripts whose interpreter is gone, a pipx venv whose Python went, dead links, Homebrew's own files, kegs brew has not linked
 fix_commands(){ local bin="$1/.local/bin" venv="$1/.local/pipx/venvs/tool/bin" index keg
@@ -103,19 +111,20 @@ fix_commandsuv(){ local uv="$1/.local/share/uv/tools/sometool/bin"; mkdir -p "$u
   mkdir -p "$1/.npm-global"; ln -s ../.local/bin "$1/.npm-global/bin"; }   # the same folder twice: scanned once
 fix_commandsok(){ mkdir -p "$1/.local/bin"; printf '#!/bin/sh\n' >"$1/.local/bin/fine"; chmod +x "$1/.local/bin/fine"; }
 
+tools_df='system df --format {{.Type}} {{.Size}}, {{.Reclaimable}} reclaimable' tools_volumes='volume ls -qf dangling=true'
 fix_docker(){ tools_fakes "$1" docker; answer "$1" docker info ''
-  answer "$1" docker system "$(printf 'Images 2.4GB, 1.2GB (50%%) reclaimable\nContainers 12.3MB, 12.3MB (100%%) reclaimable\nLocal Volumes 3.2GB, 3.2GB (100%%) reclaimable\nBuild Cache 1.5GB, 1.5GB reclaimable')"
-  answer "$1" docker volume "$(printf 'vol1\nvol2\n')"; }
-fix_dockernone(){ fix_docker "$1"; : >"$1/.fake/docker/system"; : >"$1/.fake/docker/volume"; }
+  answer "$1" docker "$tools_df" "$(printf 'Images 2.4GB, 1.2GB (50%%) reclaimable\nContainers 12.3MB, 12.3MB (100%%) reclaimable\nLocal Volumes 3.2GB, 3.2GB (100%%) reclaimable\nBuild Cache 1.5GB, 1.5GB reclaimable')"
+  answer "$1" docker "$tools_volumes" "$(printf 'vol1\nvol2\n')"; }
+fix_dockernone(){ fix_docker "$1"; : >"$1/.fake/docker/$tools_df"; : >"$1/.fake/docker/$tools_volumes"; }
 fix_dockerdown(){ fix_docker "$1"; echo 1 >"$1/.fake/docker/info.rc"; }
 fix_dockerslow(){ fix_docker "$1"; echo 30 >"$1/.fake/docker/info.sleep"; }
 
-fix_gh(){ tools_fakes "$1" gh; mkdir -p "$1/.config/gh"; echo 'github.com:' >"$1/.config/gh/hosts.yml"; : >"$1/.fake/gh/auth"
-  printf 'echo "github.com" >&2; echo "  X Failed to log in to github.com account someone (default)" >&2; echo "  - The token in default is invalid." >&2; exit 1\n' >"$1/.fake/gh/auth.then"; }
-fix_ghok(){ fix_gh "$1"; answer "$1" gh auth "$(printf 'github.com\n  ✓ Logged in to github.com account someone (keyring)')"; rm "$1/.fake/gh/auth.then"; }
+fix_gh(){ tools_fakes "$1" gh; mkdir -p "$1/.config/gh"; echo 'github.com:' >"$1/.config/gh/hosts.yml"; : >"$1/.fake/gh/auth status"
+  printf 'echo "github.com" >&2; echo "  X Failed to log in to github.com account someone (default)" >&2; echo "  - The token in default is invalid." >&2; exit 1\n' >"$1/.fake/gh/auth status.then"; }
+fix_ghok(){ fix_gh "$1"; answer "$1" gh 'auth status' "$(printf 'github.com\n  ✓ Logged in to github.com account someone (keyring)')"; rm "$1/.fake/gh/auth status.then"; }
 fix_ghdir(){ fix_gh "$1"; mkdir -p "$1/ghdir"; mv "$1/.config/gh/hosts.yml" "$1/ghdir/"; }
 fix_ghxdg(){ fix_gh "$1"; mkdir -p "$1/xdg"; mv "$1/.config/gh" "$1/xdg/"; }
-fix_ghslow(){ fix_gh "$1"; rm "$1/.fake/gh/auth.then"; echo 30 >"$1/.fake/gh/auth.sleep"; }
+fix_ghslow(){ fix_gh "$1"; rm "$1/.fake/gh/auth status.then"; echo 30 >"$1/.fake/gh/auth status.sleep"; }
 fix_ghempty(){ fix_gh "$1"; : >"$1/.config/gh/hosts.yml"; }
 
 # signing certificates made once per run of this script: a fake security lists identities and hands out the certificates
@@ -123,10 +132,17 @@ tools_certs(){ [ -f "$work/certs.pem" ] && return
   tools_cert(){ openssl req -x509 -newkey rsa:2048 -nodes -keyout /dev/null -days "$2" -subj "/CN=$1/O=Test" 2>/dev/null; }
   { tools_cert 'Apple Development: Soon Gone (AAAA111111)' 10; tools_cert 'Apple Distribution: Long Lived (BBBB222222)' 300; tools_cert 'Some Web Server' 5
     tools_cert 'Apple Development: Renewed (CCCC333333)' 10; tools_cert 'Apple Development: Renewed (CCCC333333)' 300; tools_cert 'Apple Development: No Key (DDDD444444)' 5
-    tools_cert 'Developer ID Application: Acme, Inc. (EEEE555555)' 10; tools_cert 'Apple Development: Älter (FFFF666666)' 1; } >"$work/certs.pem"; }
-fix_certs(){ tools_certs; tools_fakes "$1" security; cp "$work/certs.pem" "$1/.fake/security/find-certificate"
-  printf '  1) 0000000000000000000000000000000000000001 "Apple Development: Soon Gone (AAAA111111)"\n  2) 0000000000000000000000000000000000000002 "Apple Distribution: Long Lived (BBBB222222)"\n  3) 0000000000000000000000000000000000000003 "Apple Development: Renewed (CCCC333333)"\n  4) 0000000000000000000000000000000000000004 "Developer ID Application: Acme, Inc. (EEEE555555)"\n  5) 0000000000000000000000000000000000000005 "Apple Development: Älter (FFFF666666)"\n     5 valid identities found\n' >"$1/.fake/security/find-identity"; }
-fix_certsnone(){ fix_certs "$1"; printf '     0 valid identities found\n' >"$1/.fake/security/find-identity"; }
+    tools_cert 'Developer ID Application: Acme, Inc. (EEEE555555)' 10; tools_cert 'Apple Development: Älter (FFFF666666)' 1
+    tools_cert 'Apple Development: Expired (GGGG777777)' 5; } >"$work/certs.pem"; }
+# the stock openssl cannot make a certificate that has already expired: this one says so of the one named Expired
+tools_openssl='#!/bin/bash
+pem=$(cat)
+[ "$*" = "x509 -noout -checkend 0" ] && printf "%s\n" "$pem" | /usr/bin/openssl x509 -noout -subject | grep -q Expired && exit 1
+printf "%s\n" "$pem" | /usr/bin/openssl "$@"'
+fix_certs(){ tools_certs; tools_fakes "$1" security; cp "$work/certs.pem" "$1/.fake/security/find-certificate -a -p"
+  printf '%s\n' "$tools_openssl" >"$1/.fake/bin/openssl"; chmod +x "$1/.fake/bin/openssl"
+  printf '  1) 0000000000000000000000000000000000000001 "Apple Development: Soon Gone (AAAA111111)"\n  2) 0000000000000000000000000000000000000002 "Apple Distribution: Long Lived (BBBB222222)"\n  3) 0000000000000000000000000000000000000003 "Apple Development: Renewed (CCCC333333)"\n  4) 0000000000000000000000000000000000000004 "Developer ID Application: Acme, Inc. (EEEE555555)"\n  5) 0000000000000000000000000000000000000005 "Apple Development: Älter (FFFF666666)"\n  6) 0000000000000000000000000000000000000006 "Apple Development: Expired (GGGG777777)"\n     6 valid identities found\n' >"$1/.fake/security/find-identity -v -p codesigning"; }
+fix_certsnone(){ fix_certs "$1"; printf '     0 valid identities found\n' >"$1/.fake/security/find-identity -v -p codesigning"; }
 
 # crash reports: .ips (a JSON line, then the report) and the older .crash, in DiagnosticReports and Retired
 # one time for the whole script: the bash and the Swift run of a case must find the same files

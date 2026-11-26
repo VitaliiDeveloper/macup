@@ -23,11 +23,18 @@ enum Tools {
         let out = run.out
         out.step("Checking MCP servers")
         // from $HOME: the list depends on the current folder (local-scope servers)
-        let answer = inHome(run, orElse: (status: Int32(1), text: "", utf8: true)) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
-        let list = Bash.lines(Bash.substitution(noColor(answer.text)))
+        let answer = inHome(run, orElse: (status: Int32(1), text: "", data: Data())) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
+        var shown = answer.data.filter { $0 != 0 }, status = answer.status
+        // in a UTF-8 locale nocolor's sed stops at the first line that is not UTF-8, says so and fails the pipeline
+        if run.env.utf8Locale, let bad = firstLineNotUTF8(shown) {
+            shown = shown.prefix(bad)
+            status = 1
+            Shell.writeText("sed: RE error: illegal byte sequence\n", to: 2)
+        }
+        let list = Bash.lines(Bash.substitution(noColor(String(decoding: shown, as: UTF8.self))))
         let total = list.filter { matches(mcpLine, $0) }.count
         let bad = list.filter { matches(mcpBad, $0) }
-        if answer.status == 124 {
+        if status == 124 {
             out.warn("%s: no answer in %s seconds, skipped", "claude mcp list", "120")
         } else if total == 0 {
             out.info("Claude Code MCP servers: none configured")
@@ -52,8 +59,11 @@ enum Tools {
         let out = run.out
         out.step("brew doctor")
         let doctor = capture(run.shell, 240, ["brew", "doctor"], stderr: .stdout)
-        let text = Bash.substitution(doctor.text)
-        run.log.append(Bash.echo(text))
+        let text = Bash.substitution(doctor.text), echoed = Bash.echo(text)
+        // the report keeps the bytes brew wrote, as bash's echo does
+        var bytes = doctor.data.filter { $0 != 0 }
+        while bytes.last == 0x0A { bytes.removeLast() }
+        appendRaw(run, echoed == text + "\n" ? bytes + [0x0A] : Data(echoed.utf8))
         let warnings = Bash.lines(text).filter { starts($0, "Warning:") }.count
         if doctor.status == 124 {
             out.warn("%s: no answer in %s seconds, skipped", "brew doctor", "240")
@@ -87,34 +97,47 @@ enum Tools {
     /// Where Python stops with an error, what it printed before.
     static func simRuntimes(_ json: String) -> String {
         guard case .object(let entries)? = JSONValue.parse(Data(json.utf8)), entries.allSatisfy({ if case .object = $0.value { return true }; return false }) else { return "" }
-        func text(_ runtime: JSONValue, _ key: String) -> String? { (runtime[key] ?? .string("")).string }
-        var runtimes = entries.map(\.value)
-        if runtimes.count > 1 {
-            guard runtimes.allSatisfy({ text($0, "platformIdentifier") != nil && text($0, "version") != nil }) else { return "" }   // Python sorts only what it can compare
-            runtimes = stableSorted(runtimes) { left, right in
-                let leftPlatform = text(left, "platformIdentifier") ?? "", rightPlatform = text(right, "platformIdentifier") ?? ""
-                if Updates.codePointOrder(leftPlatform, rightPlatform) { return true }
-                if Updates.codePointOrder(rightPlatform, leftPlatform) { return false }
-                return Updates.codePointOrder(text(left, "version") ?? "", text(right, "version") ?? "")
-            }
+        func key(_ runtime: JSONValue) -> [JSONValue] { [runtime["platformIdentifier"] ?? .string(""), runtime["version"] ?? .string("")] }
+        var comparable = true
+        let runtimes = stableSorted(entries.map(\.value)) { left, right in
+            guard let less = pythonLess(key(left), key(right)) else { comparable = false; return false }
+            return less
         }
         let sizes = runtimes.map { $0["sizeBytes"] ?? .number("0") }
-        guard sizes.allSatisfy({ bytes($0) != nil }) else { return "" }
+        guard comparable, sizes.allSatisfy({ bytes($0) != nil }) else { return "" }
         var total: String
-        if sizes.allSatisfy({ whole($0) != nil }) {
-            let sum = sizes.reduce(Int64(0)) { $0 + (whole($1) ?? 0) }
-            total = String(sum >= 0 ? sum / 1024 : (sum - 1023) / 1024)
+        let wholes = sizes.compactMap(whole)
+        if wholes.count == sizes.count {
+            var quotient = wholes.reduce(Decimal(0), +) / 1024, floored = Decimal()
+            NSDecimalRound(&floored, &quotient, 0, .down)
+            total = "\(floored)"
         } else {
             total = JSONValue.number(String((sizes.reduce(0.0) { $0 + (bytes($1) ?? 0) } / 1024).rounded(.down))).pythonString
         }
         var lines = [String(runtimes.count) + " " + total]
         for (runtime, size) in zip(runtimes, sizes) {
-            guard let identifier = text(runtime, "platformIdentifier") else { break }
+            guard let identifier = (runtime["platformIdentifier"] ?? .string("")).string else { break }   // Python stops at its line
             let last = identifier.unicodeScalars.split(separator: ".", omittingEmptySubsequences: false).last.map { String(String.UnicodeScalarView($0)) } ?? ""
             let platform = last.replacingOccurrences(of: "platform", with: "", options: .literal)
             lines.append("\(platform) \((runtime["version"] ?? .string("?")).pythonString) · " + Awk.format("%.1f GB", (bytes(size) ?? 0) / 1e9))
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Python's `<` of two tuples: the first pair that is not equal decides; nil where Python cannot compare that pair.
+    static func pythonLess(_ left: [JSONValue], _ right: [JSONValue]) -> Bool? {
+        for (one, other) in zip(left, right) {
+            switch (one, other) {
+            case (.string(let first), .string(let second)):
+                if !first.unicodeScalars.elementsEqual(second.unicodeScalars) { return Updates.codePointOrder(first, second) }
+            case (.null, .null):
+                continue
+            default:
+                guard let first = bytes(one), let second = bytes(other) else { return nil }
+                if first != second { return first < second }
+            }
+        }
+        return false
     }
 
     /// A JSON number or bool as Python adds it up.
@@ -127,9 +150,9 @@ enum Tools {
     }
 
     /// The same, when it is a Python int.
-    private static func whole(_ value: JSONValue) -> Int64? {
+    private static func whole(_ value: JSONValue) -> Decimal? {
         switch value {
-        case .number(let text): return Int64(text)
+        case .number(let text): return text.contains(where: { ".eEni".contains($0) }) ? nil : Decimal(string: text)
         case .bool(let flag): return flag ? 1 : 0
         default: return nil
         }
@@ -210,15 +233,15 @@ enum Tools {
 
     // MARK: helpers
 
-    /// `$(tl seconds tool… 2>…)`: what the tool printed, trailing newlines kept, its status (124 when it was stopped,
-    /// 127 when it is not there) and whether the output is UTF-8, which Python insists on; `input`, when given, is what it reads.
+    /// `$(tl seconds tool… 2>…)`: its status (124 when it was stopped, 127 when it is not there), what it printed as `$(…)`
+    /// has it before the trailing newlines go (NUL bytes dropped) and the bytes themselves; `input`, when given, is what it reads.
     static func capture(_ shell: Shell, _ seconds: Int, _ argv: [String], stdin: Shell.Input = .inherit, stderr: Shell.Out = .null,
-                        input: String? = nil) -> (status: Int32, text: String, utf8: Bool) {
+                        input: String? = nil) -> (status: Int32, text: String, data: Data) {
         var output: [Int32] = [0, 0], feed: [Int32] = [-1, -1]
-        guard pipe(&output) == 0 else { return (127, "", true) }
+        guard pipe(&output) == 0 else { return (127, "", Data()) }
         var source = stdin
         if let input {
-            guard pipe(&feed) == 0 else { close(output[0]); close(output[1]); return (127, "", true) }
+            guard pipe(&feed) == 0 else { close(output[0]); close(output[1]); return (127, "", Data()) }
             source = .fd(feed[0])
             _ = fcntl(feed[1], F_SETNOSIGPIPE, 1)   // a tool that ends without reading all of it must not take macup along
             let writer = feed[1]
@@ -235,7 +258,26 @@ enum Tools {
         close(output[1])
         if feed[0] >= 0 { close(feed[0]) }
         drained.wait()
-        return (status, String(decoding: data, as: UTF8.self), String(data: data, encoding: .utf8) != nil)
+        return (status, String(decoding: data.filter { $0 != 0 }, as: UTF8.self), data)
+    }
+
+    /// Where the first line that is not UTF-8 starts.
+    static func firstLineNotUTF8(_ data: Data) -> Int? {
+        var start = data.startIndex
+        while start < data.endIndex {
+            let end = data[start...].firstIndex(of: 0x0A) ?? data.endIndex
+            if String(bytes: data[start..<end], encoding: .utf8) == nil { return start - data.startIndex }
+            start = end + 1
+        }
+        return nil
+    }
+
+    /// `… >>"$RAW"` of bytes.
+    static func appendRaw(_ run: Run, _ data: Data) {
+        let descriptor = open(run.log.raw, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        guard descriptor >= 0 else { return }
+        _ = data.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
+        close(descriptor)
     }
 
     /// `(cd "$HOME" && …)`, as Updates.inHome has it for a step, around any work: PWD and OLDPWD as cd leaves them.

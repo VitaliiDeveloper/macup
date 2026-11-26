@@ -54,7 +54,13 @@ final class ToolsTests: XCTestCase {
             #"{"A":{"platformIdentifier":"com.apple.platform.xros","version":"2.0","sizeBytes":2048},"B":{"platformIdentifier":"com.apple.platform.xros","version":"10.0","sizeBytes":1024}}"#,
             #"{"A":{"platformIdentifier":"Zplatform","version":"1"},"B":{"platformIdentifier":"aplatform","version":"1"},"C":{"platformIdentifier":"é","version":"1"}}"#,
             #"{"A":{"platformIdentifier":1}}"#, #"{"A":{"platformIdentifier":"a","version":2.0}}"#, #"{"A":{"version":"1"},"B":{"version":1}}"#,
-            #"{"A":{"platformIdentifier":"a.b","version":"1","sizeBytes":5},"B":{"platformIdentifier":"a.c","version":"1","sizeBytes":"5"}}"#, #"{"A":{"sizeBytes":"big"}}"#, #"{"A":[]}"#, #"{}"#, #"[]"#, "", "{", "\u{FEFF}{}",
+            #"{"A":{"platformIdentifier":"a.b","version":"1","sizeBytes":5},"B":{"platformIdentifier":"a.c","version":"1","sizeBytes":"5"}}"#, #"{"A":{"sizeBytes":"big"}}"#,
+            #"{"A":{"platformIdentifier":"p.a","version":"1","sizeBytes":9223372036854775807},"B":{"platformIdentifier":"p.b","version":"1","sizeBytes":1000000000}}"#,
+            #"{"A":{"platformIdentifier":"p.a","sizeBytes":99999999999999999999999}}"#,
+            #"{"A":{"platformIdentifier":"p.iphonesimulator","version":18},"B":{"platformIdentifier":"p.watchsimulator","version":"11.2"}}"#,
+            #"{"A":{"platformIdentifier":null,"version":"2"},"B":{"platformIdentifier":null,"version":"1"}}"#,
+            #"{"A":{"platformIdentifier":"p","version":2},"B":{"platformIdentifier":"p","version":1.5},"C":{"platformIdentifier":"p","version":true}}"#,
+            #"{"A":{"platformIdentifier":"p","version":"2"},"B":{"platformIdentifier":"p","version":1}}"#, #"{"A":[]}"#, #"{}"#, #"[]"#, "", "{", "\u{FEFF}{}",
         ]
         for json in cases {
             XCTAssertEqual(Tools.simRuntimes(json), try python(["sim-runtimes"], input: json), json)
@@ -105,14 +111,14 @@ final class ToolsTests: XCTestCase {
         try link("to-real/../real", "dotdot")
         let paths = ["\(home)/to-real/file", "\(home)/dir/up", "\(home)/dangling/more", "\(home)/loop-a/x", "\(home)/dotdot/file", "\(home)//a/./b/../c/",
                      "//x/y", "///x", "/", "\(home)/to-real/../to-real/missing/..", "\(home)/dir/up/../.."]
-        let code = "import os, sys\nfor p in sys.argv[1:]: print(os.path.realpath(p)); print(os.path.normpath(p)); print(os.path.dirname(p)); print(os.path.basename(p))"
+        let code = "import os, sys\nfor path in sys.argv[1:]: print(os.path.realpath(path)); print(os.path.normpath(path)); print(os.path.dirname(path)); print(os.path.basename(path))"
         let swift = paths.map { [PythonPath.realpath($0), PythonPath.normpath($0), PythonPath.dirname($0), PythonPath.basename($0)].joined(separator: "\n") }
         XCTAssertEqual(swift.joined(separator: "\n"), try python(["-c", code] + paths))
         try write("", "bin/plain")
         try write("", "bin/tool", executable: true)
         try FileManager.default.createDirectory(atPath: home + "/bin/folder", withIntermediateDirectories: true)
         let names = ["tool", "plain", "folder", "ls", "/bin/ls", "bin/tool", "nope"], searches = ["", ":", "/bin", "\(home)/bin", "/nope:\(home)/bin"]
-        let whichCode = "import os, shutil, sys\nos.chdir(sys.argv[1])\nfor p in sys.argv[2:]:\n  for n in \(names): print(shutil.which(n, path=p) is not None)"
+        let whichCode = "import os, shutil, sys\nos.chdir(sys.argv[1])\nfor search in sys.argv[2:]:\n  for name in \(names): print(shutil.which(name, path=search) is not None)"
         let here = FileManager.default.currentDirectoryPath
         FileManager.default.changeCurrentDirectoryPath(home)
         defer { FileManager.default.changeCurrentDirectoryPath(here) }
@@ -159,16 +165,31 @@ final class ToolsTests: XCTestCase {
         XCTAssertEqual(Tools.crashCounts(home: home, now: now), try python(["crashes"]), "a list as the name of an app stops Python")
     }
 
+    func testCrashesUnderAHomeWithGlobCharacters() throws {
+        let base = home
+        defer { home = base }
+        home += "/h[1]"
+        for index in 1...3 {
+            try write("{\"app_name\":\"Foo\\nS 99\",\"bug_type\":\"309\"}\n{\"procPath\":\"/Applications/Foo.app/x\"}\n", "Library/Logs/DiagnosticReports/Foo-\(index).ips")
+        }
+        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), try python(["crashes"]))
+        home = base + "/h1"
+        for index in 1...3 {
+            try write("{\"app_name\":\"Foo\\nS 99\",\"bug_type\":\"309\"}\n{\"procPath\":\"/Applications/Foo.app/x\"}\n", "Library/Logs/DiagnosticReports/Foo-\(index).ips")
+        }
+        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), try python(["crashes"]), "a name that holds a line of the answer")
+    }
+
     func testTimestampsAsPythonReadsThem() throws {
         let stamps = ["2026-11-20 10:11:12.00 +0000", "2026-11-20 10:11:12.123456 -0130", "2026-1-2 3:4:5.6 +01:00", "2026-11- 2 10:11:12.0 Z",
                       "2026-11-20 10:11:12.0 +01:00:30", "2026-11-20 10:11:12.0 +01:00:30.5", "2026-11-20 10:11:12.0 +0100:30", "2026-11-20 10:11:12.0 +2400",
                       "2026-02-29 10:11:12.0 +0000", "2024-02-29 10:11:12.0 +0000", "2026-11-20 10:11:60.0 +0000", "2026-11-20 10:11:12 +0000",
                       "2026-11-20 10:11:12.0 +0000\n", "2026-11-20  10:11:12.0\t+0000", "2026-11-20 10:11:12.0 z", "0000-01-01 00:00:00.0 +0000"]
-        let code = "import datetime, sys\nfor s in sys.argv[1:]:\n  try: print('%.6f' % datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S.%f %z').timestamp())\n  except Exception: print('-')"
+        let code = "import datetime, sys\nfor stamp in sys.argv[1:]:\n  try: print('%.6f' % datetime.datetime.strptime(stamp, '%Y-%m-%d %H:%M:%S.%f %z').timestamp())\n  except Exception: print('-')"
         XCTAssertEqual(stamps.map { Tools.reportTimestamp($0).map { String(format: "%.6f", $0) } ?? "-" }.joined(separator: "\n"), try python(["-c", code] + stamps))
         let ends = ["Nov 26 10:00:00 2026 GMT", "Nov  6 10:00:00 2026 GMT", "nov 26 1:2:3 2026 utc", "Feb 30 10:00:00 2026 GMT", "Nov 26 10:00:00 2026 XYZ",
                     "November 26 10:00:00 2026 GMT", "Nov 26 10:00:00 2026", "Nov 26 10:00:60 2026 GMT"]
-        let endCode = "import datetime, calendar, sys\nfor s in sys.argv[1:]:\n  try: print(calendar.timegm(datetime.datetime.strptime(s, '%b %d %H:%M:%S %Y %Z').timetuple()))\n  except Exception: print('-')"
+        let endCode = "import datetime, calendar, sys\nfor stamp in sys.argv[1:]:\n  try: print(calendar.timegm(datetime.datetime.strptime(stamp, '%b %d %H:%M:%S %Y %Z').timetuple()))\n  except Exception: print('-')"
         XCTAssertEqual(ends.map { Tools.certificateDate($0).map { String($0) } ?? "-" }.joined(separator: "\n"), try python(["-c", endCode] + ends))
     }
 

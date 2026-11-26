@@ -212,6 +212,19 @@ final class UpdatesTests: XCTestCase {
         for (text, expected) in zip(texts, bash) { XCTAssertEqual(Updates.saysOffline(text) ? "yes" : "no", expected, text) }
     }
 
+    func testMacOSUpdatesRouteToSwift() throws {
+        let environment = try Env(["HOME": home, "PATH": "/usr/bin:/bin"])
+        for line in ["check --only check.macos_updates", "update --only check.macos_updates", "check --only update.agy,check.macos_updates --json"] {
+            XCTAssertNotEqual(Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false), .bash, line)
+        }
+    }
+
+    func testTimedOutputWithErrorsKeepsWhatCameBeforeTheStop() throws {
+        let listed = Updates.timedOutput(try makeRun(), 1, ["/bin/sh", "-c", "echo out; echo err >&2; sleep 30"], errors: true)
+        XCTAssertEqual(listed.status, 124)
+        XCTAssertEqual(listed.text, "out\nerr")
+    }
+
     func testJSONReaderRefusesWhatPythonRefuses() {
         let deep = String(repeating: "[", count: 5000) + String(repeating: "]", count: 5000)
         for bad in ["", "{", "[1,]", "{\"a\":1,}", "01", "1.", ".5", "\"tab\there\"", "{\"a\" 1}", "[1] [2]", "tru", "\"\\x\"", "\"\\u+abc\"", "\u{FEFF}{}", deep] {

@@ -185,6 +185,8 @@ upd-all-json|everything|$upd_path FAKE_SUDO_RC=0|update --only update.* --json
 upd-macos-check|macos|$upd_path|check --only check.macos_updates
 upd-macos-json|macos|$upd_path|check --only check.macos_updates --json
 upd-macos-labels|macoslabels|$upd_path|update --only check.macos_updates
+upd-macos-after-later|macosagy|$upd_path|check --only update.agy,check.macos_updates
+upd-macos-clean|macos|$upd_path|clean --only check.macos_updates
 upd-macos-none|macosnone|$upd_path|check --only check.macos_updates
 upd-macos-timeout|macosslow|$upd_path|check --only check.macos_updates
 upd-macos-offline|macosoffline|$upd_path|check --only check.macos_updates
@@ -252,12 +254,16 @@ fix_macos(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_h
 * Label: macOS Sequoia 15.1-24B83\n\tTitle: macOS Sequoia 15.1, Version: 15.1, Size: 6283533KiB, Recommended: YES, Action: restart, 
 * Label: Safari18.1VenturaAuto-18.1\n\tTitle: Safari, Version: 18.1, Size: 160000KiB, Recommended: YES, 
 * Label: BridgeOSUpdateCustomer\n  Title: BridgeOS\n* Label: Blank-1\n\tTitle: Blank, Version: , Size: 1KiB, '; }
-fix_macoslabels(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nAn error occurred reading one catalog\n * Label: Command Line Tools for Xcode-16.0\n\t* Label: macOS Sequoia 15.1-24B83'; }
-fix_macosnone(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nNo new software available.'; }
+fix_macoslabels(){ upd_tools "$1" softwareupdate
+  answer "$1" softwareupdate -l "$su_head"$'\nAn error occurred reading one catalog\n * Label: Command Line Tools for Xcode-16.0\n\t* Label: macOS Sequoia 15.1-24B83\n\xc2\xa0* Label: No-break-1\n\xe3\x80\x80* Label: Wide-1\n\r* Label: Return-1'; echo 1 >"$1/.fake/softwareupdate/-l.rc"; }
+# softwareupdate writes its answer to stderr: the check reads both
+su_says(){ echo "echo '$2' >&2" >"$1/.fake/softwareupdate/-l.then"; }
+fix_macosnone(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"; su_says "$1" 'No new software available.'; }
 fix_macosslow(){ fix_macos "$1"; echo 124 >"$1/.fake/softwareupdate/-l.rc"; }
 fix_macosoffline(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"; echo 1 >"$1/.fake/softwareupdate/-l.rc"
-  echo "echo 'Software Update Tool: could not reach the server' >&2" >"$1/.fake/softwareupdate/-l.then"; }
-fix_macosnonet(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nNO INTERNET connection'; }
+  su_says "$1" 'Software Update Tool: could not reach the server'; }
+fix_macosnonet(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"; su_says "$1" 'NO INTERNET connection'; }
+fix_macosagy(){ fix_agy "$1"; fix_macos "$1"; }
 fix_everything(){ fix_brew "$1"; fix_claude "$1"; fix_npm "$1"; fix_skills "$1"; fix_mas "$1"; fix_apps "$1"; fix_simple "$1"; fix_grok "$1"; fix_agy "$1"; }
 
 # commands unit

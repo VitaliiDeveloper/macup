@@ -5,7 +5,8 @@ extension Updates {
     static func macOS(_ run: Run) {
         let out = run.out
         out.step("Looking for macOS updates (up to a minute)")
-        let listed = timedOutput(run, 240, ["softwareupdate", "-l"], errors: true)
+        let limit = 240
+        let listed = timedOutput(run, limit, ["softwareupdate", "-l"], errors: true)
         let blank = Config(path: "/dev/null", utf8: run.env.utf8Locale).isSpace
         func after(_ prefix: String) -> [String] {
             Bash.lines(listed.text).compactMap { line in
@@ -17,7 +18,7 @@ extension Updates {
         // a Label is an id ("Command Line Tools for Xcode 27.2-27.2"); some Titles carry no version ("Safari")
         let titles = Bash.substitution(after("Title: ").map { title($0) + "\n" }.joined())
         if listed.status == 124 {
-            out.warn("%s: no answer in %s seconds, skipped", "softwareupdate", "240")
+            out.warn("%s: no answer in %s seconds, skipped", "softwareupdate", String(limit))
         } else if labels.isEmpty, listed.status != 0 || saysOffline(listed.text) {
             out.info("macOS updates: could not check (no connection to Apple's server?)")
         } else if labels.isEmpty {

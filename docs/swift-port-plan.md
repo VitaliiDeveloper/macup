@@ -1,156 +1,282 @@
 # Porting macup to Swift
 
-Status: plan, not started. Integration branch: `swift/main`. Everything for the port lands there; `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
+Status: plan, not started. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
 
 ## Why
 
-macup is about 3,100 lines of bash 3.2 in `src/*.sh`, built into one `macup` file. It works, and `tests/run.sh` (211 black-box tests on throwaway home folders) proves it, but the code is hard to read and has whole classes of bugs a compiler would stop: global variables clobbering each other (a cleaner's `G` overwrote the green colour), nested heredocs breaking the build, `grep -q` under `pipefail` reading a match as "no".
+macup is about 3,100 lines of bash 3.2 in `src/*.sh`, built into one `macup` file. It works, and `tests/run.sh` (211 black-box tests on throwaway home folders) proves it. But the code is hard to read, and it has whole classes of bugs a compiler would stop:
+
+- global variables clobbering each other (a cleaner's `G` overwrote the green colour);
+- nested heredocs breaking the build;
+- `grep -q` under `pipefail` reading a match as "no".
 
 Swift fits this tool:
 
-- A prebuilt universal binary runs on a fresh Mac with no Command Line Tools: the Swift runtime ships with macOS since 10.14.4. bash gave the same, Python would not.
-- Native APIs replace text parsing: `FileManager`, `PropertyListSerialization`, `Codable`, `Process`.
+- A prebuilt universal binary runs on a fresh Mac with no Command Line Tools: the Swift runtime ships with macOS since 10.14.4.
+- Native APIs replace text parsing: `FileManager`, `PropertyListSerialization`, `Process`.
 - Strict types and one owner per piece of state.
 
-Non-goals: new features, changed output, changed task ids or config keys. 3.0.0 behaves like 2.9.x; only the implementation and the way it is shipped change.
+Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9.x, apart from the changes listed under "Intended differences".
 
 ## Ground rules
 
-1. **Behaviour is the spec.** `tests/run.sh` must pass against the Swift build at every merge into `swift/main`. Terminal output, the report, `--json`, exit codes and the files macup writes stay byte-identical, except timings.
-2. **Nothing is ported blind.** Bash and Swift run side by side until the last bash line is gone: each step replaces one piece and the full suite runs on the result. A step that cannot be tested end to end is not merged.
-3. **Sequential where pieces depend on each other, parallel where they do not.** A parallel phase starts only after the phase it builds on is merged into `swift/main`.
-4. **Foundation only.** Swift 5.9 tools, macOS 12 deployment target, no third-party packages.
-5. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each one adds a line to "Bash fixes to carry over" at the end of this file, and `main` is merged into `swift/main` after each fix.
+1. **Behaviour is the spec.** Two tests define it:
+   - `tests/run.sh`, adapted so it runs either build;
+   - a differential harness that runs bash and Swift on the same fixture and diffs the output.
 
-## How the two languages coexist
+   Both pass at every merge into `swift/main`.
+2. **The bash build is the oracle and stays whole.** On `swift/main`, `src/*.sh` changes only by bash fixes merged from `main`. Swift never calls into pieces of it.
+3. **Whole runs are routed, never split.** The Swift binary runs a command or a run itself only when every task it would touch is ported. Otherwise it hands the whole run to the embedded bash build (see "Routing"). Nothing ships half and half: the hybrid exists only on `swift/main`, for testing.
+4. **Nothing is ported blind.** A unit counts as done when the runs that cover its tasks go through Swift and pass both tests.
+5. **Sequential where pieces depend on each other, parallel where they do not.** A parallel wave starts only after the work it builds on is merged into `swift/main`.
+6. **Foundation only:** Swift 5.9 tools and no third-party packages. The deployment target is decided under "Decisions for the owner".
+7. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each fix is merged into `swift/main` and adds a line to "Bash fixes to carry over". A unit that ports the touched code ticks its line. This list is a checklist item on every merge (see "Every pull request").
 
-### One-off commands: the binary decides
+## Routing
 
-From phase 0 on, the Swift binary is the `macup` entry point. It holds the built bash script, generated into a Swift source at build time. A command Swift does not handle yet runs that script with the same argv, environment, stdin, stdout, stderr and exit status. `MACUP_SELF=<path of the binary>` tells the script who it is: `resolve_self` decides the Homebrew and uninstall paths from it. One-off commands (`help`, `version`, `tasks`, `history`, `reports`, `last`, `config`, `lang`, `schedule`, `uninstall`, `self-update`, the menu) switch to Swift one by one.
+From phase 0 on, the Swift binary is the `macup` entry point. It carries the built bash script.
 
-### The main run: a section bridge
+**Routing rule.** The binary resolves the command and the task selection (`--only`, `--skip`, `--enable`, the config, the defaults). It runs itself only if the command is ported and every selected task is in the ported set. Otherwise it runs bash for the entire invocation. The suite's 94 `--only` runs give per-unit granularity for free. Full runs switch to Swift when the last unit lands.
 
-`check`, `update`, `clean` and `all` are one pass through every section (system, security, updates, tools, sizes, cleaners, leftovers, pick, summary). The sections share state: warnings, updated items, skipped apps, cleanup candidates and the report body. A command-level switch cannot move one section at a time, so until phase 3 the bash script keeps orchestrating the main run and calls Swift for each section already ported:
+**How bash runs.** Through `execve`, not `Process`, so the process keeps its pid and its terminal:
 
-```
-macup __section <name>     # run by the bash orchestrator, never by users
-```
+1. Write the script to a temporary file.
+2. Open it on a spare descriptor (not 3 or 4, which the script itself uses).
+3. Unlink the file.
+4. `exec /bin/bash /dev/fd/N args…`
 
-The bridge contract:
+This keeps `$$` for the lock and the watchdogs, signal delivery (the suite kills the pid it started), the terminal for questions and the pick, and exit codes. It leaves no temporary file behind.
 
-- **Input** comes from the environment the orchestrator exports: `HOME`, `PATH`, language, colour or no colour, level, dry run, the allowed task list (`--only`/`--skip`/`--enable` resolved), `BODY`, `RAW` and the report paths.
-- **Terminal output** goes to stdout and stderr. The orchestrator passes it through unchanged.
-- **Report text** is appended to `$BODY` and its `.det` file, the same as bash sections do.
-- **State** is written as tab-separated records to `$BODY.state.<name>` and read back by one bash function `bridge_import`. Records: `WARN`, `ITEM`, `UPDATED`, `SKIPPED`, `ERR`, `CAND` (all candidate fields, matching `cand()` in `src/cleanup.sh`) and `COVER`. Fields escape tab and newline as `\t` and `\n`.
-- **Exit status** 0 means the section ran. Anything else is a failed step, reported the way bash reports one.
+**Self path.** `MACUP_SELF=<real path of the binary>` is exported before the exec, and the bash build reads it wherever it uses `$0`. That covers `resolve_self` → `brew_prefix`, `update_cmd`, `self_update`, `schedule` and `uninstall`. This is the only change to `src/*.sh` that the port itself makes, and it lands in phase 0.
 
-Phase 0 writes this contract down as a Swift type and a bash function and tests it in both directions. After that it is frozen: changing it needs a pull request to `swift/main` that the coordinator approves, merged before anything that uses the change.
+**Self-update and schedule stay off under the hybrid.** Until phase 5, `self-update` and `schedule` go through bash only on the bash build. On the Swift build they print "not available in this build". The bash `self_update` would install a script over the binary, and the bash `schedule` writes `/bin/bash <binary>` into the LaunchAgent.
 
-In phase 3 Swift takes over orchestration, the bridge and the bash orchestrator are deleted, and the sections call each other directly.
+## Parity
+
+The differential harness lives in `tests/diff.sh` (phase 0). For every case it runs both builds on identical fixtures and fakes, in all three languages, with and without a terminal (through `script`). It diffs:
+
+- stdout and stderr, captured together on one descriptor as macup writes them;
+- the report file;
+- `--json`;
+- the exit status;
+- the files left in the fake home.
+
+**Normalised before diffing:** dates and times, "took Xm Ys", `seconds`, report file names, temporary paths and pids. The transient `step` and `tick` lines on a terminal are dropped.
+
+**Must match exactly.** Each of these gets an XCTest against values captured from bash:
+
+- **JSON.** Written by hand: fixed key order, control characters deleted, no `\/` (core.sh `jstr`, summary.sh). `JSONEncoder` is not used for output.
+- **Candidate keys.** `cksum` of the paths in the order `find` gives (cleanup.sh `cand`). Port `cksum` (the POSIX CRC) and keep the order.
+- **Widths.** `pad` and `ulen` count Unicode scalars, not grapheme clusters.
+- **Sizes.** `hum`, `tokb` and `tokb10` follow awk's number parsing and `%.1f`.
+- **Sorting.** It follows the locale where bash uses plain `sort` (for example `data_cands`) and `LC_ALL=C` where bash says so.
+- **Sizes on disk and file ages.** They come from `du -k` and `find -mtime`, called as tools, not re-implemented.
+
+**Intended differences** are listed here and nowhere else. Each one is a deliberate change, has a test, and goes into the 3.0.0 CHANGELOG:
+
+- Sections that bash runs only `if have python3` (npm globals, skills, plugins, simulators, outdated apps, the Electron layout scan, editor workspaces) run on every Mac in Swift.
 
 ## Layout
 
 ```
 Package.swift
-Sources/macup/                 main.swift: entry, legacy fallback
-Sources/MacupCore/             everything else, one folder per module
-  Foundation/                  Env, Shell, Output, I18n, Config, Tasks, Paths, Size, Lock, Report, Bridge
-  Commands/  Checks/  Report/  Tools/  Updates/  Cleaners/  Leftovers/  Cleanup/  Summary/
-Sources/macup/Generated/       LegacyScript.swift, Translations.swift (written by build.sh; not committed)
-Tests/MacupCoreTests/          XCTest for pure logic
-tests/run.sh                   unchanged black-box suite; M=<binary> chooses what it runs
+Sources/macup/                  main.swift: routing, the bash exec
+Sources/MacupCore/
+  Foundation/                   Env, Shell, Output, I18n, Config, Tasks, Paths, Size, Lock, Report, JSON
+  Run/                          the main pass, the summary, trends, --json, signals, sudo
+  Cleanup/                      candidate model, safe_path, measuring, settle; later exec and pick
+  Checks/ Updates/ Tools/ Cleaners/ Leftovers/ Commands/
+  Ported.swift                  the ported set, assembled from one list file per module (no shared edits)
+Sources/macup/Generated/        LegacyScript.swift, Translations.swift (written by build.sh, not committed)
+Tests/MacupCoreTests/           XCTest
+tests/run.sh, tests/diff.sh     black-box suite and differential harness
 ```
 
-`build.sh` keeps building the bash `macup` from `src/` and then runs `swift build`. `./build.sh --check` covers both.
+**Built files are not committed on `swift/main`.** `macup` and `macup.sha256` are untracked there and built in CI, so parallel pull requests do not conflict on a 300 KB generated file. When `main` is merged in, a change to them on `main` is resolved by keeping them deleted, and the `src/` change comes in as usual. Phase 5 puts the root `macup` back as the bootstrap.
 
-## Foundation interfaces (phase 0, frozen afterwards)
+## Foundation (phase 0)
 
 | Piece | Replaces | Must get right |
 |---|---|---|
-| `Env` | top of `core.sh` | `HOME` from the environment, never `FileManager.homeDirectoryForCurrentUser`, which ignores `HOME` and would break every fake-home test; `PATH` with Homebrew prepended unless `MACUP_PATH=keep`; refusing to run without `HOME` or under sudo |
-| `Shell` | `run`, `tl`, `have`, `tick` | tools found through `PATH`, never fixed paths, so the tests' fake `pgrep`, `lsof`, `brew` and `xcrun` win; `step_timeout_minutes` kills the whole process group; output teed to the report's raw section; `/dev/tty` for questions; sudo with `sudo -v`, the keep-alive and `stop_sudo_keep` as today |
-| `Output` | `ok`, `info`, `warn`, `err`, `step`, `section`, `md`, `detail`, colours | byte-identical lines, colours only on a terminal and without `--no-color`, the same Markdown in the report, items recorded for `--json` |
+| `Env` | top of `core.sh` | `HOME` from the environment, never `homeDirectoryForCurrentUser` (it ignores `HOME` and would break every fake-home test); `PATH` with Homebrew prepended unless `MACUP_PATH=keep`; every hook: `MACUP_REPO`, `MACUP_LANG`, `NO_COLOR`, `MACUP_STEP_SECS`, `MACUP_APPS`, `MACUP_SYSLIB`, `XDG_CONFIG_HOME`; the `LC_CTYPE` export; refusing to run without `HOME` or under sudo |
+| `Shell` | `run`, `tl`, `have`, `tick` | tools found through `PATH`, never fixed paths, so the fakes win; output of a command on one descriptor; `tl` semantics exactly: the command stays in the terminal's foreground group, a watchdog stops it and its descendants (found through `ps`) after `step_timeout_minutes`, 124 when stopped. A new process group would take Ctrl-C and sudo prompts away from it |
+| `Output` | `ok`, `info`, `warn`, `err`, `step`, `section`, `md`, `detail`, colours | byte-identical lines; the lazy section header (`PENDING`, `SEC`); `IT_N` numbering of items and of `.det` lines; colours only on a terminal and without `--no-color` |
 | `I18n` | `_`, `_f`, `translations.json` | `printf` semantics for `%s`, `%d` and `%%`, and the same fallback to English |
-| `Config`, `Tasks` | `load_conf`, `conf`, `conf_set`, the task table, `task_allowed`, `task`, groups | the same file format and keys, and the same unknown-id errors |
-| `Paths`, `Size` | `expand`, `tildify`, `kb`, `hum`, `tokb` | `du -k` numbers (call `du`, do not re-implement it), the same rounding in `hum` |
-| `Lock`, `Report` | `unlock`, `tidy_own`, report naming, `interrupted` | one run at a time; SIGINT, SIGTERM and SIGHUP still write the report |
-| `Bridge` | new | as specified above |
+| `Config`, `Tasks` | `load_conf`, `conf`, `conf_set`, the task table, `task_allowed`, `task`, groups, unknown ids | same file, same keys, same errors |
+| `Paths`, `Size` | `expand`, `tildify`, `kb`, `hum`, `tokb`, `tokb10` | as under "Parity" |
+| `Lock`, `Report` | `unlock`, `tidy_own`, report naming | the same lock protocol (a folder and a pid file), so a 2.9 scheduled run and a 3.0 run still exclude each other |
+| `JSON` | `jstr`, `jlines`, `jarr` | byte-identical to bash |
+
+Only the data types are frozen after phase 1's vertical slice. `Shell` keeps evolving until `updates` has used its sudo and timeout paths.
 
 ## Phases
 
-Each unit below is one session working in its own worktree, on a branch `swift/<unit>` cut from `swift/main`, and one pull request into `swift/main`. The coordinator, the session that wrote this plan, starts the sessions, reviews, merges and keeps this file up to date.
+Each unit is one session working in its own worktree, on a branch `swift/<unit>` cut from `swift/main`, with one pull request into `swift/main`. The coordinator (the session that wrote this plan) starts the sessions, reviews, merges and keeps this file current. Sessions never merge into `swift/main` themselves.
 
-### Phase 0: foundation (one session)
+### Phase 0: foundation and test harness (one session)
 
-- **Package and build.** `Package.swift`, `build.sh` integration, the generated sources, the legacy fallback with `MACUP_SELF`.
-- **Foundation.** All the interfaces above, with XCTest for the pure parts: `hum`, `tokb`, `expand`, `tildify`, config parsing, task matching, `_f`.
-- **Bridge.** The Swift side, `bridge_import` in bash, and a round-trip test for every record type with tabs, newlines, Cyrillic and `%` in the fields.
-- **Proof commands.** `help` in all three languages, `version`, and `tasks` with and without `--json`, ported in Swift and byte-identical to bash.
-- **Tests and CI.** `tests/run.sh` gets `M=` to run either build. CI builds the universal binary (`--arch arm64 --arch x86_64`) on macos-26 and macos-15, runs XCTest, and runs `tests/run.sh` against the bash build and the Swift build.
-- **Gate.** Both builds ALL PASS and a reviewed diff. The interfaces are then frozen.
+- **`Package.swift` and `build.sh`.** `build.sh` keeps building the bash script, then runs `swift build`. `./build.sh --check` covers both.
+- **The bash exec and `MACUP_SELF`** as under "Routing", plus the routing rule with an empty ported set.
+- **The foundation pieces** above, with XCTest for the pure parts.
+- **`tests/run.sh` runs either build.**
+  - Replace the 108 `/bin/bash "$M"` calls and the 7 `/bin/bash "$H/…/macup"` calls with one `macup_run` helper. It runs `/bin/bash macup` for the bash build and the binary directly for the Swift build.
+  - Tag the tests that only make sense for the script and skip them on the Swift build: `build.sh --check`, `bash -n`, shellcheck, the self-update `sed`/`cmp` test, the installer.
+  - Add the version and remote hooks the Swift build needs for the update-check tests.
+- **`tests/diff.sh`** as under "Parity", starting with `help`, `version` and `tasks`.
+- **Proof.** `help` (three languages), `version` and `tasks` with and without `--json`, ported and identical.
+- **CI.**
+  - `push` also on `swift/**`, so merges into `swift/main` are tested as merged.
+  - Separate jobs: lint, XCTest plus the universal build, `run.sh` on bash, `run.sh` on Swift, and `diff.sh`. Each job has its own timeout; the old single 30-minute job cannot hold two 12-minute suites.
+  - Lint stops naming files that phase 4 deletes.
+- **Gate.** All jobs green, and a reviewed diff.
 
-### Phase 1: sections and commands (two waves of three parallel sessions)
+### Phase 1: the run skeleton and a vertical slice (one session, sequential)
 
-Every unit ports one file, as a section behind the bridge or as one-off commands behind the fallback, and deletes its bash code from the orchestrated path. The bash code itself stays in `src/` until phase 3.
+- **The main pass:**
+  - argument parsing (`arguments.sh`) and the section order;
+  - the lock, the report lifecycle, `--quiet`, `--json`, `--deep`, exit status;
+  - SIGINT, SIGTERM and SIGHUP writing the report;
+  - the sudo keep-alive and its cleanup;
+  - `HOMEBREW_NO_AUTO_UPDATE` set once for the whole run;
+  - the summary and trends (`summary.sh` without the pick).
 
-Wave A, read-mostly and low-risk:
+  Shared scalars become typed run state: free space before, disk total, memory, swap, battery, freed, candidate totals.
+- **Candidate registration**, which every cleaner and leftover depends on:
+  - the candidate model with all its fields, `C_SUDO`, `C_LOP` and `C_BUSY` included;
+  - keys;
+  - `cover`, `safe_path`, `ai_path`, `artifact_ok`;
+  - the cache tables (`ELECTRON_CACHES` and friends; `safe_path` reads them);
+  - background measuring (`kb_bg`, `kb_get`, `settle`), owned by the run so any section can read a measurement started earlier.
+- **One vertical slice through all of it:** one check (`check.disk`), one updater (`update.brew`, which exercises `Shell` timeouts) and one cleaner (`clean.derived_data`). Runs with `--only` on these route to Swift and pass both tests.
+- **Shared integration points as stubs**, so phase 2 units never edit the same file:
+  - the startup section's call into leftovers;
+  - the cleaners' call to leftovers' candidates;
+  - `ver_gt` and `update_cmd`, which the summary uses.
+- **Gate.** Merged and green. The data types are frozen.
 
-| Unit | Bash source | Notes |
+### Phase 2: sections, in parallel (two waves of three sessions)
+
+Units are grouped by tasks, not by bash file. Each unit owns its tasks end to end and adds them to its own ported list.
+
+Wave A:
+
+| Unit | Tasks | Bash it reads |
 |---|---|---|
-| `checks` | `checks.sh`, `report.sh` | system, security, sizes, video and photo, startup, deep; fakes of `sysctl`, `profiles`, `tmutil` and friends already exist in `run.sh` |
-| `cleaners` | `cleaners.sh` | emits `CAND` and `COVER` records; includes the AI tools, editors and the Electron layout scan (from `src/py/macup_helpers.py`) |
-| `commands` | `commands.sh` | `history`, `last`, `reports`, `config`, `lang`, `schedule`, `uninstall`, the menu; `self-update` is ported as it is, and its redesign belongs to phase 4 |
+| `checks` | `check.*` system, security, sizes, video and photo, deep (not startup items) | `checks.sh`, `report.sh` except the startup section |
+| `updates` | `update.*` | `updates.sh`; the riskiest unit (sudo, `mas`, casks, long downloads); it finishes `Shell`'s sudo path |
+| `commands` | one-off commands: `history`, `last`, `reports`, `config`, `lang`, the menu, `uninstall` | `commands.sh`; `uninstall` must still find 2.9 bash copies (it recognises them by `^MACUP_VERSION=`) and recognise 3.0 binaries by the rule decided in phase 5 |
 
-Wave B, starts after wave A is merged:
+Wave B, after wave A is merged:
 
-| Unit | Bash source | Notes |
+| Unit | Tasks | Bash it reads |
 |---|---|---|
-| `tools` | `tools.sh` | npm globals, MCP servers, skills, plugins, the commands check, outdated apps |
-| `updates` | `updates.sh` | brew, mas with sudo, npm, Claude, editors, Grok, Antigravity; the riskiest unit because of passwords and long commands, so it reviews the `Shell` sudo path first |
-| `leftovers` | `leftovers.sh` | leftovers of deleted apps, dev containers, the Trash moves, the sudo commands shown before they run |
+| `tools` | tools and services checks: npm globals, MCP servers, skills, plugins, the commands check, outdated apps | `tools.sh` |
+| `cleaners` | every `clean.*` task registered in `cleaners.sh`, registration only | `cleaners.sh` up to `leftovers_cands` |
+| `leftovers` | `clean.orphan_*`, `clean.dev_containers`, the startup section, the Trash moves and the sudo commands they show | `leftovers.sh`, `report.sh` startup section; it fills the stubs from phase 1 |
 
-Two units of a wave never edit the same file outside their own module folder. If one needs a change to a foundation piece, it stops and asks the coordinator, who merges that change first.
+Within a wave, a unit that needs a foundation change stops and asks the coordinator, who merges that change first.
 
-### Phase 2: the cleanup engine and the summary (one session)
+### Phase 3: exec and pick (one session)
 
-`cleanup.sh` (candidates, `settle`, `safe_path`, `ai_path`, busy detection, `lsof`, background `du`, deletion and the Trash, `exec_cand`) and `summary.sh` (pick, confirmations, totals, history, `--json`, `--pick`). This is the code that deletes files, so it runs alone and gets the strictest review. `safe_path` and `artifact_ok` get table-driven XCTest with every protected path the suite knows.
+- **The code that deletes files:**
+  - `exec_cand` and `run_key` (with the `orph:`, `odata:` and `devc:` keys that point into the leftovers state);
+  - `del`, `to_trash_path`, the leftovers `to_trash` with its allow list;
+  - busy detection (`running`, `lsof_snap`, `open_in`, `mark_busy`);
+  - `visible`, `list_cands`, the pick, confirmations, `--pick`.
+- **Gate:**
+  - full `check`, `clean` and `all` runs route to Swift and pass both tests;
+  - `safe_path`, `artifact_ok` and `to_trash` get table-driven XCTest with every protected path the suite knows;
+  - the strictest review of the port.
 
-### Phase 3: Swift orchestrates (one session)
+### Phase 4: Swift only (one session)
 
-Swift runs the main pass itself: argument parsing (`arguments.sh`), the order of sections, `--quiet`, `--json`, `--deep`, exit status, the lock and the signals. The bridge, the bash orchestrator and the legacy fallback are deleted, then `src/*.sh`, `src/py` and `tests/test_helpers.py`, once their logic has a Swift home and XCTest. `tests/run.sh` stays as the black-box suite. `install.sh` stays bash.
+- **The bash exec and the embedded script are removed from the binary,** and so is the routing (every task is ported).
+- **The bash build stays in `src/`** for one more phase as the oracle for `tests/diff.sh`.
+- **`self-update` and `schedule` are ported for the binary.**
+  - `self-update` replaces the binary by rename, not by writing into it.
+  - `schedule` writes `ProgramArguments` with the binary itself, not `/bin/bash`.
 
-### Phase 4: shipping (one session)
+### Phase 5: shipping (one session)
 
-- **Releases.** On a tag, a workflow builds the universal binary, strips it, and attaches `macup-<version>-macos-universal.tar.gz` and its SHA-256 to the GitHub release. The tag must already have passed CI on `main`.
-- **`install.sh`.** Downloads that archive, checks the SHA-256 and installs `~/.local/bin/macup`. Downloads by curl carry no quarantine attribute, so no notarization is needed; signing is still worth doing (ad hoc at least) and decided here.
-- **`self-update`.** Downloads the release archive and checks it the same way.
-- **Old installs.** Every 2.9.x copy updates itself by fetching the file `macup` at the new tag and checking it against `macup.sha256` from the same tag (`fetch_release` in `src/commands.sh`). So the repository root keeps a small bash `macup` and its `macup.sha256`: a bootstrap that downloads the binary, checks it and replaces itself. Without that file every curl install stays on 2.9.x forever. The suite gets a test that runs a 2.9.2 `self-update` against a fake release.
-- **Homebrew.** The formula installs the prebuilt binary (allowed in a personal tap); `tools/bump-formula.sh` learns the new URL and checksum; `brew test` and `brew audit` pass.
-- **Docs.** README requirements (no bash requirement for running; bash 3.2 only for `install.sh`), CHANGELOG 3.0.0, `uninstall` paths.
+**Releases.** On a tag that has already passed CI on `main`, a workflow:
 
-### Phase 5: final review and release (coordinator)
+- builds the universal binary and strips it;
+- runs `codesign -v` on both slices (arm64 refuses unsigned code; ad hoc is the minimum);
+- attaches `macup-<version>-macos-universal.tar.gz` and its SHA-256 to the GitHub release.
 
-The whole `swift/main` diff against `main` gets a Fable review and a code review, both run on the full diff; every finding is fixed or answered. `main` is merged in one last time and the suite runs. Then one pull request `swift/main` into `main`. Merging it and tagging 3.0.0 happen only when the user says so.
+**`install.sh`.** Downloads that archive, checks it and installs `~/.local/bin/macup`. Running it from a checkout installs the locally built binary instead (CI's install step uses that).
+
+**Old installs.** A 2.9.x copy updates itself like this (`fetch_release`, `self_update` in `src/commands.sh`):
+
+1. reads `MACUP_VERSION="…"` from `main/macup`;
+2. fetches `v<version>/macup.sha256`, then `v<version>/macup`;
+3. checks them with `bash -n`;
+4. installs that file over itself.
+
+So the repository root keeps a bash `macup` with that exact version line, and its `macup.sha256`: a bootstrap. The bootstrap:
+
+- downloads and checks the release binary and replaces itself by rename;
+- leaves itself working and says so if the release asset is not there yet (the minutes between the merge and the upload);
+- refuses to run from a Homebrew Cellar path and says `brew upgrade macup`;
+- on a macOS older than the deployment target, installs the last 2.9.x instead of a binary that cannot start;
+- rewrites an existing LaunchAgent. 2.9.x wrote `/bin/bash <path> check --quiet --notify`, and with a binary at that path launchd would fail with exit 126 silently forever. The 3.0 binary also checks and rewrites it on its first run, which covers Homebrew installs.
+
+The suite gets tests for each of these, including a 2.9.2 `self-update` against a fake release.
+
+**Recognising macup.**
+
+- 2.9 copies keep being found by `^MACUP_VERSION=` and `^# macup`.
+- A 3.0 binary is found by a fixed marker string that the binary must keep (checked by a test, so the compiler cannot drop it) or by running it with `version`; this phase decides which.
+- `install.sh` and `uninstall` use the same rule.
+
+**Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL and checks that the asset exists. `brew audit --strict --online` is run in the tap before relying on it.
+
+**Cleanup.**
+
+- `src/*.sh`, `src/py`, `tests/test_helpers.py` and `tests/diff.sh` are deleted.
+- `tests/run.sh` stays, minus the bash-only tests.
+- `install.sh` and the bootstrap stay bash.
+
+**Docs.** README requirements and install options (curl and Homebrew; see "Decisions for the owner" about downloads from a browser), CHANGELOG 3.0.0 with the intended differences.
+
+### Phase 6: final review and release (coordinator)
+
+1. The whole `swift/main` diff against `main` gets a Fable review and a code review, and every finding is fixed or answered.
+2. `main` is merged in one last time, and the carry-over list must be fully ticked.
+3. The suite runs.
+4. One pull request goes from `swift/main` into `main`.
+
+Merging it and tagging 3.0.0 happen only when the owner says so.
 
 ## Every pull request into `swift/main`
 
-1. The session runs `./build.sh`, `swift build -c release`, XCTest and `tests/run.sh` against both builds (in the background, about 12 minutes each). It reports the numbers.
-2. A Fable reviewer subagent reads the diff and the bash it replaces, looking for behaviour that changed. The session fixes or answers each finding.
-3. A code review (`/code-review` at high) reads the same diff. The session fixes or answers each finding.
-4. CI is green on both macOS versions.
-5. The coordinator reads the result, checks one or two claims itself, and merges. Sessions never merge into `swift/main` themselves.
+1. **The session runs and reports the numbers:** `./build.sh`, `swift build -c release`, XCTest, `tests/run.sh` on both builds and `tests/diff.sh`, in the background (about 12 minutes per suite).
+2. **A Fable reviewer subagent** reads the diff together with the bash it replaces, looking for changed behaviour. The session fixes or answers each finding.
+3. **A code review** (`/code-review` at high) reads the same diff. The session fixes or answers each finding.
+4. **CI** is green.
+5. **The coordinator** reads the result and verifies a claim or two itself. It checks that no carry-over line touching the unit's code is left unticked, then merges.
 
 ## Known traps
 
-- **`HOME`.** Read it from `ProcessInfo.environment`, never from `homeDirectoryForCurrentUser` or `NSHomeDirectory()`.
-- **`PATH`.** Look tools up in `PATH`, keep `MACUP_PATH=keep`, and never call `/usr/bin/<tool>` directly unless bash does today.
-- **Sorting and locale.** Bash sorts with `sort` in the user's locale or with `LC_ALL=C` where the code says so; Swift must sort the same way in each place.
-- **`du` and `find`.** Their numbers and `-mtime` rounding are part of the behaviour. Call them, or match them exactly and test it.
-- **Terminals.** Questions read `/dev/tty`; the suite drives the pick through `script`; `ask` must work under `curl | bash` as today.
-- **Signals and children.** A timeout kills the process group. Ctrl-C, SIGTERM and SIGHUP keep the report and name it.
-- **sudo.** The keep-alive must die with macup, and no `sudo` runs under `--quiet` or a schedule.
-- **Text.** `_f` is `printf`: Ukrainian and Russian strings carry the same placeholders, and widths count characters (`ulen`, `pad`), not bytes.
-- **Self path.** Homebrew detection and uninstall read the real path of the binary, not of a temporary script.
+- **`HOME`, `PATH` and the hooks.** See `Env`.
+- **Timeouts and the foreground.** See `Shell`.
+- **`du`, `find`, `cksum`, `sort`.** See "Parity".
+- **Terminals.** Questions read `/dev/tty`. The suite drives the pick through `script`. `ask` must keep working under `curl | bash`.
+- **sudo.** The keep-alive dies with macup, and nothing asks for sudo under `--quiet` or a schedule.
+- **State that bash shares through globals and the environment.** It becomes typed run state, never a re-read file. For example, `HOMEBREW_NO_AUTO_UPDATE` must still hold for `brew doctor` and `brew cleanup -n` later in the run.
+- **Regex literals need macOS 13.** Below that, use `NSRegularExpression`.
+
+## Decisions for the owner
+
+1. **Deployment target.**
+   - macOS 12 matches today's README ("should work"), but no CI runner can test it, and regex literals are unavailable.
+   - macOS 13 allows regex literals and is still untested.
+   - Recommendation: 13, with the bootstrap keeping older Macs on 2.9.x.
+2. **Downloads from a browser.**
+   - curl and Homebrew downloads carry no quarantine attribute, so they run without notarization.
+   - A tarball downloaded in a browser is quarantined and, most likely, blocked without notarization (not verified).
+   - Either notarize (an Apple Developer account and a signing step in the release workflow), or have the README offer curl and Homebrew only.
+   - Recommendation: curl and Homebrew only for 3.0.0.
 
 ## Bash fixes to carry over
 
@@ -160,4 +286,4 @@ The whole `swift/main` diff against `main` gets a Fable review and a code review
 
 | Phase | Unit | Branch | PR | State |
 |---|---|---|---|---|
-| 0 | foundation | `swift/foundation` | | not started |
+| 0 | foundation and harness | `swift/foundation` | | not started |

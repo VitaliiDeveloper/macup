@@ -25,6 +25,9 @@ for cases in tests/diff_cases/*.sh; do
   # shellcheck source=/dev/null
   . "$cases"
 done
+# tools unit
+# shellcheck source=tests/diff_tools.sh
+. tests/diff_tools.sh
 
 # what may differ between two runs: dates and times, durations, report names, temporary paths, pids; on a terminal the
 # transient step and tick lines, and the extra \r a terminal adds to a newline when a long write fills it; the script's name

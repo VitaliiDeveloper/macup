@@ -223,6 +223,7 @@ final class UpdatesTests: XCTestCase {
         let listed = Updates.timedOutput(try makeRun(), 1, ["/bin/sh", "-c", "echo out; echo err >&2; sleep 30"], errors: true)
         XCTAssertEqual(listed.status, 124)
         XCTAssertEqual(listed.text, "out\nerr")
+        XCTAssertEqual(Updates.timedOutput(try makeRun(), 5, ["/usr/bin/printf", "* Lab\\0el: X\\n\\n"]).text, "* Label: X")
     }
 
     func testJSONReaderRefusesWhatPythonRefuses() {

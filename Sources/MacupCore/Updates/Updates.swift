@@ -98,7 +98,7 @@ enum Updates {
         let status = run.shell.tl(seconds, argv, stdout: .fd(fds[1]), stderr: errors ? .fd(fds[1]) : .null)
         close(fds[1])
         drained.wait()
-        return (status, Bash.substitution(String(decoding: data, as: UTF8.self)))
+        return (status, Bash.substitution(String(decoding: data.filter { $0 != 0 }, as: UTF8.self)))   // bash 3.2's $() drops NUL bytes
     }
 
     /// `$(tool 2>/dev/null | awk '{print $N}')`.

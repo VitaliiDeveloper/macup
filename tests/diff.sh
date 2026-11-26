@@ -39,7 +39,7 @@ tasks-after-check|config||check tasks
 tasks-unicode-blanks|blanks||tasks
 tasks-latin1-config|latin1||tasks --json
 help-latin1-config|latin1|MACUP_LANG=|help
-tasks-step-09|octal||tasks
+tasks-step-09|octal|ANSWERS=q|tasks
 disk|||check --only check.disk
 disk-low||FAKE_DF_FREE=75000000 FAKE_SWAP_KB=2097152 FAKE_SNAPS=3|check --only check.disk
 disk-critical||FAKE_DF_FREE=10000000 FAKE_SMART=Failing|check --only check.disk

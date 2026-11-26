@@ -82,6 +82,13 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
   - when no temporary file can be made, the run exits 1 instead of going on without a report body;
   - tools no longer inherit `MACUP_SELF`, `SHLVL`, `_` or fds 3 and 4;
   - `sw_vers` and `xcode-select -p` run only when something uses them.
+- Found in wave A, checks unit (PR #11):
+  - where bash leaves a tool's stderr alone (uptime, the second `pmset -g batt`, `date -j`), it is dropped;
+  - a `[ x -lt n ]` on a non-integer takes the same branch without bash's `integer expression expected` line;
+  - an empty `sysctl -n hw.memsize` reads as 0 GB instead of ending the run with a syntax error;
+  - `stale_project_days` written with leading zeros ("007") shows as 7 in the `--deep` tip;
+  - a `grep -q` under pipefail that SIGPIPE could turn into "no" gives the intended answer;
+  - xargs batch sizes for the old Downloads follow BSD xargs approximately, which decides only how du counts a hard link shared across batches.
 
 ## Layout
 
@@ -291,6 +298,6 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 |---|---|---|---|---|
 | 0 | foundation and harness | `swift/foundation` | #9 | merged (0ee1899) |
 | 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | #10 | merged (d4b13c9) |
-| 2A | checks | `swift/checks` | | in progress |
+| 2A | checks | `swift/checks` | #11 | merged (cbe2a53) |
 | 2A | updates | `swift/updates` | | in progress |
 | 2A | commands | `swift/commands` | | in progress |

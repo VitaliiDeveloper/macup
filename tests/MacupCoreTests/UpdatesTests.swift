@@ -101,6 +101,8 @@ final class UpdatesTests: XCTestCase {
         try app("MacupLong", version("CFBundleShortVersionString", "<string>99999999999999999999.1</string>"))
         try app("MacupLatest", version("CFBundleShortVersionString", "<string>1.0</string>"))
         try app("MacupBroken", "not a plist")
+        try app("MacupBool", version("CFBundleShortVersionString", "<true/>"))
+        try app("MacupReal", version("CFBundleShortVersionString", "<real>2.0</real>"))
         func cask(_ token: String, _ version: String, _ app: String) -> String {
             #"{"token":"\#(token)","version":\#(version),"artifacts":[{"zap":["x"]},{"app":\#(app)}]}"#
         }
@@ -112,6 +114,7 @@ final class UpdatesTests: XCTestCase {
             cask("macup-brewed", #""9.0""#, #"["MacupBrewed.app"]"#), cask("macup-long", #""100000000000000000000.0""#, #"["MacupLong.app"]"#),
             cask("macup-latest", #""latest""#, #"["MacupLatest.app"]"#), cask("macup-broken", #""2.0""#, #"["MacupBroken.app"]"#),
             cask("macup-string", #""2.0""#, #""Xylophone.app""#), cask("macup-none", "null", "null"),
+            cask("macup-bool", #""True.1""#, #"["MacupBool.app"]"#), cask("macup-real", #""2.0.1""#, #"["MacupReal.app"]"#),
         ].joined(separator: ",") + "]", "cask.json")
         let run = try makeRun()
         let expected = try python("apps-behind", [catalog, home + "/Applications"])
@@ -124,6 +127,11 @@ final class UpdatesTests: XCTestCase {
             let path = try write(broken, "broken.json")
             XCTAssertNil(Updates.appsBehind(run, path), broken)
             XCTAssertFalse(try python("apps-behind", [path, home + "/Applications"]).ok, broken)
+        }
+        for empty in ["{}", "\"\""] {
+            let path = try write(empty, "empty.json")
+            let found = try XCTUnwrap(Updates.appsBehind(run, path), empty)
+            XCTAssertEqual(([String(found.checked)] + found.behind).joined(separator: "\n"), try python("apps-behind", [path, home + "/Applications"]).output, empty)
         }
     }
 
@@ -184,7 +192,8 @@ final class UpdatesTests: XCTestCase {
     }
 
     func testJSONReaderRefusesWhatPythonRefuses() {
-        for bad in ["", "{", "[1,]", "{\"a\":1,}", "01", "1.", ".5", "\"tab\there\"", "{\"a\" 1}", "[1] [2]", "tru", "\"\\x\""] {
+        let deep = String(repeating: "[", count: 5000) + String(repeating: "]", count: 5000)
+        for bad in ["", "{", "[1,]", "{\"a\":1,}", "01", "1.", ".5", "\"tab\there\"", "{\"a\" 1}", "[1] [2]", "tru", "\"\\x\"", "\"\\u+abc\"", "\u{FEFF}{}", deep] {
             XCTAssertNil(JSONValue.parse(Data(bad.utf8)), bad)
         }
         for good in ["0", "-0.5e+3", "\"\\ud83d\\ude00\"", " [ ] ", "{\"a\":[1,{\"b\":null}]}", "NaN", "-Infinity", "\"\\u00e9\""] {

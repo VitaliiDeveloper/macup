@@ -154,6 +154,7 @@ upd-mas-update|mas|$upd_path FAKE_SUDO_RC=0|update --only update.mas
 upd-mas-asks|mas|$upd_path|update --only update.mas
 upd-mas-sudo-refused|mas|$upd_path FAKE_SUDO_ASK_RC=1|update --only update.mas
 upd-mas-timeout|masslow|$upd_path FAKE_SUDO_RC=0 MACUP_STEP_SECS=1|update --only update.mas
+upd-mas-longer-limit|maslong|$upd_path FAKE_SUDO_RC=0 MACUP_STEP_SECS=1|update --only update.mas
 upd-mas-current|mascurrent|$upd_path|update --only update.mas
 upd-mas-missing||$upd_path|update --only update.mas
 upd-apps-cached|apps|$upd_path|check --only update.apps
@@ -202,6 +203,7 @@ fix_skills(){ upd_tools "$1" npx node; mkdir -p "$1/.agents"
 fix_skillsfail(){ fix_skills "$1"; echo 1 >"$1/.fake/npx/-y.rc"; }
 fix_mas(){ upd_tools "$1" mas; answer "$1" mas outdated "$(printf '        1  Foo          (1.0    -> 1.1)\n123456789  Bar Baz Pro  (2.10.3 -> 3.0)')"; echo 1 >"$1/.fake/mas/upgrade 123456789.rc"; }
 fix_masslow(){ fix_mas "$1"; echo 30 >"$1/.fake/mas/upgrade 1.sleep"; }
+fix_maslong(){ fix_mas "$1"; echo 2 >"$1/.fake/mas/upgrade 1.sleep"; }   # longer than the step limit, within the App Store's four times that
 fix_mascurrent(){ upd_tools "$1" mas; : >"$1/.fake/mas/outdated"; }
 upd_app(){ mkdir -p "$1/Applications/$2.app/Contents"
   printf '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>%s</string></dict></plist>' "$3" >"$1/Applications/$2.app/Contents/Info.plist"; }

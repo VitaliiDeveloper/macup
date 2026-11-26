@@ -103,11 +103,23 @@ enum Updates {
         Bash.substitution(Bash.lines(run.shell.capture(argv, stdin: .inherit).output).map { Awk.field($0, number) }.joined(separator: "\n"))
     }
 
-    /// `(cd "$HOME" && run …)`: the step runs from the home folder (a project's settings in the current folder would apply).
+    /// `(cd "$HOME" && run …)`: the step runs from the home folder (a project's settings in the current folder would apply),
+    /// with PWD and OLDPWD as cd leaves them.
     static func inHome(_ run: Run, _ argv: [String]) -> Int32 {
-        let here = open(".", O_RDONLY)
-        defer { if here >= 0 { fchdir(here); close(here) } }
+        let shell = run.shell, saved = (pwd: shell.vars["PWD"], oldpwd: shell.vars["OLDPWD"])
+        let here = open(".", O_RDONLY), herePath = FileManager.default.currentDirectoryPath
+        defer {
+            if here >= 0 { fchdir(here); close(here) } else { chdir(herePath) }
+            shell.vars["PWD"] = saved.pwd
+            shell.vars["OLDPWD"] = saved.oldpwd
+        }
         guard chdir(run.env.home) == 0 else { return 1 }
+        shell.vars["OLDPWD"] = saved.pwd ?? herePath
+        var parts: [Substring] = []   // cd's logical path: no "//", "." or ".."
+        for part in run.env.home.split(separator: "/") where part != "." {
+            if part == ".." { _ = parts.popLast() } else { parts.append(part) }
+        }
+        shell.vars["PWD"] = "/" + parts.joined(separator: "/")
         return run.run(argv)
     }
 

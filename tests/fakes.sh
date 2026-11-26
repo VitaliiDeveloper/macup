@@ -77,7 +77,7 @@ FAKE
 #                         or, when nothing is there for those, the first one: <key> is printed, <key>.rc is the exit status,
 #                         <key>.then is sourced afterwards (to change later answers), <key>.sleep holds seconds to wait.
 #                         A call with nothing to print is an action and goes into $HOME/calls.log, so the files a run
-#                         leaves say what it changed. curl copies $HOME/.fake/cask.json to its -o file, or fails.
+#                         leaves say what it changed; "(in ~)" marks a call run from the home folder, PWD included. curl copies $HOME/.fake/cask.json to its -o file, or fails.
 answering(){
   local dir=$1 tool; shift; mkdir -p "$dir"
   for tool in "$@"; do
@@ -94,7 +94,7 @@ for try in "${all//\//_}" "$1"; do
   for suffix in '' .rc .then .sleep; do [ -e "$dir/$try$suffix" ] && { key=$try; break 2; }; done
 done
 if [ -f "$dir/$key" ]; then cat "$dir/$key"
-else where=""; [ "$(pwd -P)" = "$(cd "$HOME" && pwd -P)" ] && where=" (in ~)"; echo "$tool $*$where" >>"$HOME/calls.log"; fi
+else where=""; [ "$PWD" = "$HOME" ] && [ "$(pwd -P)" = "$(cd "$HOME" && pwd -P)" ] && where=" (in ~)"; echo "$tool $*$where" >>"$HOME/calls.log"; fi
 [ -f "$dir/$key.then" ] && . "$dir/$key.then"
 [ -f "$dir/$key.sleep" ] && exec sleep "$(cat "$dir/$key.sleep")"
 exit "$(cat "$dir/$key.rc" 2>/dev/null || echo 0)"

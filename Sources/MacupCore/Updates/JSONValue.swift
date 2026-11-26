@@ -9,7 +9,7 @@ enum JSONValue {
 
     /// nil where Python's json.loads raises.
     static func parse(_ data: Data) -> JSONValue? {
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        guard !data.starts(with: [0xEF, 0xBB, 0xBF]), let text = String(data: data, encoding: .utf8) else { return nil }   // Python refuses a BOM
         var reader = Reader(scalars: Array(text.unicodeScalars))
         guard let value = reader.value() else { return nil }
         reader.skipBlanks()
@@ -58,6 +58,8 @@ enum JSONValue {
     private struct Reader {
         let scalars: [Unicode.Scalar]
         var index = 0
+        /// Python gives up on nesting deeper than its recursion limit; deeper still would overflow the stack here.
+        var depth = 0
 
         mutating func skipBlanks() {
             while index < scalars.count, [" ", "\t", "\n", "\r"].contains(scalars[index]) { index += 1 }
@@ -65,7 +67,7 @@ enum JSONValue {
 
         mutating func value() -> JSONValue? {
             skipBlanks()
-            guard index < scalars.count else { return nil }
+            guard index < scalars.count, depth < 990 else { return nil }
             switch scalars[index] {
             case "{": return object()
             case "[": return array()
@@ -141,13 +143,16 @@ enum JSONValue {
         }
 
         private mutating func hex() -> UInt32? {
-            guard index + 4 <= scalars.count, let code = UInt32(String(String.UnicodeScalarView(scalars[index..<index + 4])), radix: 16) else { return nil }
+            guard index + 4 <= scalars.count, scalars[index..<index + 4].allSatisfy({ $0.properties.isASCIIHexDigit }),
+                  let code = UInt32(String(String.UnicodeScalarView(scalars[index..<index + 4])), radix: 16) else { return nil }
             index += 4
             return code
         }
 
         private mutating func array() -> JSONValue? {
             index += 1
+            depth += 1
+            defer { depth -= 1 }
             var items: [JSONValue] = []
             skipBlanks()
             if index < scalars.count, scalars[index] == "]" { index += 1; return .array(items) }
@@ -164,6 +169,8 @@ enum JSONValue {
 
         private mutating func object() -> JSONValue? {
             index += 1
+            depth += 1
+            defer { depth -= 1 }
             var entries: [(key: String, value: JSONValue)] = []
             var places: [[Unicode.Scalar]: Int] = [:]
             skipBlanks()

@@ -105,7 +105,13 @@ extension Updates {
     /// nil where Python would stop with an error.
     static func appsBehind(_ run: Run, _ catalog: String) -> (checked: Int, behind: [String])? {
         let brewed = Set(run.shell.capture(["brew", "list", "--cask"]).output.split(whereSeparator: \.isWhitespace).map(String.init))
-        guard case .array(let casks) = JSONValue.parse(file: catalog) else { return nil }
+        var casks: [JSONValue] = []
+        switch JSONValue.parse(file: catalog) {
+        case .array(let items)?: casks = items
+        case .string("")?: break   // Python iterates nothing in these
+        case .object(let entries)? where entries.isEmpty: break
+        default: return nil
+        }
         // app name → (token, version) of each cask that installs it, as code points: a name is a key exactly as Python has it
         var byApp: [[Unicode.Scalar]: [(token: String, version: String)]] = [:]
         for cask in casks {
@@ -138,7 +144,7 @@ extension Updates {
         }
         var checked = 0, behind: [String] = []
         for folder in ["/Applications", run.env.home + "/Applications"] where Run.isDirectory(folder) {
-            let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).sorted(by: codePointOrder)
+            guard let names = (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted(by: codePointOrder) else { return nil }
             for name in names {
                 let path = folder + "/" + name
                 guard let new = latest[Array(name.unicodeScalars)], !Run.isDirectory(path + "/Contents/_MASReceipt") else { continue }
@@ -161,7 +167,9 @@ extension Updates {
         for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
             switch info[key] {
             case let text as String where !text.isEmpty: return text
-            case let number as NSNumber where number.doubleValue != 0: return number.stringValue
+            case let number as NSNumber where number.doubleValue != 0:
+                if CFGetTypeID(number) == CFBooleanGetTypeID() { return "True" }
+                return CFNumberIsFloatType(number) ? JSONValue.number("\(number.doubleValue)").pythonString : number.stringValue
             default: continue
             }
         }

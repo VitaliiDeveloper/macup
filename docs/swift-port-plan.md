@@ -181,7 +181,7 @@ Wave A:
 | `updates` | `update.*` | `updates.sh`; the riskiest unit (sudo, `mas`, casks, long downloads); it finishes `Shell`'s sudo path |
 | `commands` | one-off commands: `history`, `last`, `reports`, `config`, `lang`, the menu, `uninstall` | `commands.sh`; `uninstall` must still find 2.9 bash copies (it recognises them by `^MACUP_VERSION=`) and recognise 3.0 binaries by the rule decided in phase 5 |
 
-Wave B, after wave A is merged:
+Wave B (started alongside the last wave A merges, 2026-11-26; each unit rebases before its final checks):
 
 | Unit | Tasks | Bash it reads |
 |---|---|---|
@@ -314,4 +314,8 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 1 | run skeleton, candidates, vertical slice | `swift/run-skeleton` | #10 | merged (d4b13c9) |
 | 2A | checks | `swift/checks` | #11 | merged (cbe2a53) |
 | 2A | updates | `swift/updates` | #12 | merged (1dcd8b2) |
-| 2A | commands | `swift/commands` | | in progress |
+| 2A | commands | `swift/commands` | #13 | in review |
+| 2A | `check.macos_updates` | `swift/macos-updates` | #14 | in review |
+| 2B | tools | `swift/tools` | | in progress |
+| 2B | cleaners (registration) | `swift/cleaners` | | in progress |
+| 2B | leftovers (registration, startup) | `swift/leftovers` | | in progress |

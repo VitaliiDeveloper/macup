@@ -31,6 +31,7 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 5. **Sequential where pieces depend on each other, parallel where they do not.** A parallel wave starts only after the work it builds on is merged into `swift/main`.
 6. **Foundation only:** Swift 5.9 tools, macOS 13 deployment target, no third-party packages.
 7. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each fix is merged into `swift/main` and adds a line to "Bash fixes to carry over". A unit that ports the touched code ticks its line. This list is a checklist item on every merge (see "Every pull request").
+8. **Code rules (owner, 2026-11-26).** KISS and DRY come first: the plainest code that does the job, no copy-paste, no layer added for later. Every file stays under 500 lines, test files included. No single-letter names, whether variables, loop indices, closure or function parameters, or struct fields; `$0` and `_` are fine. These rules cover everything written for the port: Swift, tests and the shell harness. `src/*.sh` is exempt because it is the oracle (rule 2) and is deleted in phase 4.
 
 ## Routing
 
@@ -254,7 +255,8 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 2. **A Fable reviewer subagent** reads the diff together with the bash it replaces, looking for changed behaviour. The session fixes or answers each finding.
 3. **A code review** (`/code-review` at high) reads the same diff. The session fixes or answers each finding.
 4. **CI** is green.
-5. **The coordinator** reads the result and verifies a claim or two itself. It checks that no carry-over line touching the unit's code is left unticked, then merges.
+5. **Code rules** (ground rule 8) hold for every file the PR adds or changes.
+6. **The coordinator** reads the result and verifies a claim or two itself. It checks that no carry-over line touching the unit's code is left unticked, then merges.
 
 ## Known traps
 

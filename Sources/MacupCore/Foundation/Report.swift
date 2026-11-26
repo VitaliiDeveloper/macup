@@ -48,7 +48,7 @@ public enum Tidy {
         _ = shell.tl(0, ["find", log, "-maxdepth", "1", "-type", "f", "(", "-name", "macup_*.md", "-o", "-name", "macup_*.log", ")",
                          "-mtime", "+\(settings.keepReportsDays)", "-delete"], stdin: .inherit, stdout: .inherit, stderr: .null)
         // this run's report is not written yet: it makes keep_reports
-        for report in Names.glob(log, "macup_*.md").reversed().dropFirst(max(0, settings.keepReports - 1)) {
+        for report in Names.lsReversed(Names.glob(log, "macup_*.md")).dropFirst(max(0, settings.keepReports - 1)) {
             unlink(report)
             unlink("\(report.dropLast(3)).log")
         }

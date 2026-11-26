@@ -10,8 +10,15 @@ final class NamesTests: XCTestCase {
                         ".hidden", "..dots", ".a", ".g.sqlite"]
 
     /// The locales bash and Swift start in. BashOracle's environment has LC_CTYPE=en_US.UTF-8; "" unsets it for core.sh.
-    static let locales: [[String: String]] = [["LANG": "en_US.UTF-8", "LC_CTYPE": ""], ["LANG": "C", "LC_CTYPE": ""], ["LANG": "uk_UA.UTF-8"],
-                                              ["LC_ALL": "C"], ["LC_ALL": "en_US.UTF-8"], ["LANG": "", "LC_CTYPE": ""]]
+    /// bogus, en_DK.UTF-8 and the Linux spelling en_US.utf8 are locales macOS lacks: bash and its tools fall back differently.
+    static let locales: [[String: String]] = [
+        ["LANG": "en_US.UTF-8", "LC_CTYPE": ""], ["LANG": "C", "LC_CTYPE": ""], ["LANG": "uk_UA.UTF-8"], ["LC_ALL": "C"],
+        ["LC_ALL": "en_US.UTF-8"], ["LANG": "", "LC_CTYPE": ""], ["LANG": "en_US.ISO8859-1", "LC_CTYPE": ""],
+        ["LANG": "en_US.UTF-8", "LC_CTYPE": "", "LC_COLLATE": "bogus"], ["LANG": "uk_UA.UTF-8", "LC_CTYPE": "en_US.utf8"],
+        ["LC_COLLATE": "en_US.UTF-8", "LC_CTYPE": "en_US.utf8"], ["LANG": "en_US.UTF-8", "LC_CTYPE": "", "LC_TIME": "en_DK.UTF-8"],
+        ["LANG": "uk_UA.UTF-8", "LC_NUMERIC": "xx"], ["LC_ALL": "bogus", "LANG": "en_US.UTF-8"],
+        ["LANG": "en_US.utf8", "LC_COLLATE": "uk_UA.UTF-8", "LC_CTYPE": ""], ["LC_COLLATE": "uk_UA.UTF-8", "LC_TIME": "bogus", "LC_CTYPE": ""],
+    ]
 
     /// core.sh's own line that exports LC_CTYPE: the oracle's core functions start after it.
     static let export = BashOracle.read("src/core.sh").components(separatedBy: "\n").first { $0.contains("export LC_CTYPE=") }!
@@ -50,20 +57,23 @@ final class NamesTests: XCTestCase {
         }
     }
 
-    /// The report tidy-up keeps the first names `ls -r` lists: two reports from the same second come in the locale's order.
-    func testSameSecondReportsAsLs() throws {
+    /// The report tidy-up keeps the first names `ls -r` lists: two reports from the same second come in the locale's order,
+    /// and names strcoll ties come in the order of ls's own qsort.
+    func testReportsAsLsReversed() throws {
         let folder = NSTemporaryDirectory() + "macup-tidy-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: folder) }
         try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-        for name in ["macup_2026-11-01_10-00-00.md", "macup_2026-11-01_10-00-00_123.md"] { FileManager.default.createFile(atPath: "\(folder)/\(name)", contents: nil) }
+        for name in ["2026-11-01_10-00-00", "2026-11-01_10-00-00_123", "б", "в", "г", "д", "ж", "з", "к", "л", "м"] {
+            FileManager.default.createFile(atPath: "\(folder)/macup_\(name).md", contents: nil)
+        }
         var orders: Set<[String]> = []
         for vars in Self.locales {
             try useLocale(vars)
             let bash = try BashOracle.run(["ls -r \(BashOracle.quoted(folder))/macup_*.md"], env: vars, prelude: Self.export)
-            let swift = Array(Names.glob(folder, "macup_*.md").reversed())
+            let swift = Names.lsReversed(Names.glob(folder, "macup_*.md"))
             XCTAssertEqual(bytes(swift.joined(separator: "\n")), bytes(bash[0]), "\(vars)")
-            orders.insert(swift)
+            orders.insert(swift.filter { $0.contains("2026") })
         }
-        XCTAssertEqual(orders.count, 2, "UTF-8 and C order the two reports differently")
+        XCTAssertEqual(orders.count, 2, "UTF-8 and C order the two reports of one second differently")
     }
 }

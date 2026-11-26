@@ -412,13 +412,16 @@ jb-clean-open|jb|$jb_deep|clean --level standard --only clean.jetbrains
 jb-clean-lsof-fails|jb|FAKE_LSOF_FAIL=1|clean --level standard --only clean.jetbrains
 jb-clean-no-lsof|jb|PATH=$work/nolsof:/usr/bin:/bin|clean --level standard --only clean.jetbrains"
 
-# names in the locale's order: the report tidy-up (ls -r) and bash's globs, in UTF-8 and in C
+# names in the locale's order: the report tidy-up (ls -r) and bash's globs, in UTF-8, in C, and with a locale macOS lacks
+# (forwarded by ssh from Linux), where bash falls back to LANG and ls to C
 CASES="$CASES"'
 names-tidy-utf8|names_tidy|LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=|check --only check.disk|pipe
 names-tidy-c|names_tidy|LC_ALL=C|check --only check.disk|pipe
 names-glob-utf8|names_glob|TMPDIR=@H/tmp/ LANG=en_US.UTF-8 LC_ALL= LC_COLLATE= ANSWERS=n|uninstall|tty
 names-glob-uk|names_glob|TMPDIR=@H/tmp/ LANG=uk_UA.UTF-8 LC_ALL= LC_COLLATE= ANSWERS=n|uninstall|tty
-names-glob-c|names_glob|TMPDIR=@H/tmp/ LC_ALL=C ANSWERS=n|uninstall|tty'
+names-glob-c|names_glob|TMPDIR=@H/tmp/ LC_ALL=C ANSWERS=n|uninstall|tty
+names-tidy-ssh|names_tidy|LANG=en_US.UTF-8 LC_ALL= LC_COLLATE= LC_TIME=en_DK.UTF-8|check --only check.disk|pipe
+names-glob-ssh|names_glob|TMPDIR=@H/tmp/ LANG=en_US.UTF-8 LC_ALL= LC_COLLATE=bogus ANSWERS=n|uninstall|tty'
 # two reports from the same second, keep_reports = 2: the tidy-up keeps the first ls -r lists. They are links, which the
 # files list shows even in the log folder
 fix_names_tidy(){ local log="$1/Library/Logs/macup" name; mkdir -p "$log" "$1/kept" "$1/.config/macup"; printf 'keep_reports = 2\n' >"$1/.config/macup/config"
@@ -483,7 +486,7 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
     script -q /dev/null env "${vars[@]}" tests/macup_run "$@" < <(type_answers "$answers" "$out.out" "$runs_done") >"$out.out" 2>&1; echo $? >"$out.rc"
     : >"$runs_done"
   else   # a session of its own: no /dev/tty either, as in CI, even when diff.sh runs from a terminal
-    env "${vars[@]}" perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die "$ARGV[0]: $!\n"' tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
+    env "${vars[@]}" PERL_BADLANG=0 perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die "$ARGV[0]: $!\n"' tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
   local report; report=$(ls -t "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
   if [ -n "$report" ]; then norm "$report" "$home" >"$out.report"; else : >"$out.report"; fi
   norm "$out.out" "$home" >"$out.norm"; mv "$out.norm" "$out.out"

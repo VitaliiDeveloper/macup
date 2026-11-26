@@ -12,14 +12,14 @@ public struct Report {
     /// `macup_<YYYY-mm-dd_HH-MM-SS>.md`, with `_<pid>` when a run in the same second already has that name.
     public static func path(logDir: String, date: Date = Date(), pid: pid_t = getpid()) -> String {
         let stamp = Report.stamp(date)
-        let p = "\(logDir)/macup_\(stamp).md"
-        return FileManager.default.fileExists(atPath: p) ? "\(logDir)/macup_\(stamp)_\(pid).md" : p
+        let candidate = "\(logDir)/macup_\(stamp).md"
+        return FileManager.default.fileExists(atPath: candidate) ? "\(logDir)/macup_\(stamp)_\(pid).md" : candidate
     }
 
     static func stamp(_ date: Date) -> String {
-        var t = time_t(date.timeIntervalSince1970)
+        var seconds = time_t(date.timeIntervalSince1970)
         var tm = tm()
-        localtime_r(&t, &tm)
+        localtime_r(&seconds, &tm)
         var buf = [CChar](repeating: 0, count: 32)
         strftime(&buf, buf.count, "%Y-%m-%d_%H-%M-%S", &tm)
         return String(cString: buf)
@@ -69,26 +69,26 @@ public enum Tidy {
         defer { unlink(path + ".tmp") }
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue,
-              let d = FileManager.default.contents(atPath: path) else { return }
-        let newlines = d.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
+              let contents = FileManager.default.contents(atPath: path) else { return }
+        let newlines = contents.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
         guard newlines > keep * 2 else { return }
-        let tail = lastLines(d, keep)
-        guard let h = FileHandle(forWritingAtPath: path) else { return }
-        try? h.truncate(atOffset: 0)
-        try? h.write(contentsOf: tail)
-        try? h.close()
+        let tail = lastLines(contents, keep)
+        guard let handle = FileHandle(forWritingAtPath: path) else { return }
+        try? handle.truncate(atOffset: 0)
+        try? handle.write(contentsOf: tail)
+        try? handle.close()
     }
 
-    /// `tail -n k`: a last line without a newline counts as a line.
-    static func lastLines(_ d: Data, _ k: Int) -> Data {
-        let bytes = [UInt8](d)
+    /// `tail -n keep`: a last line without a newline counts as a line.
+    static func lastLines(_ data: Data, _ keep: Int) -> Data {
+        let bytes = [UInt8](data)
         var end = bytes.count
         if end > 0, bytes[end - 1] == 0x0A { end -= 1 }
-        var count = 0, i = end
-        while i > 0 {
-            if bytes[i - 1] == 0x0A { count += 1; if count == k { break } }
-            i -= 1
+        var count = 0, index = end
+        while index > 0 {
+            if bytes[index - 1] == 0x0A { count += 1; if count == keep { break } }
+            index -= 1
         }
-        return Data(bytes[i...])
+        return Data(bytes[index...])
     }
 }

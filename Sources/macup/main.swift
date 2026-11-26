@@ -14,6 +14,6 @@ do {
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()
-case .swift(let a):
-    exit(OneOff.run(a, env: env, translations: Translations.json))
+case .swift(let arguments):
+    exit(OneOff.run(arguments, env: env, translations: Translations.json))
 }

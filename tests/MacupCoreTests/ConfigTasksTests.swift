@@ -27,9 +27,9 @@ final class ConfigTasksTests: XCTestCase {
     func testConfAgainstBash() throws {
         for text in configs {
             try text.write(toFile: confPath, atomically: true, encoding: .utf8)
-            let c = Config(path: confPath)
+            let config = Config(path: confPath)
             let got = try BashOracle.run(keys.map { "conf \($0) dflt" }, home: dir)
-            for (i, k) in keys.enumerated() { XCTAssertEqual(c.value(k, "dflt"), got[i], "conf \(k) in \(text.debugDescription)") }
+            for (index, key) in keys.enumerated() { XCTAssertEqual(config.value(key, "dflt"), got[index], "conf \(key) in \(text.debugDescription)") }
         }
         XCTAssertEqual(Config(path: dir + "/none").value("skip", "x"), "x")
         XCTAssertEqual(Config(path: dir).value("skip", "x"), "x", "a folder is not a config file")
@@ -39,11 +39,11 @@ final class ConfigTasksTests: XCTestCase {
     func testInvalidUTF8StopsLikeSed() throws {
         let bytes = Data("language = ru\n# caf".utf8) + Data([0xE9]) + Data("\nskip = clean.*\n".utf8)
         try bytes.write(to: URL(fileURLWithPath: confPath))
-        var c = Config(path: confPath)
-        c.reportsErrors = false
+        var config = Config(path: confPath)
+        config.reportsErrors = false
         let got = try BashOracle.run(["conf language x", "conf skip none"], home: dir)
-        XCTAssertTrue(c.sedFails)
-        XCTAssertEqual([c.value("language", "x"), c.value("skip", "none")], got)
+        XCTAssertTrue(config.sedFails)
+        XCTAssertEqual([config.value("language", "x"), config.value("skip", "none")], got)
         var latin = Config(path: confPath, utf8: false)
         latin.reportsErrors = false
         XCTAssertEqual(latin.value("skip", "none"), "clean.*", "LC_ALL=C: sed reads every byte")
@@ -69,7 +69,7 @@ final class ConfigTasksTests: XCTestCase {
                 try? FileManager.default.removeItem(atPath: confPath)
                 if let text { try text.write(toFile: confPath, atomically: true, encoding: .utf8) }
                 let prelude = "write_default_conf(){ mkdir -p \"$CONF_DIR\"; printf 'language = en\\n' >\"$CONF\"; }"
-                _ = try BashOracle.run(["conf_set \(key) \(BashOracle.q(value))"], home: dir, prelude: prelude)
+                _ = try BashOracle.run(["conf_set \(key) \(BashOracle.quoted(value))"], home: dir, prelude: prelude)
                 let want = try String(contentsOfFile: confPath, encoding: .utf8)
                 // swift
                 try? FileManager.default.removeItem(atPath: confPath)
@@ -91,7 +91,7 @@ final class ConfigTasksTests: XCTestCase {
         let table = core[start..<core[start...].firstIndex(of: "'")!]
         let rows = table.split(separator: "\n").map { $0.split(separator: "|", maxSplits: 2).map(String.init) }
         XCTAssertEqual(rows.count, Tasks.all.count)
-        for (row, t) in zip(rows, Tasks.all) { XCTAssertEqual(row, [t.id, t.on ? "on" : "off", t.text]) }
+        for (row, task) in zip(rows, Tasks.all) { XCTAssertEqual(row, [task.id, task.on ? "on" : "off", task.text]) }
     }
 
     func testSelectionAgainstBash() throws {
@@ -103,14 +103,14 @@ final class ConfigTasksTests: XCTestCase {
         for text in configs {
             try text.write(toFile: confPath, atomically: true, encoding: .utf8)
             for cli in clis {
-                let s = Settings(config: Config(path: confPath), env: env, cliSkip: cli.skip, cliOnly: cli.only, cliEnable: cli.enable, cliLevel: nil)
-                let sel = Selection(s)
-                let prelude = "CLI_SKIP=\(BashOracle.q(cli.skip)); CLI_ONLY=\(BashOracle.q(cli.only)); CLI_ENABLE=\(BashOracle.q(cli.enable)); load_conf"
+                let settings = Settings(config: Config(path: confPath), env: env, cliSkip: cli.skip, cliOnly: cli.only, cliEnable: cli.enable, cliLevel: nil)
+                let sel = Selection(settings)
+                let prelude = "CLI_SKIP=\(BashOracle.quoted(cli.skip)); CLI_ONLY=\(BashOracle.quoted(cli.only)); CLI_ENABLE=\(BashOracle.quoted(cli.enable)); load_conf"
                 let calls = Tasks.all.map { "if task \($0.id); then echo 1; else echo 0; fi" } + ["printf %s \"$SKIP|$ENABLE|$CLI_ONLY|$LEVEL|$KEEP_RUNS|$STEP_SECS|$SIM_DAYS\""]
                 let got = try BashOracle.run(calls, home: dir, prelude: prelude)
-                for (i, t) in Tasks.all.enumerated() { XCTAssertEqual(sel.runs(t.id) ? "1" : "0", got[i], "task \(t.id) with \(cli) in \(text.debugDescription)") }
-                if s.bashArithmeticFails { XCTAssertEqual(got.last?.contains("||20|3600|"), true, "bash gave up halfway through load_conf"); continue }
-                XCTAssertEqual("\(s.skip)|\(s.enable)|\(s.only)|\(s.level)|\(s.keepReports)|\(s.stepSeconds)|\(s.simulatorDays)", got.last, "load_conf")
+                for (index, task) in Tasks.all.enumerated() { XCTAssertEqual(sel.runs(task.id) ? "1" : "0", got[index], "task \(task.id) with \(cli) in \(text.debugDescription)") }
+                if settings.bashArithmeticFails { XCTAssertEqual(got.last?.contains("||20|3600|"), true, "bash gave up halfway through load_conf"); continue }
+                XCTAssertEqual("\(settings.skip)|\(settings.enable)|\(settings.only)|\(settings.level)|\(settings.keepReports)|\(settings.stepSeconds)|\(settings.simulatorDays)", got.last, "load_conf")
             }
         }
     }
@@ -119,7 +119,7 @@ final class ConfigTasksTests: XCTestCase {
         let lists = [",chek.disk", ",check.*,clean.nope, update.brew ", ",,,", "a,b,c", ",clean.*,update.*", ",check.disk,check.tyme_machine",
                      ",check\\.disk,check\\.d\\isk", "x\\", "a\nb,check.*"]
         let prelude = BashOracle.function("unknown_tasks", in: "src/arguments.sh")
-        let got = try BashOracle.run(lists.map { "unknown_tasks \(BashOracle.q($0))" }, prelude: prelude)
-        for (i, l) in lists.enumerated() { XCTAssertEqual(Tasks.unknown(l), got[i], "unknown_tasks \(l)") }
+        let got = try BashOracle.run(lists.map { "unknown_tasks \(BashOracle.quoted($0))" }, prelude: prelude)
+        for (index, list) in lists.enumerated() { XCTAssertEqual(Tasks.unknown(list), got[index], "unknown_tasks \(list)") }
     }
 }

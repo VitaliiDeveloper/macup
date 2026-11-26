@@ -2,23 +2,23 @@
 /// Text is split on the newline scalar, never on Swift characters: "\r\n" is one Character.
 enum Bash {
     /// What the builtin `echo "$1"` writes: a lone `-n`, `-e`, `-E` (or a mix of those letters) is an option, not text.
-    static func echo(_ s: String) -> String {
-        let u = s.unicodeScalars
-        if u.count > 1, u.first == "-", u.dropFirst().allSatisfy({ $0 == "n" || $0 == "e" || $0 == "E" }) {
-            return u.contains("n") ? "" : "\n"
+    static func echo(_ text: String) -> String {
+        let scalars = text.unicodeScalars
+        if scalars.count > 1, scalars.first == "-", scalars.dropFirst().allSatisfy({ $0 == "n" || $0 == "e" || $0 == "E" }) {
+            return scalars.contains("n") ? "" : "\n"
         }
-        return s + "\n"
+        return text + "\n"
     }
 
     /// `$(cmd)`: the output without its trailing newlines.
-    static func substitution(_ s: String) -> String {
-        var u = Substring(s).unicodeScalars
-        while u.last == "\n" { u.removeLast() }
-        return String(u)
+    static func substitution(_ text: String) -> String {
+        var scalars = Substring(text).unicodeScalars
+        while scalars.last == "\n" { scalars.removeLast() }
+        return String(scalars)
     }
 
     /// The pieces between newlines; "a\n" gives ["a", ""].
-    static func lines(_ s: String) -> [String] {
-        s.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map { String(String.UnicodeScalarView($0)) }
+    static func lines(_ text: String) -> [String] {
+        text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map { String(String.UnicodeScalarView($0)) }
     }
 }

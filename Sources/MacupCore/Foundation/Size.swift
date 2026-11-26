@@ -14,39 +14,39 @@ public enum Size {
     }
 
     /// `hum`: KB as Finder shows it, in decimal units ("1.2 GB", "340 MB", "12 KB"). Takes what bash would pass, text included.
-    public static func hum(_ k: String) -> String {
-        let k = k.isEmpty ? "0" : k
+    public static func hum(_ kilobytes: String) -> String {
+        let kilobytes = kilobytes.isEmpty ? "0" : kilobytes
         var sign = ""
-        var v = Awk.number(k)
-        if Awk.lessThanZero(k) { sign = "-"; v = -v }
-        let b = v * 1024
-        if Awk.ge(b, 1e9) { return sign + Awk.format("%.1f GB", b / 1e9) }
-        if Awk.ge(b, 1e6) { return sign + Awk.format("%.0f MB", b / 1e6) }
-        return sign + String(Awk.int(b / 1e3)) + " KB"
+        var value = Awk.number(kilobytes)
+        if Awk.lessThanZero(kilobytes) { sign = "-"; value = -value }
+        let bytes = value * 1024
+        if Awk.ge(bytes, 1e9) { return sign + Awk.format("%.1f GB", bytes / 1e9) }
+        if Awk.ge(bytes, 1e6) { return sign + Awk.format("%.0f MB", bytes / 1e6) }
+        return sign + String(Awk.int(bytes / 1e3)) + " KB"
     }
 
-    public static func hum(_ k: Int64) -> String { hum(String(k)) }
+    public static func hum(_ kilobytes: Int64) -> String { hum(String(kilobytes)) }
 
     /// `tokb`: "1.5GB" (binary units, as `du -h` prints them) → KB.
-    public static func tokb(_ s: String) -> String {
-        convert(s) { u in
-            switch u { case "TB": 1_073_741_824; case "GB": 1_048_576; case "MB": 1024; case "KB": 1; default: 0 }
+    public static func tokb(_ text: String) -> String {
+        convert(text) { unit in
+            switch unit { case "TB": 1_073_741_824; case "GB": 1_048_576; case "MB": 1024; case "KB": 1; default: 0 }
         } scale: { $0 }
     }
 
     /// `tokb10`: "1.5GB" in decimal units, as Docker counts → KB.
-    public static func tokb10(_ s: String) -> String {
-        convert(s) { u in
-            switch u { case "TB": 1e12; case "GB": 1e9; case "MB": 1e6; case "KB": 1e3; case "B": 1; default: 0 }
+    public static func tokb10(_ text: String) -> String {
+        convert(text) { unit in
+            switch unit { case "TB": 1e12; case "GB": 1e9; case "MB": 1e6; case "KB": 1e3; case "B": 1; default: 0 }
         } scale: { $0 / 1024 }
     }
 
     /// One `printf "%d"` per line of input, as awk runs its action on every record of `echo "$1"`.
-    private static func convert(_ s: String, unit: (String) -> Double, scale: (Double) -> Double) -> String {
-        Awk.records(echoing: s).map { rec -> String in
-            let f = Awk.firstField(rec)
-            let u = Awk.upper(String(f.unicodeScalars.filter { !("0"..."9").contains($0) && $0 != "." }))
-            return String(Awk.int(scale(Awk.number(f) * unit(u))))
+    private static func convert(_ text: String, unit: (String) -> Double, scale: (Double) -> Double) -> String {
+        Awk.records(echoing: text).map { rec -> String in
+            let field = Awk.firstField(rec)
+            let suffix = Awk.upper(String(field.unicodeScalars.filter { !("0"..."9").contains($0) && $0 != "." }))
+            return String(Awk.int(scale(Awk.number(field) * unit(suffix))))
         }.joined()
     }
 }

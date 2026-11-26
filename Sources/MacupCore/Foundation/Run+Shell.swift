@@ -14,10 +14,10 @@ public struct RunLog {
         self.runSeconds = runSeconds
     }
 
-    func append(_ s: String) {
+    func append(_ text: String) {
         let fd = open(raw, O_WRONLY | O_CREAT | O_APPEND, 0o644)
         guard fd >= 0 else { return }
-        _ = s.withCString { Darwin.write(fd, $0, strlen($0)) }
+        _ = text.withCString { Darwin.write(fd, $0, strlen($0)) }
         close(fd)
     }
 }
@@ -49,17 +49,17 @@ public extension Shell {
         guard isatty(output.fd) == 1, !output.colors.cl.isEmpty else { return run(argv, log: log, output: output) }
         let from = lineCount(log.raw) + 2   // past the "$ cmd" line run writes
         let cols = Int(Bash.substitution(capture(["tput", "cols"]).output)) ?? 80
-        let w = max(10, cols - 30)
-        let shown = String(String.UnicodeScalarView(label.unicodeScalars.prefix(w)))   // a wrapped line would stay behind on every redraw
+        let width = max(10, cols - 30)
+        let shown = String(String.UnicodeScalarView(label.unicodeScalars.prefix(width)))   // a wrapped line would stay behind on every redraw
         let done = DispatchSemaphore(value: 0)
         let t0 = Date()
         let ticker = Thread { [self] in
             repeat {
                 let ph = latestPhase(log.raw, from: from)
-                let s = Int(Date().timeIntervalSince(t0))
-                let c = output.colors
-                let phase = ph.isEmpty ? "" : " · " + output.i18n.t(ph)
-                output.write(c.cl + "  " + c.d + "… " + shown + phase + " · " + String(s / 60) + ":" + String(format: "%02d", s % 60) + c.n)
+                let elapsed = Int(Date().timeIntervalSince(t0))
+                let colors = output.colors
+                let phase = ph.isEmpty ? "" : " · " + output.i18n.translate(ph)
+                output.write(colors.cl + "  " + colors.dim + "… " + shown + phase + " · " + String(elapsed / 60) + ":" + String(format: "%02d", elapsed % 60) + colors.reset)
             } while done.wait(timeout: .now() + 1) == .timedOut
         }
         ticker.start()
@@ -70,15 +70,15 @@ public extension Shell {
     }
 
     private func lineCount(_ path: String) -> Int {
-        guard let d = FileManager.default.contents(atPath: path) else { return 0 }
-        return d.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
+        guard let contents = FileManager.default.contents(atPath: path) else { return 0 }
+        return contents.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
     }
 
     /// The word after the last "==> " at the start of a line, from line `from` on.
     private func latestPhase(_ path: String, from: Int) -> String {
-        guard let d = FileManager.default.contents(atPath: path) else { return "" }
+        guard let contents = FileManager.default.contents(atPath: path) else { return "" }
         var phase = ""
-        for line in Bash.lines(String(decoding: d, as: UTF8.self)).dropFirst(max(0, from - 1)) where line.hasPrefix("==> ") {
+        for line in Bash.lines(String(decoding: contents, as: UTF8.self)).dropFirst(max(0, from - 1)) where line.hasPrefix("==> ") {
             phase = String(line.dropFirst(4).unicodeScalars.prefix(while: { ("A"..."Z").contains($0) || ("a"..."z").contains($0) }))
         }
         return phase

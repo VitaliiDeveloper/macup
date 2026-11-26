@@ -1,13 +1,13 @@
 /// `macup help` (help.sh). The texts are the bash build's, line for line; tests/diff.sh compares them.
 public enum Help {
     /// `usage`: the help in the run's language; `conf` is the config path as the user writes it (~/…).
-    public static func text(lang: Lang, colors c: Colors, conf: String) -> String {
+    public static func text(lang: Lang, colors: Colors, conf: String) -> String {
         switch lang {
         case .uk:
             """
-            \(c.b)macup\(c.n) \(Env.version) — догляд за Маком однією командою
+            \(colors.bold)macup\(colors.reset) \(Env.version) — догляд за Маком однією командою
 
-            Просто набери  \(c.b)macup\(c.n)  — з'явиться меню.
+            Просто набери  \(colors.bold)macup\(colors.reset)  — з'явиться меню.
 
             Команди
               macup check        Перевірити все, потім вибрати, що почистити (або нічого)
@@ -48,9 +48,9 @@ public enum Help {
             """
         case .ru:
             """
-            \(c.b)macup\(c.n) \(Env.version) — уход за Маком одной командой
+            \(colors.bold)macup\(colors.reset) \(Env.version) — уход за Маком одной командой
 
-            Просто наберите  \(c.b)macup\(c.n)  — появится меню.
+            Просто наберите  \(colors.bold)macup\(colors.reset)  — появится меню.
 
             Команды
               macup check        Проверить всё, потом выбрать, что почистить (или ничего)
@@ -91,9 +91,9 @@ public enum Help {
             """
         case .en:
             """
-            \(c.b)macup\(c.n) \(Env.version) — keep your Mac healthy from one command
+            \(colors.bold)macup\(colors.reset) \(Env.version) — keep your Mac healthy from one command
 
-            Just type  \(c.b)macup\(c.n)  to get a menu.
+            Just type  \(colors.bold)macup\(colors.reset)  to get a menu.
 
             Commands
               macup check        Check everything, then pick what to clean (or nothing)

@@ -28,10 +28,10 @@ public struct RunLock {
     }
 
     /// `kill -0 pid`: the process exists and macup may signal it (another user's process does not count).
-    static func alive(_ s: String) -> Bool {
-        let t = s.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n"))
-        guard let p = Int32(t) else { return false }
-        return kill(p, 0) == 0
+    static func alive(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n"))
+        guard let processID = Int32(trimmed) else { return false }
+        return kill(processID, 0) == 0
     }
 
     /// `unlock`.

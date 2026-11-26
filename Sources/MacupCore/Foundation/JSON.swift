@@ -1,14 +1,14 @@
 /// JSON written by hand, byte for byte as core.sh's `jstr`, `jlines` and `jarr`: a backslash and a quote are escaped,
 /// control characters (0x00–0x1F, newlines and tabs included) are deleted, nothing else changes (no \/ and no \u).
 public enum JSON {
-    public static func str(_ s: String) -> String {
+    public static func str(_ text: String) -> String {
         var out = String.UnicodeScalarView()
-        for c in s.unicodeScalars {
-            switch c.value {
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
             case 0x5C: out.append(contentsOf: "\\\\".unicodeScalars)
             case 0x22: out.append(contentsOf: "\\\"".unicodeScalars)
             case 0x00...0x1F: continue
-            default: out.append(c)
+            default: out.append(scalar)
             }
         }
         return String(out)

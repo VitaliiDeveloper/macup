@@ -10,7 +10,7 @@ enum BashExec {
         setenv("MACUP_SELF", selfPath(), 1)
         // the arguments as the C strings macup got: a Swift String would replace bytes that are not UTF-8
         var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup("/bin/bash"), strdup("/dev/fd/\(fd)")]
-        for i in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[i]) }
+        for index in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[index]) }
         cArgs.append(nil)
         execv("/bin/bash", cArgs)
         fail("cannot run /bin/bash: \(String(cString: strerror(errno)))")
@@ -21,27 +21,27 @@ enum BashExec {
         // /tmp when TMPDIR cannot take it: the bash build runs its one-off commands without a temp folder
         let dirs = [ProcessInfo.processInfo.environment["TMPDIR"].flatMap { $0.isEmpty ? nil : $0 }, "/tmp"].compactMap { $0 }
         var template: [CChar] = []
-        var w: Int32 = -1
-        for d in dirs where w < 0 {
-            template = Array("\(d)/macup.XXXXXX".utf8CString)
-            w = mkstemp(&template)
+        var writeDescriptor: Int32 = -1
+        for dir in dirs where writeDescriptor < 0 {
+            template = Array("\(dir)/macup.XXXXXX".utf8CString)
+            writeDescriptor = mkstemp(&template)
         }
-        guard w >= 0 else { fail("cannot write a temporary file in \(dirs.joined(separator: " or ")): \(String(cString: strerror(errno)))") }
+        guard writeDescriptor >= 0 else { fail("cannot write a temporary file in \(dirs.joined(separator: " or ")): \(String(cString: strerror(errno)))") }
         let path = String(cString: template)
         defer { unlink(path) }
         let data = Array(LegacyScript.text.utf8)
         var off = 0
         while off < data.count {
-            let n = data.withUnsafeBytes { write(w, $0.baseAddress! + off, $0.count - off) }
-            if n < 0 { if errno == EINTR { continue }; fail("cannot write \(path): \(String(cString: strerror(errno)))") }
-            off += n
+            let written = data.withUnsafeBytes { write(writeDescriptor, $0.baseAddress! + off, $0.count - off) }
+            if written < 0 { if errno == EINTR { continue }; fail("cannot write \(path): \(String(cString: strerror(errno)))") }
+            off += written
         }
-        close(w)
-        let r = open(path, O_RDONLY)
-        guard r >= 0 else { fail("cannot read \(path): \(String(cString: strerror(errno)))") }
-        let fd = fcntl(r, F_DUPFD, 10)
+        close(writeDescriptor)
+        let readDescriptor = open(path, O_RDONLY)
+        guard readDescriptor >= 0 else { fail("cannot read \(path): \(String(cString: strerror(errno)))") }
+        let fd = fcntl(readDescriptor, F_DUPFD, 10)
         guard fd >= 0 else { fail("no descriptor for the script: \(String(cString: strerror(errno)))") }
-        close(r)
+        close(readDescriptor)
         return fd
     }
 
@@ -54,8 +54,8 @@ enum BashExec {
         var buf = [CChar](repeating: 0, count: Int(size) + 1)
         guard _NSGetExecutablePath(&buf, &size) == 0 else { return CommandLine.arguments[0] }
         let path = String(cString: buf)
-        if let r = path.range(of: "/.build/", options: .backwards) {
-            let checkout = String(path[..<r.lowerBound])
+        if let range = path.range(of: "/.build/", options: .backwards) {
+            let checkout = String(path[..<range.lowerBound])
             let fm = FileManager.default
             if fm.fileExists(atPath: checkout + "/build.sh"), fm.fileExists(atPath: checkout + "/src") { return checkout + "/macup" }
         }

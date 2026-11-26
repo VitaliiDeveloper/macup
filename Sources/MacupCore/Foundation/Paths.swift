@@ -8,8 +8,8 @@ public struct Paths {
 
     public func tildify(_ path: String) -> String {
         Bash.substitution(Bash.lines(stripEcho(path)).map { line -> String in
-            guard let n = homePrefixLength(line) else { return line }
-            return "~" + String(String.UnicodeScalarView(line.unicodeScalars.dropFirst(n)))
+            guard let prefix = homePrefixLength(line) else { return line }
+            return "~" + String(String.UnicodeScalarView(line.unicodeScalars.dropFirst(prefix)))
         }.joined(separator: "\n"))
     }
 
@@ -22,29 +22,29 @@ public struct Paths {
     }
 
     /// What `echo "$1"` hands to sed, without the newline it adds (sed keeps lines as they come).
-    private func stripEcho(_ s: String) -> String {
-        let e = Bash.echo(s)
-        return e.isEmpty ? "" : String(String.UnicodeScalarView(e.unicodeScalars.dropLast()))
+    private func stripEcho(_ text: String) -> String {
+        let echoed = Bash.echo(text)
+        return echoed.isEmpty ? "" : String(String.UnicodeScalarView(echoed.unicodeScalars.dropLast()))
     }
 
     /// How many scalars at the start of the line match HOME read as a basic regular expression, nil when it does not match.
     /// HOME is a path: the only special character it realistically has is ".", which matches any one character.
     /// Anything rarer (* [ \ ^ $) is matched literally; the bash build may differ there.
     func homePrefixLength(_ line: String) -> Int? {
-        let h = Array(home.unicodeScalars), l = Array(line.unicodeScalars)
-        guard l.count >= h.count else { return nil }
-        for (i, c) in h.enumerated() where c != "." && c != l[i] { return nil }
-        return h.count
+        let homeScalars = Array(home.unicodeScalars), lineScalars = Array(line.unicodeScalars)
+        guard lineScalars.count >= homeScalars.count else { return nil }
+        for (index, scalar) in homeScalars.enumerated() where scalar != "." && scalar != lineScalars[index] { return nil }
+        return homeScalars.count
     }
 
     /// The text sed puts in for a replacement: & is the matched text, a backslash takes the next character literally.
-    static func sedReplacement(_ r: String, match: String) -> String {
+    static func sedReplacement(_ replacement: String, match: String) -> String {
         var out = "", esc = false
-        for c in r.unicodeScalars {
-            if esc { out.unicodeScalars.append(c); esc = false }
-            else if c == "\\" { esc = true }
-            else if c == "&" { out += match }
-            else { out.unicodeScalars.append(c) }
+        for scalar in replacement.unicodeScalars {
+            if esc { out.unicodeScalars.append(scalar); esc = false }
+            else if scalar == "\\" { esc = true }
+            else if scalar == "&" { out += match }
+            else { out.unicodeScalars.append(scalar) }
         }
         return out
     }

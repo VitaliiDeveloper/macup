@@ -4,36 +4,36 @@ import XCTest
 
 final class RoutingTests: XCTestCase {
     func env(_ extra: [String: String] = [:]) throws -> Env {
-        var v = ["HOME": NSTemporaryDirectory() + "macup-none-\(UUID().uuidString)", "PATH": "/usr/bin:/bin"]
-        for (k, x) in extra { v[k] = x }
-        return try Env(v)
+        var vars = ["HOME": NSTemporaryDirectory() + "macup-none-\(UUID().uuidString)", "PATH": "/usr/bin:/bin"]
+        for (key, value) in extra { vars[key] = value }
+        return try Env(vars)
     }
 
     func testParseMirrorsArgumentsSh() throws {
-        var a = try Arguments.parse(["check", "--skip", "a", "--skip=b", "--only", "c", "--lang", "ua", "--no-color", "tasks"])
-        XCTAssertEqual(a.command, .tasks)
-        XCTAssertEqual(a.action, "check")
-        XCTAssertTrue(a.dry)
-        XCTAssertEqual(a.cliSkip, ",a,b")
-        XCTAssertEqual(a.cliOnly, ",c")
-        XCTAssertEqual(a.lang, .uk)
-        XCTAssertTrue(a.noColor)
+        var arguments = try Arguments.parse(["check", "--skip", "a", "--skip=b", "--only", "c", "--lang", "ua", "--no-color", "tasks"])
+        XCTAssertEqual(arguments.command, .tasks)
+        XCTAssertEqual(arguments.action, "check")
+        XCTAssertTrue(arguments.dry)
+        XCTAssertEqual(arguments.cliSkip, ",a,b")
+        XCTAssertEqual(arguments.cliOnly, ",c")
+        XCTAssertEqual(arguments.lang, .uk)
+        XCTAssertTrue(arguments.noColor)
 
-        a = try Arguments.parse(["schedule", "weekly", "lang", "--json", "reports", "clean", "help", "version"])
-        XCTAssertEqual(a.command, .version, "the last command word wins")
-        XCTAssertEqual(a.schedArg, "weekly")
-        XCTAssertEqual(a.langArg, "", "lang takes no option as its word")
-        XCTAssertEqual(a.repArg, "clean")
-        XCTAssertTrue(a.json && a.quiet)
+        arguments = try Arguments.parse(["schedule", "weekly", "lang", "--json", "reports", "clean", "help", "version"])
+        XCTAssertEqual(arguments.command, .version, "the last command word wins")
+        XCTAssertEqual(arguments.schedArg, "weekly")
+        XCTAssertEqual(arguments.langArg, "", "lang takes no option as its word")
+        XCTAssertEqual(arguments.repArg, "clean")
+        XCTAssertTrue(arguments.json && arguments.quiet)
 
-        a = try Arguments.parse(["--skip"])
-        XCTAssertEqual(a.cliSkip, ",", "an option at the end takes an empty value")
+        arguments = try Arguments.parse(["--skip"])
+        XCTAssertEqual(arguments.cliSkip, ",", "an option at the end takes an empty value")
 
-        a = try Arguments.parse(["tasks", "--pick", "k1, k2"])
-        XCTAssertEqual(a.pick, ",,k1,k2,")
-        XCTAssertEqual(a.cliOnly, "clean.*")
-        XCTAssertEqual(a.action, "clean")
-        XCTAssertFalse(a.dry || a.doUpdate)
+        arguments = try Arguments.parse(["tasks", "--pick", "k1, k2"])
+        XCTAssertEqual(arguments.pick, ",,k1,k2,")
+        XCTAssertEqual(arguments.cliOnly, "clean.*")
+        XCTAssertEqual(arguments.action, "clean")
+        XCTAssertFalse(arguments.dry || arguments.doUpdate)
 
         XCTAssertThrowsError(try Arguments.parse(["--level", "huge", "help"]))
         XCTAssertThrowsError(try Arguments.parse(["--lang"]))
@@ -42,11 +42,11 @@ final class RoutingTests: XCTestCase {
     }
 
     func testRoutes() throws {
-        let e = try env()
-        func route(_ a: String) -> String {
-            switch Router.route(a.split(separator: " ").map(String.init), env: e) {
+        let environment = try env()
+        func route(_ line: String) -> String {
+            switch Router.route(line.split(separator: " ").map(String.init), env: environment) {
             case .bash: return "bash"
-            case .swift(let x): return x.command?.rawValue ?? "run"
+            case .swift(let arguments): return arguments.command?.rawValue ?? "run"
             }
         }
         XCTAssertEqual(route("help"), "help")
@@ -57,28 +57,28 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(route("check tasks"), "tasks", "a one-off command runs before the check")
         XCTAssertEqual(route("self-update"), "self_update")
         XCTAssertEqual(route("schedule weekly"), "schedule")
-        for a in ["", "check", "all --only check.disk", "--deep", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
+        for line in ["", "check", "all --only check.disk", "--deep", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
                   "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
-            XCTAssertEqual(route(a), "bash", "'\(a)' goes to the bash build")
+            XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }
     }
 
     func testConfigBashCannotComputeGoesToBash() throws {
-        let e = try env()
-        try FileManager.default.createDirectory(atPath: e.confDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(atPath: e.home) }
-        try "step_timeout_minutes = 09\n".write(toFile: e.conf, atomically: true, encoding: .utf8)
-        XCTAssertEqual(Router.route(["tasks"], env: e), .bash)
-        XCTAssertNotEqual(Router.route(["help"], env: e), .bash)
-        try "step_timeout_minutes = 010\n".write(toFile: e.conf, atomically: true, encoding: .utf8)
-        XCTAssertNotEqual(Router.route(["tasks"], env: e), .bash)
+        let environment = try env()
+        try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: environment.home) }
+        try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Router.route(["tasks"], env: environment), .bash)
+        XCTAssertNotEqual(Router.route(["help"], env: environment), .bash)
+        try "step_timeout_minutes = 010\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+        XCTAssertNotEqual(Router.route(["tasks"], env: environment), .bash)
     }
 
     func testRunsRouteOnlyWhenEveryTaskIsPorted() throws {
-        let e = try env()
+        let environment = try env()
         let ported: Set<String> = ["run", "help"]
-        func route(_ a: [String], _ tasks: Set<String>) -> Bool {
-            if case .swift = Router.route(a, env: e, ported: ported, portedTasks: tasks) { return true }
+        func route(_ argv: [String], _ tasks: Set<String>) -> Bool {
+            if case .swift = Router.route(argv, env: environment, ported: ported, portedTasks: tasks) { return true }
             return false
         }
         XCTAssertTrue(route(["check", "--only", "check.disk"], ["check.disk"]))
@@ -93,28 +93,28 @@ final class RoutingTests: XCTestCase {
         XCTAssertThrowsError(try Env(["HOME": ""]))
         XCTAssertThrowsError(try Env(["HOME": "/"]))
         XCTAssertThrowsError(try Env(["HOME": "relative"]))
-        var e = try Env(["HOME": "/h", "PATH": "/usr/bin"])
-        XCTAssertEqual(e.path, "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/h/.local/bin:/h/.npm-global/bin:/h/.cargo/bin:/usr/bin")
-        XCTAssertEqual(e.userPath, "/usr/bin")
-        XCTAssertEqual(e.conf, "/h/.config/macup/config")
-        XCTAssertEqual(e.lcCtype, "en_US.UTF-8")
-        XCTAssertEqual(e.apps, "/Applications:/h/Applications")
-        XCTAssertEqual(e.raw, "https://raw.githubusercontent.com/VitaliiDeveloper/macup")
-        e = try Env(["HOME": "/h", "PATH": "/x", "MACUP_PATH": "keep", "XDG_CONFIG_HOME": "/xdg", "LANG": "uk_UA.UTF-8", "MACUP_REPO": "me/fork",
+        var environment = try Env(["HOME": "/h", "PATH": "/usr/bin"])
+        XCTAssertEqual(environment.path, "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/h/.local/bin:/h/.npm-global/bin:/h/.cargo/bin:/usr/bin")
+        XCTAssertEqual(environment.userPath, "/usr/bin")
+        XCTAssertEqual(environment.conf, "/h/.config/macup/config")
+        XCTAssertEqual(environment.lcCtype, "en_US.UTF-8")
+        XCTAssertEqual(environment.apps, "/Applications:/h/Applications")
+        XCTAssertEqual(environment.raw, "https://raw.githubusercontent.com/VitaliiDeveloper/macup")
+        environment = try Env(["HOME": "/h", "PATH": "/x", "MACUP_PATH": "keep", "XDG_CONFIG_HOME": "/xdg", "LANG": "uk_UA.UTF-8", "MACUP_REPO": "me/fork",
                      "NO_COLOR": "", "MACUP_LANG": "", "TMPDIR": "/t/"])
-        XCTAssertEqual(e.path, "/x")
-        XCTAssertEqual(e.conf, "/xdg/macup/config")
-        XCTAssertNil(e.lcCtype)
-        XCTAssertEqual(e.repo, "me/fork")
-        XCTAssertFalse(e.noColor, "an empty NO_COLOR is no NO_COLOR")
-        XCTAssertNil(e.langHook)
-        XCTAssertEqual(e.tmpDir, "/t/")
+        XCTAssertEqual(environment.path, "/x")
+        XCTAssertEqual(environment.conf, "/xdg/macup/config")
+        XCTAssertNil(environment.lcCtype)
+        XCTAssertEqual(environment.repo, "me/fork")
+        XCTAssertFalse(environment.noColor, "an empty NO_COLOR is no NO_COLOR")
+        XCTAssertNil(environment.langHook)
+        XCTAssertEqual(environment.tmpDir, "/t/")
     }
 
     func testHelpIsUsage() throws {
         for lang in Lang.allCases {
-            for (colors, c) in [(Colors.off, "B=; N="), (Colors.on, "B=$'\\033[1m'; N=$'\\033[0m'")] {
-                let prelude = "MACUP_VERSION=\(Env.version); MSG_LANG=\(lang.rawValue); \(c)\n" + BashOracle.read("src/help.sh")
+            for (colors, colorPrelude) in [(Colors.off, "B=; N="), (Colors.on, "B=$'\\033[1m'; N=$'\\033[0m'")] {
+                let prelude = "MACUP_VERSION=\(Env.version); MSG_LANG=\(lang.rawValue); \(colorPrelude)\n" + BashOracle.read("src/help.sh")
                 let got = try BashOracle.run(["usage; printf x"], home: "/Users/h.x", prelude: prelude)
                 XCTAssertEqual(Help.text(lang: lang, colors: colors, conf: "~/.config/macup/config") + "x", got[0], "help \(lang)")
             }

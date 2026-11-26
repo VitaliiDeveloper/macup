@@ -23,21 +23,21 @@ enum BashOracle {
         // a file, not `bash -c`: Process hands its arguments over decomposed (é as e + accent)
         let file = NSTemporaryDirectory() + "macup-oracle-\(UUID().uuidString).sh"
         var script = coreFunctions + "\n\(prelude)\n"
-        for c in calls { script += "printf '%s' \"$(\(c))\"\nprintf '%s' '\(sep)'\n" }
+        for call in calls { script += "printf '%s' \"$(\(call))\"\nprintf '%s' '\(sep)'\n" }
         try script.write(toFile: file, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(atPath: file) }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/bash")
-        p.arguments = [file]
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [file]
         var env = ["HOME": home, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MACUP_PATH": "keep", "LC_CTYPE": "en_US.UTF-8", "MACUP_LANG": "en"]
-        for (k, v) in extra { env[k] = v }
-        p.environment = env
+        for (key, value) in extra { env[key] = value }
+        process.environment = env
         let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = FileHandle.nullDevice
-        try p.run()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
+        process.waitUntilExit()
         var parts = String(decoding: data, as: UTF8.self).components(separatedBy: sep)
         parts.removeLast()
         XCTAssertEqual(parts.count, calls.count, "bash did not answer every call")
@@ -51,5 +51,5 @@ enum BashOracle {
     }
 
     /// A value as a single-quoted bash word.
-    static func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+    static func quoted(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }

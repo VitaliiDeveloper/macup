@@ -7,11 +7,11 @@ final class PathsI18nTests: XCTestCase {
         let paths = ["", "/Users/me", "/Users/me/.config/macup/config", "/Users/meme/x", "/Users/mex/y", "~", "~/Code", "~other/x",
                      "/elsewhere", "-n", "/Users/me\n/Users/me/two", "/var/folders/x/macup-testsXAbC123/h/z", "/tmp/hXx/a", "/tmp/h.x/b"]
         for home in homes {
-            let p = Paths(home: home)
-            let got = try BashOracle.run(paths.flatMap { ["tildify \(BashOracle.q($0))", "expand \(BashOracle.q($0))"] }, home: home)
-            for (i, path) in paths.enumerated() {
-                XCTAssertEqual(p.tildify(path), got[2 * i], "tildify \(path.debugDescription) with HOME=\(home)")
-                XCTAssertEqual(p.expand(path), got[2 * i + 1], "expand \(path.debugDescription) with HOME=\(home)")
+            let homePaths = Paths(home: home)
+            let got = try BashOracle.run(paths.flatMap { ["tildify \(BashOracle.quoted($0))", "expand \(BashOracle.quoted($0))"] }, home: home)
+            for (index, path) in paths.enumerated() {
+                XCTAssertEqual(homePaths.tildify(path), got[2 * index], "tildify \(path.debugDescription) with HOME=\(home)")
+                XCTAssertEqual(homePaths.expand(path), got[2 * index + 1], "expand \(path.debugDescription) with HOME=\(home)")
             }
         }
     }
@@ -23,8 +23,8 @@ final class PathsI18nTests: XCTestCase {
             ("%d", [" 42"]), ("tab\\there\\n", []), ("100%", []), ("%s%%)", ["5"]), ("\\101\\x41", []), ("%d", ["1.5"]), ("%d|%d", ["3 ", "12abc"]), ("-x %s", ["a"]),
             ("Mode: %s · macup %s · took %s", ["check", "2.9.2", "0m 1s"]),
         ]
-        let got = try BashOracle.run(cases.map { c in "printf \(BashOracle.q(c.0))" + c.1.map { " " + BashOracle.q($0) }.joined() })
-        for (i, c) in cases.enumerated() { XCTAssertEqual(Bash.substitution(Printf.format(c.0, c.1)), got[i], "printf \(c.0) \(c.1)") }
+        let got = try BashOracle.run(cases.map { example in "printf \(BashOracle.quoted(example.0))" + example.1.map { " " + BashOracle.quoted($0) }.joined() })
+        for (index, example) in cases.enumerated() { XCTAssertEqual(Bash.substitution(Printf.format(example.0, example.1)), got[index], "printf \(example.0) \(example.1)") }
     }
 
     var translations: [String: [String: String]] {
@@ -33,14 +33,14 @@ final class PathsI18nTests: XCTestCase {
 
     func testTranslationsAndFallback() {
         let uk = I18n(lang: .uk, translations: translations)
-        XCTAssertEqual(uk.t("TASK"), translations["TASK"]?["uk"])
-        XCTAssertEqual(uk.t("not a message"), "not a message")
-        XCTAssertEqual(I18n(lang: .en, translations: translations).t("TASK"), "TASK")
-        XCTAssertEqual(uk.f("Language: %s", Lang.uk.name), Printf.format(translations["Language: %s"]!["uk"]!, ["Українська"]))
-        XCTAssertEqual(I18n(lang: .ru, translationsJSON: BashOracle.read("src/i18n/translations.json")).t("STATE"), translations["STATE"]?["ru"])
+        XCTAssertEqual(uk.translate("TASK"), translations["TASK"]?["uk"])
+        XCTAssertEqual(uk.translate("not a message"), "not a message")
+        XCTAssertEqual(I18n(lang: .en, translations: translations).translate("TASK"), "TASK")
+        XCTAssertEqual(uk.format("Language: %s", Lang.uk.name), Printf.format(translations["Language: %s"]!["uk"]!, ["Українська"]))
+        XCTAssertEqual(I18n(lang: .ru, translationsJSON: BashOracle.read("src/i18n/translations.json")).translate("STATE"), translations["STATE"]?["ru"])
         // every entry has both languages and the same placeholders (build.sh refuses the build otherwise)
         for (en, tr) in translations {
-            for l in ["uk", "ru"] { XCTAssertFalse((tr[l] ?? "").isEmpty, "\(l) for \(en)") }
+            for lang in ["uk", "ru"] { XCTAssertFalse((tr[lang] ?? "").isEmpty, "\(lang) for \(en)") }
         }
     }
 

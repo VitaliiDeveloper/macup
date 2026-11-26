@@ -13,7 +13,7 @@ final class SizeTextJSONTests: XCTestCase {
     ]
 
     func testHumCaptured() {
-        for (k, want) in humCaptured { XCTAssertEqual(Size.hum(k), want, "hum \(k)") }
+        for (kilobytes, want) in humCaptured { XCTAssertEqual(Size.hum(kilobytes), want, "hum \(kilobytes)") }
     }
 
     // captured from `tokb` and `tokb10`
@@ -25,9 +25,9 @@ final class SizeTextJSONTests: XCTestCase {
     ]
 
     func testTokbCaptured() {
-        for (s, kb, kb10) in tokbCaptured {
-            XCTAssertEqual(Size.tokb(s), kb, "tokb \(s)")
-            XCTAssertEqual(Size.tokb10(s), kb10, "tokb10 \(s)")
+        for (size, kb, kb10) in tokbCaptured {
+            XCTAssertEqual(Size.tokb(size), kb, "tokb \(size)")
+            XCTAssertEqual(Size.tokb10(size), kb10, "tokb10 \(size)")
         }
     }
 
@@ -36,9 +36,9 @@ final class SizeTextJSONTests: XCTestCase {
             ("", 0, "        "), ("a", 1, "a       "), ("Українська", 10, "Українська "), ("\u{E9}", 1, "\u{E9}       "),
             ("e\u{301}", 2, "e\u{301}      "), ("👍🏽", 2, "👍🏽      "), ("日本語", 3, "日本語     "), ("a b", 3, "a b     "),
         ]
-        for (s, n, padded) in cases {
-            XCTAssertEqual(Text.ulen(s), n, "ulen \(s)")
-            XCTAssertEqual(Text.pad(s, 8), padded, "pad \(s)")
+        for (text, length, padded) in cases {
+            XCTAssertEqual(Text.ulen(text), length, "ulen \(text)")
+            XCTAssertEqual(Text.pad(text, 8), padded, "pad \(text)")
         }
     }
 
@@ -60,21 +60,21 @@ final class SizeTextJSONTests: XCTestCase {
         // \001 and \177 are left out: bash 3.2 mangles them in script text (its own quoting bytes)
         let texts = ["", "x", "Пам'ять", "e\u{301}e\u{301}", "🇺🇦", "a\tb", "日本語テキスト", "tab\there", "q\"\\'", "\u{1F}é\u{1B}", "line1\nline2\n\nline4"]
         var calls: [String] = []
-        calls += nums.map { "hum \(BashOracle.q($0))" }
-        calls += sizes.flatMap { ["tokb \(BashOracle.q($0))", "tokb10 \(BashOracle.q($0))"] }
-        calls += texts.flatMap { t in ["ulen", "pad", "jstr", "jlines", "jarr"].map { "\($0) \(BashOracle.q(t)) \($0 == "pad" ? "12" : $0 == "jarr" ? "b" : "")" } }
+        calls += nums.map { "hum \(BashOracle.quoted($0))" }
+        calls += sizes.flatMap { ["tokb \(BashOracle.quoted($0))", "tokb10 \(BashOracle.quoted($0))"] }
+        calls += texts.flatMap { text in ["ulen", "pad", "jstr", "jlines", "jarr"].map { "\($0) \(BashOracle.quoted(text)) \($0 == "pad" ? "12" : $0 == "jarr" ? "b" : "")" } }
         let got = try BashOracle.run(calls)
-        var i = 0
-        for n in nums { XCTAssertEqual(Size.hum(n), got[i], "hum \(n)"); i += 1 }
-        for s in sizes {
-            XCTAssertEqual(Size.tokb(s), got[i], "tokb \(s.debugDescription)")
-            XCTAssertEqual(Size.tokb10(s), got[i + 1], "tokb10 \(s.debugDescription)")
-            i += 2
+        var index = 0
+        for number in nums { XCTAssertEqual(Size.hum(number), got[index], "hum \(number)"); index += 1 }
+        for size in sizes {
+            XCTAssertEqual(Size.tokb(size), got[index], "tokb \(size.debugDescription)")
+            XCTAssertEqual(Size.tokb10(size), got[index + 1], "tokb10 \(size.debugDescription)")
+            index += 2
         }
-        for t in texts {
-            let swift = [String(Text.ulen(t)), Text.pad(t, 12), JSON.str(t), JSON.lines(t), JSON.array([t, "b"])]
-            XCTAssertEqual(swift, Array(got[i..<i + 5]), "text \(t.debugDescription)")
-            i += 5
+        for text in texts {
+            let swift = [String(Text.ulen(text)), Text.pad(text, 12), JSON.str(text), JSON.lines(text), JSON.array([text, "b"])]
+            XCTAssertEqual(swift, Array(got[index..<index + 5]), "text \(text.debugDescription)")
+            index += 5
         }
     }
 
@@ -84,7 +84,7 @@ final class SizeTextJSONTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: dir) }
         try Data(count: 300 * 1024).write(to: URL(fileURLWithPath: dir + "/blob"))
         let shell = Shell(env: try Env(["HOME": "/Users/someone", "PATH": "/usr/bin:/bin", "MACUP_PATH": "keep"]))
-        let want = try BashOracle.run(["kb \(BashOracle.q(dir))", "kb \(BashOracle.q(dir + "/none"))"])
+        let want = try BashOracle.run(["kb \(BashOracle.quoted(dir))", "kb \(BashOracle.quoted(dir + "/none"))"])
         XCTAssertEqual(String(Size.kb(dir, shell: shell)), want[0])
         XCTAssertEqual(String(Size.kb(dir + "/none", shell: shell)), want[1])
         XCTAssertGreaterThanOrEqual(Size.kb(dir, shell: shell), 300)

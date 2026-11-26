@@ -21,10 +21,10 @@ public struct Config {
         self.utf8 = utf8
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue,
-              let d = FileManager.default.contents(atPath: path) else { lines = []; sedFails = false; return }
+              let contents = FileManager.default.contents(atPath: path) else { lines = []; sedFails = false; return }
         var out: [String] = [], fails = false
-        for raw in d.split(separator: 0x0A, omittingEmptySubsequences: false) {
-            if let l = String(bytes: raw, encoding: .utf8) { out.append(l); continue }
+        for raw in contents.split(separator: 0x0A, omittingEmptySubsequences: false) {
+            if let line = String(bytes: raw, encoding: .utf8) { out.append(line); continue }
             if utf8 { fails = true; break }
             out.append(String(decoding: raw, as: UTF8.self))
         }
@@ -35,30 +35,30 @@ public struct Config {
     /// `conf key default`: the last `key = value` line, without a trailing `# comment` and blanks; the default when that is empty.
     public func value(_ key: String, _ def: String) -> String {
         if sedFails, reportsErrors { _ = "sed: RE error: illegal byte sequence\n".withCString { write(2, $0, strlen($0)) } }
-        var v = ""
+        var result = ""
         for line in lines {
-            if let rest = match(line, key) { v = stripComment(rest) }
+            if let rest = match(line, key) { result = stripComment(rest) }
         }
         // the value goes through echo: a lone -n, -e or -E is an option there and prints nothing
-        return Bash.substitution(Bash.echo(v.isEmpty ? def : v))
+        return Bash.substitution(Bash.echo(result.isEmpty ? def : result))
     }
 
     /// The text after `^[[:space:]]*key[[:space:]]*=[[:space:]]*`, nil when the line does not set that key.
     func match(_ line: String, _ key: String) -> Substring.UnicodeScalarView? {
-        var u = Substring(line).unicodeScalars
-        u = u.drop(while: isSpace)
-        guard u.starts(with: key.unicodeScalars) else { return nil }
-        u = u.dropFirst(key.unicodeScalars.count).drop(while: isSpace)
-        guard u.first == "=" else { return nil }
-        return u.dropFirst().drop(while: isSpace)
+        var scalars = Substring(line).unicodeScalars
+        scalars = scalars.drop(while: isSpace)
+        guard scalars.starts(with: key.unicodeScalars) else { return nil }
+        scalars = scalars.dropFirst(key.unicodeScalars.count).drop(while: isSpace)
+        guard scalars.first == "=" else { return nil }
+        return scalars.dropFirst().drop(while: isSpace)
     }
 
     /// sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//'
-    func stripComment(_ u: Substring.UnicodeScalarView) -> String {
-        var s = u
-        if let hash = s.firstIndex(of: "#") { s = s[s.startIndex..<hash] }
-        while let l = s.last, isSpace(l) { s = s.dropLast() }
-        return String(s)
+    func stripComment(_ scalars: Substring.UnicodeScalarView) -> String {
+        var kept = scalars
+        if let hash = kept.firstIndex(of: "#") { kept = kept[kept.startIndex..<hash] }
+        while let last = kept.last, isSpace(last) { kept = kept.dropLast() }
+        return String(kept)
     }
 
     /// What macOS's iswspace counts beyond ASCII in en_US.UTF-8 (listed from libc; U+0085 is not one).
@@ -66,9 +66,9 @@ public struct Config {
                                                     0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000]
 
     /// [[:space:]]: the locale's blanks in UTF-8, the six ASCII ones otherwise.
-    func isSpace(_ c: Unicode.Scalar) -> Bool {
-        if c.isASCII || !utf8 { return c == " " || c == "\t" || c == "\n" || c == "\u{0B}" || c == "\u{0C}" || c == "\r" }
-        return Self.unicodeBlanks.contains(c.value)
+    func isSpace(_ scalar: Unicode.Scalar) -> Bool {
+        if scalar.isASCII || !utf8 { return scalar == " " || scalar == "\t" || scalar == "\n" || scalar == "\u{0B}" || scalar == "\u{0C}" || scalar == "\r" }
+        return Self.unicodeBlanks.contains(scalar.value)
     }
 
     /// `write_default_conf`: the commented config a first `macup config`, `macup lang` or `conf_set` writes.
@@ -119,19 +119,19 @@ public struct Config {
     }
 
     /// `level_num`.
-    public static func level(_ s: String) -> Int? {
-        switch s { case "safe", "1": 1; case "standard", "2": 2; case "aggressive", "3": 3; default: nil }
+    public static func level(_ text: String) -> Int? {
+        switch text { case "safe", "1": 1; case "standard", "2": 2; case "aggressive", "3": 3; default: nil }
     }
 
     /// `num`: the value when it is digits and not just "0", else the default ("007" stays "007", as in bash).
-    public static func num(_ s: String, _ def: String) -> String {
-        guard !s.isEmpty, s != "0", s.unicodeScalars.allSatisfy({ ("0"..."9").contains($0) }) else { return def }
-        return s
+    public static func num(_ text: String, _ def: String) -> String {
+        guard !text.isEmpty, text != "0", text.unicodeScalars.allSatisfy({ ("0"..."9").contains($0) }) else { return def }
+        return text
     }
 
     /// `num` read as a number. Bash's arithmetic would read a leading 0 as octal; macup's values never have one.
-    public static func num(_ s: String, _ def: Int) -> Int {
-        Int(num(s, String(def))) ?? def
+    public static func num(_ text: String, _ def: Int) -> Int {
+        Int(num(text, String(def))) ?? def
     }
 
     /// `conf_set key value`: replaces the key's lines, or adds one; writes the default config first when there is none.
@@ -144,11 +144,11 @@ public struct Config {
         let conf = Config(path: path, utf8: utf8)
         var raws = data.split(separator: 0x0A, omittingEmptySubsequences: false).map { Data($0) }
         var found = false
-        for (i, raw) in raws.enumerated() {
-            let l = String(decoding: raw, as: UTF8.self)
-            guard conf.setsKey(l, key) else { continue }
+        for (index, raw) in raws.enumerated() {
+            let line = String(decoding: raw, as: UTF8.self)
+            guard conf.setsKey(line, key) else { continue }
             // sed "s|^…=.*|key = value|": the pattern takes the whole line, and & in the value stands for it
-            raws[i] = Data(Paths.sedReplacement("\(key) = \(value)", match: l).utf8)
+            raws[index] = Data(Paths.sedReplacement("\(key) = \(value)", match: line).utf8)
             found = true
         }
         let out: Data
@@ -159,18 +159,18 @@ public struct Config {
         } else {
             out = data + Data("\(key) = \(value)\n".utf8)
         }
-        let h = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
-        defer { try? h.close() }
-        try h.truncate(atOffset: 0)
-        try h.write(contentsOf: out)
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        defer { try? handle.close() }
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: out)
     }
 
     /// grep -qE "^[[:space:]]*key[[:space:]]*="
     func setsKey(_ line: String, _ key: String) -> Bool {
-        var u = Substring(line).unicodeScalars.drop(while: isSpace)
-        guard u.starts(with: key.unicodeScalars) else { return false }
-        u = u.dropFirst(key.unicodeScalars.count).drop(while: isSpace)
-        return u.first == "="
+        var scalars = Substring(line).unicodeScalars.drop(while: isSpace)
+        guard scalars.starts(with: key.unicodeScalars) else { return false }
+        scalars = scalars.dropFirst(key.unicodeScalars.count).drop(while: isSpace)
+        return scalars.first == "="
     }
 }
 
@@ -196,9 +196,9 @@ public struct Settings {
     public var bashArithmeticFails: Bool
 
     public init(config: Config, env: Env, cliSkip: String, cliOnly: String, cliEnable: String, cliLevel: Int?) {
-        func nospace(_ s: String) -> String { String(s.unicodeScalars.filter { $0 != " " }) }
+        func nospace(_ text: String) -> String { String(text.unicodeScalars.filter { $0 != " " }) }
         // $(echo "$x" | tr -d ' '): the spaces go first, then $(…) drops the trailing newlines
-        func cli(_ s: String) -> String { Bash.substitution(nospace(Bash.echo(s))) }
+        func cli(_ text: String) -> String { Bash.substitution(nospace(Bash.echo(text))) }
         skip = ",\(nospace(config.value("skip", ""))),\(cli(cliSkip)),"
         enable = ",\(nospace(config.value("enable", ""))),\(cli(cliEnable)),"
         only = cli(cliOnly)
@@ -211,7 +211,7 @@ public struct Settings {
         let minutes = Config.num(config.value("step_timeout_minutes", "60"), "60")
         bashArithmeticFails = minutes.hasPrefix("0") && Int(minutes, radix: 8) == nil
         var step = minutes.hasPrefix("0") ? Int(minutes, radix: 8).map { $0 * 60 } ?? 3600 : (Int(minutes) ?? 60) * 60
-        if let h = env.stepSecsHook { step = Config.num(h, step) }   // seconds, for the tests
+        if let seconds = env.stepSecsHook { step = Config.num(seconds, step) }   // seconds, for the tests
         stepSeconds = step
         level = cliLevel ?? Config.level(config.value("clean_level", "safe")) ?? 1
         devPrefixes = config.value("dev_container_prefixes", "")

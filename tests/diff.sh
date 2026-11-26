@@ -6,10 +6,10 @@
 # Every case runs in en, uk and ru (MACUP_LANG), without a terminal and on one (through script). Compared: stdout and
 # stderr together as macup writes them (--json included), the exit status, the newest report, the files in the fake home.
 cd "$(dirname "$0")/.." || exit 1
-W=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'rm -rf "$W"' EXIT
+work=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'rm -rf "$work"' EXIT
 export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}
 [ -f macup ] && [ -x "$MACUP_BIN" ] || { echo "build both first: ./build.sh"; exit 1; }
-F=0; N=0
+failed=0; runs=0
 
 # name | fixture | environment | arguments        (the fixture is a fix_* function below; the environment is VAR=value words)
 CASES='help|||help
@@ -56,40 +56,40 @@ norm(){ # file home
   ' "$1" | sed "s|$2|HOME|g"
 }
 
-run(){ # build lang tty fixture env args… → $W/<build>.{out,rc,report,files}
-  local b=$1 lang=$2 tty=$3 fix=$4 envs=$5 H="$W/home" o="$W/$1"; shift 5
-  rm -rf "$H"; mkdir -p "$H"; [ -n "$fix" ] && "fix_$fix" "$H"
-  local e=(HOME="$H" MACUP_LANG="$lang" MACUP_BUILD="$b" PATH="$PATH")
-  for v in $envs; do e+=("${v//@H/$H}"); done
+run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,files}
+  local build=$1 lang=$2 tty=$3 fix=$4 envs=$5 home="$work/home" out="$work/$1"; shift 5
+  rm -rf "$home"; mkdir -p "$home"; [ -n "$fix" ] && "fix_$fix" "$home"
+  local vars=(HOME="$home" MACUP_LANG="$lang" MACUP_BUILD="$build" PATH="$PATH")
+  for word in $envs; do vars+=("${word//@H/$home}"); done
   if [ "$tty" = tty ]; then
     # the terminal's input stays open, with nothing in it: at its end script would echo a ^D somewhere into the output
-    rm -f "$W/in"; mkfifo "$W/in"; sleep 600 >"$W/in" & local hold=$!
-    script -q /dev/null env "${e[@]}" tests/macup_run "$@" <"$W/in" >"$o.out" 2>&1; echo $? >"$o.rc"
+    rm -f "$work/in"; mkfifo "$work/in"; sleep 600 >"$work/in" & local hold=$!
+    script -q /dev/null env "${vars[@]}" tests/macup_run "$@" <"$work/in" >"$out.out" 2>&1; echo $? >"$out.rc"
     kill "$hold" 2>/dev/null; wait "$hold" 2>/dev/null
-  else env "${e[@]}" tests/macup_run "$@" </dev/null >"$o.out" 2>&1; echo $? >"$o.rc"; fi
-  local r; r=$(ls -t "$H"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
-  if [ -n "$r" ]; then norm "$r" "$H" >"$o.report"; else : >"$o.report"; fi
-  norm "$o.out" "$H" >"$o.norm"; mv "$o.norm" "$o.out"
-  (cd "$H" && find . ! -path './Library/Logs/macup/*' \( -type f -o -type l \) -exec cksum {} + | LC_ALL=C sort -k3) >"$o.files"
+  else env "${vars[@]}" tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
+  local report; report=$(ls -t "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
+  if [ -n "$report" ]; then norm "$report" "$home" >"$out.report"; else : >"$out.report"; fi
+  norm "$out.out" "$home" >"$out.norm"; mv "$out.norm" "$out.out"
+  (cd "$home" && find . ! -path './Library/Logs/macup/*' \( -type f -o -type l \) -exec cksum {} + | LC_ALL=C sort -k3) >"$out.files"
 }
 
 while IFS='|' read -r name fix envs args <&3; do
-  if [ $# -gt 0 ]; then m=0; for w in "$@"; do case "$name" in "$w"*) m=1 ;; esac; done; [ $m = 1 ] || continue; fi
+  if [ $# -gt 0 ]; then matched=0; for prefix in "$@"; do case "$name" in "$prefix"*) matched=1 ;; esac; done; [ $matched = 1 ] || continue; fi
   for lang in en uk ru; do
     for tty in pipe tty; do
-      N=$((N + 1))
+      runs=$((runs + 1))
       # shellcheck disable=SC2086 # the arguments are words
       run bash "$lang" "$tty" "$fix" "$envs" $args
       # shellcheck disable=SC2086
       run swift "$lang" "$tty" "$fix" "$envs" $args
       bad=""
-      for k in out rc report files; do cmp -s "$W/bash.$k" "$W/swift.$k" || bad="$bad $k"; done
+      for kind in out rc report files; do cmp -s "$work/bash.$kind" "$work/swift.$kind" || bad="$bad $kind"; done
       if [ -z "$bad" ]; then echo "SAME $name $lang $tty"
-      else F=1; echo "DIFF $name $lang $tty:$bad"
-        for k in $bad; do diff "$W/bash.$k" "$W/swift.$k" | head -10 | sed 's/^/    /'; done
+      else failed=1; echo "DIFF $name $lang $tty:$bad"
+        for kind in $bad; do diff "$work/bash.$kind" "$work/swift.$kind" | head -10 | sed 's/^/    /'; done
       fi
     done
   done
 done 3<<<"$CASES"
-echo; [ $N -gt 0 ] || { echo "no case matches: $*"; exit 2; }
-[ $F = 0 ] && echo "ALL SAME ($N runs)" || { echo "SOME DIFFER"; exit 1; }
+echo; [ $runs -gt 0 ] || { echo "no case matches: $*"; exit 2; }
+[ $failed = 0 ] && echo "ALL SAME ($runs runs)" || { echo "SOME DIFFER"; exit 1; }

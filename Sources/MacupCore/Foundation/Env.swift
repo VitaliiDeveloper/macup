@@ -71,8 +71,8 @@ public struct Env {
 
     /// core.sh exports LC_CTYPE=en_US.UTF-8 when the locale is not UTF-8, so tools count characters, not bytes.
     public var lcCtype: String? {
-        let l = vars["LC_ALL"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LC_CTYPE"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LANG"] ?? ""
-        for u in ["UTF-8", "utf-8", "UTF8", "utf8"] where l.contains(u) { return nil }
+        let locale = vars["LC_ALL"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LC_CTYPE"].flatMap { $0.isEmpty ? nil : $0 } ?? vars["LANG"] ?? ""
+        for marker in ["UTF-8", "utf-8", "UTF8", "utf8"] where locale.contains(marker) { return nil }
         return "en_US.UTF-8"
     }
 
@@ -84,16 +84,16 @@ public struct Env {
 
     /// The environment of the tools macup runs.
     public var childVars: [String: String] {
-        var v = vars
-        v["PATH"] = path
-        if let c = lcCtype { v["LC_CTYPE"] = c }
-        return v
+        var result = vars
+        result["PATH"] = path
+        if let ctype = lcCtype { result["LC_CTYPE"] = ctype }
+        return result
     }
 
     /// Makes this process's environment the one core.sh leaves, for code that reads it directly.
     public func apply() {
         setenv("PATH", path, 1)
-        if let c = lcCtype { setenv("LC_CTYPE", c, 1) }
+        if let ctype = lcCtype { setenv("LC_CTYPE", ctype, 1) }
     }
 
     /// Run under sudo by a user: the config, the reports and the history would become root's.

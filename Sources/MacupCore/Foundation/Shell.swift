@@ -22,28 +22,28 @@ public final class Shell {
     public func which(_ name: String) -> String? {
         if name.contains("/") { return isExecutableFile(name) ? name : nil }
         for dir in (vars["PATH"] ?? "").split(separator: ":", omittingEmptySubsequences: false) {
-            let p = (dir.isEmpty ? "." : String(dir)) + "/" + name
-            if isExecutableFile(p) { return p }
+            let candidate = (dir.isEmpty ? "." : String(dir)) + "/" + name
+            if isExecutableFile(candidate) { return candidate }
         }
         return nil
     }
 
-    private func isExecutableFile(_ p: String) -> Bool {
+    private func isExecutableFile(_ path: String) -> Bool {
         var st = stat()
-        return stat(p, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG && access(p, X_OK) == 0
+        return stat(path, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG && access(path, X_OK) == 0
     }
 
     private lazy var cltOK: Bool = {
-        let p = Bash.substitution(capture(["xcode-select", "-p"]).output)
+        let developerDir = Bash.substitution(capture(["xcode-select", "-p"]).output)
         var isDir: ObjCBool = false
-        return !p.isEmpty && FileManager.default.fileExists(atPath: p, isDirectory: &isDir) && isDir.boolValue
+        return !developerDir.isEmpty && FileManager.default.fileExists(atPath: developerDir, isDirectory: &isDir) && isDir.boolValue
     }()
 
     /// `have`: the tool is there. Without the Command Line Tools, /usr/bin/python3, swift, xcrun, xcodebuild and git
     /// are stubs that pop up an install dialog: those count only when the tools are installed.
     public func have(_ name: String) -> Bool {
-        guard let p = which(name) else { return false }
-        switch p {
+        guard let path = which(name) else { return false }
+        switch path {
         case "/usr/bin/python3", "/usr/bin/pip3", "/usr/bin/swift", "/usr/bin/xcrun", "/usr/bin/xcodebuild", "/usr/bin/git":
             return cltOK
         default:
@@ -67,14 +67,14 @@ public final class Shell {
         switch stdin {
         case .inherit: posix_spawn_file_actions_addinherit_np(&fa, 0)
         case .null: posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0)
-        case .fd(let f): posix_spawn_file_actions_adddup2(&fa, f, 0)
+        case .fd(let descriptor): posix_spawn_file_actions_adddup2(&fa, descriptor, 0)
         }
         for (target, out) in [(Int32(1), stdout), (Int32(2), stderr)] {
             switch out {
             case .inherit: posix_spawn_file_actions_addinherit_np(&fa, target)
             case .null: posix_spawn_file_actions_addopen(&fa, target, "/dev/null", O_WRONLY, 0)
-            case .fd(let f): posix_spawn_file_actions_adddup2(&fa, f, target)
-            case .file(let p): posix_spawn_file_actions_addopen(&fa, target, p, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+            case .fd(let descriptor): posix_spawn_file_actions_adddup2(&fa, descriptor, target)
+            case .file(let file): posix_spawn_file_actions_addopen(&fa, target, file, O_WRONLY | O_CREAT | O_APPEND, 0o644)
             case .stdout: if target == 2 { posix_spawn_file_actions_adddup2(&fa, 1, 2) }
             }
         }
@@ -84,7 +84,7 @@ public final class Shell {
         var none = sigset_t(), reset = sigset_t()
         sigemptyset(&none)
         sigemptyset(&reset)
-        for s in signalsToReset { sigaddset(&reset, s) }
+        for signal in signalsToReset { sigaddset(&reset, signal) }
         posix_spawnattr_setsigmask(&attr, &none)
         posix_spawnattr_setsigdefault(&attr, &reset)
         posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_CLOEXEC_DEFAULT))
@@ -150,14 +150,14 @@ public final class Shell {
     func descendants(of root: pid_t) -> [pid_t] {
         var parent: [pid_t: pid_t] = [:]
         for line in Bash.lines(capture(["ps", "-Ao", "pid=,ppid="]).output) {
-            let f = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            if f.count >= 2, let p = pid_t(f[0]), let pp = pid_t(f[1]) { parent[p] = pp }
+            let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            if fields.count >= 2, let pid = pid_t(fields[0]), let parentPID = pid_t(fields[1]) { parent[pid] = parentPID }
         }
         var out: [pid_t] = []
-        for c in parent.keys {
-            var x = c
-            while let p = parent[x], x != root, x > 1 { x = p }
-            if x == root, c != root { out.append(c) }
+        for process in parent.keys {
+            var ancestor = process
+            while let parentPID = parent[ancestor], ancestor != root, ancestor > 1 { ancestor = parentPID }
+            if ancestor == root, process != root { out.append(process) }
         }
         return out + [root]
     }
@@ -167,10 +167,10 @@ public final class Shell {
         switch stderr {
         case .inherit, .stdout: _ = msg.withCString { write(2, $0, strlen($0)) }
         case .null: break
-        case .fd(let f): _ = msg.withCString { write(f, $0, strlen($0)) }
-        case .file(let p):
-            let f = open(p, O_WRONLY | O_CREAT | O_APPEND, 0o644)
-            if f >= 0 { _ = msg.withCString { write(f, $0, strlen($0)) }; close(f) }
+        case .fd(let descriptor): _ = msg.withCString { write(descriptor, $0, strlen($0)) }
+        case .file(let file):
+            let descriptor = open(file, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+            if descriptor >= 0 { _ = msg.withCString { write(descriptor, $0, strlen($0)) }; close(descriptor) }
         }
     }
 }

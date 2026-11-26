@@ -3,11 +3,11 @@ import Foundation
 
 /// The colours of core.sh: on a terminal without NO_COLOR, off with --no-color (and --json for a run).
 public struct Colors: Equatable {
-    public var b = "", g = "", y = "", r = "", c = "", d = "", n = "", cl = ""
+    public var bold = "", green = "", yellow = "", red = "", cyan = "", dim = "", reset = "", cl = ""
 
     public static let off = Colors()
-    public static let on = Colors(b: "\u{1B}[1m", g: "\u{1B}[32m", y: "\u{1B}[33m", r: "\u{1B}[31m", c: "\u{1B}[36m",
-                                  d: "\u{1B}[2m", n: "\u{1B}[0m", cl: "\r\u{1B}[K")
+    public static let on = Colors(bold: "\u{1B}[1m", green: "\u{1B}[32m", yellow: "\u{1B}[33m", red: "\u{1B}[31m", cyan: "\u{1B}[36m",
+                                  dim: "\u{1B}[2m", reset: "\u{1B}[0m", cl: "\r\u{1B}[K")
 
     /// What core.sh starts with: colours when stdout is a terminal and NO_COLOR is not set.
     public static func initial(env: Env, fd: Int32 = 1) -> Colors {
@@ -47,43 +47,43 @@ public final class Output {
         self.fd = fd
     }
 
-    public func write(_ s: String) {
-        var rest = Data(s.utf8)
+    public func write(_ text: String) {
+        var rest = Data(text.utf8)
         while !rest.isEmpty {
-            let n = rest.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
-            if n < 0 { if errno == EINTR { continue }; return }
-            rest.removeFirst(n)
+            let written = rest.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+            if written < 0 { if errno == EINTR { continue }; return }
+            rest.removeFirst(written)
         }
     }
 
-    public func md(_ s: String) {
-        try? body?.write(contentsOf: Data((s + "\n").utf8))   // a report that cannot be written does not stop the run
+    public func md(_ text: String) {
+        try? body?.write(contentsOf: Data((text + "\n").utf8))   // a report that cannot be written does not stop the run
     }
 
     public func beginSection(_ en: String) {
-        pending = i18n.t(en)
+        pending = i18n.translate(en)
         section = pending
     }
 
     func flush() {
         guard !pending.isEmpty else { return }
-        write("\(colors.cl)\n\(colors.b)\(colors.c)▸ \(pending)\(colors.n)\n")
+        write("\(colors.cl)\n\(colors.bold)\(colors.cyan)▸ \(pending)\(colors.reset)\n")
         md(""); md("## \(pending)"); md("")
         pending = ""
     }
 
     /// The message as `m=$(_f "$@")` has it: translated, formatted, trailing newlines gone.
     private func message(_ fmt: String, _ args: [String]) -> String {
-        Bash.substitution(i18n.f(fmt, args: args))
+        Bash.substitution(i18n.format(fmt, args: args))
     }
 
-    private func line(_ mark: String, _ color: String, _ m: String) {
+    private func line(_ mark: String, _ color: String, _ text: String) {
         flush()
-        write("\(colors.cl)  \(color)\(mark)\(colors.n) \(m)\n")
+        write("\(colors.cl)  \(color)\(mark)\(colors.reset) \(text)\n")
     }
 
-    private func item(_ kind: String, _ m: String) {
-        if json { items.append(Item(section: section, kind: kind, text: m)) }
+    private func item(_ kind: String, _ text: String) {
+        if json { items.append(Item(section: section, kind: kind, text: text)) }
     }
 
     public func ok(_ fmt: String, _ args: String...) { ok(fmt, args: args) }
@@ -94,23 +94,23 @@ public final class Output {
     public func err(_ fmt: String, _ args: String...) { err(fmt, args: args) }
 
     public func ok(_ fmt: String, args: [String]) {
-        let m = message(fmt, args)
-        line("✓", colors.g, m); md("- ✅ \(m)"); item("ok", m)
+        let text = message(fmt, args)
+        line("✓", colors.green, text); md("- ✅ \(text)"); item("ok", text)
     }
 
     public func info(_ fmt: String, args: [String]) {
-        let m = message(fmt, args)
-        line("·", colors.d, m); md("- \(m)"); item("info", m)
+        let text = message(fmt, args)
+        line("·", colors.dim, text); md("- \(text)"); item("info", text)
     }
 
     public func warn(_ fmt: String, args: [String]) {
-        let m = message(fmt, args)
-        line("!", colors.y, m); md("- ⚠️ \(m)"); warnings.append(m); item("warn", m)
+        let text = message(fmt, args)
+        line("!", colors.yellow, text); md("- ⚠️ \(text)"); warnings.append(text); item("warn", text)
     }
 
     public func fail(_ fmt: String, args: [String]) {
-        let m = message(fmt, args)
-        line("✗", colors.r, m); md("- ❌ \(m)"); warnings.append(m); item("fail", m)
+        let text = message(fmt, args)
+        line("✗", colors.red, text); md("- ❌ \(text)"); warnings.append(text); item("fail", text)
     }
 
     public func err(_ fmt: String, args: [String]) {
@@ -119,27 +119,27 @@ public final class Output {
     }
 
     /// A line under the last one, as it is (not translated).
-    public func sub(_ s: String) {
+    public func sub(_ text: String) {
         flush()
-        write("      \(colors.d)\(s)\(colors.n)\n")
-        md("    - \(s)"); detail(s)
+        write("      \(colors.dim)\(text)\(colors.reset)\n")
+        md("    - \(text)"); detail(text)
     }
 
     /// A line under the last one in the report and --json only.
-    public func mdonly(_ s: String) {
-        md("    - \(s)"); detail(s)
+    public func mdonly(_ text: String) {
+        md("    - \(text)"); detail(text)
     }
 
     /// With --json, a line under the last item.
     /// The bash build keeps details in a file of "item<TAB>text" lines: only the first line of a detail survives, an empty one none.
-    public func detail(_ s: String) {
-        guard json, !items.isEmpty, body != nil, let first = Bash.lines(s).first, !first.isEmpty else { return }
+    public func detail(_ text: String) {
+        guard json, !items.isEmpty, body != nil, let first = Bash.lines(text).first, !first.isEmpty else { return }
         items[items.count - 1].details.append(first)
     }
 
     /// The transient "… doing this" line, only on a terminal with colours.
     public func step(_ fmt: String, _ args: String...) {
         guard isatty(fd) == 1, !colors.cl.isEmpty else { return }
-        write("\(colors.cl)  \(colors.d)… \(message(fmt, args))\(colors.n)")
+        write("\(colors.cl)  \(colors.dim)… \(message(fmt, args))\(colors.reset)")
     }
 }

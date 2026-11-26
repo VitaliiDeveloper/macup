@@ -12,9 +12,9 @@ final class OutputShellTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(atPath: dir) }
 
     func env(_ extra: [String: String] = [:]) throws -> Env {
-        var v = ["HOME": dir, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MACUP_PATH": "keep", "TMPDIR": dir]
-        for (k, x) in extra { v[k] = x }
-        return try Env(v)
+        var vars = ["HOME": dir, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MACUP_PATH": "keep", "TMPDIR": dir]
+        for (key, value) in extra { vars[key] = value }
+        return try Env(vars)
     }
 
     /// The same calls through core.sh's output functions and through Output: terminal lines, report and --json items.
@@ -29,46 +29,46 @@ final class OutputShellTests: XCTestCase {
             FileManager.default.createFile(atPath: body, contents: nil)
             FileManager.default.createFile(atPath: outFile, contents: nil)
             let fd = open(outFile, O_WRONLY | O_APPEND)
-            let o = Output(i18n: I18n(lang: .en, translations: [:]), colors: colors, fd: fd)
-            o.body = FileHandle(forWritingAtPath: body)
-            o.json = true
-            for (f, a) in script {
-                switch f {
-                case "section": o.beginSection(a[0])
-                case "ok": o.ok(a[0], args: Array(a.dropFirst()))
-                case "info": o.info(a[0], args: Array(a.dropFirst()))
-                case "warn": o.warn(a[0], args: Array(a.dropFirst()))
-                case "fail": o.fail(a[0], args: Array(a.dropFirst()))
-                case "err": o.err(a[0], args: Array(a.dropFirst()))
-                case "sub": o.sub(a[0])
-                default: o.mdonly(a[0])
+            let output = Output(i18n: I18n(lang: .en, translations: [:]), colors: colors, fd: fd)
+            output.body = FileHandle(forWritingAtPath: body)
+            output.json = true
+            for (call, arguments) in script {
+                switch call {
+                case "section": output.beginSection(arguments[0])
+                case "ok": output.ok(arguments[0], args: Array(arguments.dropFirst()))
+                case "info": output.info(arguments[0], args: Array(arguments.dropFirst()))
+                case "warn": output.warn(arguments[0], args: Array(arguments.dropFirst()))
+                case "fail": output.fail(arguments[0], args: Array(arguments.dropFirst()))
+                case "err": output.err(arguments[0], args: Array(arguments.dropFirst()))
+                case "sub": output.sub(arguments[0])
+                default: output.mdonly(arguments[0])
                 }
             }
             close(fd)
             let swiftOut = try String(contentsOfFile: outFile, encoding: .utf8), swiftBody = try String(contentsOfFile: body, encoding: .utf8)
-            let items = o.items.enumerated().map { "\($0.element.section)|\($0.element.kind)|\($0.element.text)|\($0.element.details.joined(separator: "^"))" }
+            let items = output.items.enumerated().map { "\($0.element.section)|\($0.element.kind)|\($0.element.text)|\($0.element.details.joined(separator: "^"))" }
 
-            let c = colors == .on ? "B=$'\\033[1m'; G=$'\\033[32m'; Y=$'\\033[33m'; R=$'\\033[31m'; C=$'\\033[36m'; D=$'\\033[2m'; N=$'\\033[0m'; CL=$'\\r\\033[K'" : "B=; G=; Y=; R=; C=; D=; N=; CL="
-            let calls = script.map { f, a in "\(f)" + a.map { " " + BashOracle.q($0) }.joined() }.joined(separator: "; ")
-            let prelude = "\(c); JSON=1; BODY=\(BashOracle.q(dir + "/bbody")); : >\"$BODY\"; rm -f \"$BODY.det\""
+            let colorPrelude = colors == .on ? "B=$'\\033[1m'; G=$'\\033[32m'; Y=$'\\033[33m'; R=$'\\033[31m'; C=$'\\033[36m'; D=$'\\033[2m'; N=$'\\033[0m'; CL=$'\\r\\033[K'" : "B=; G=; Y=; R=; C=; D=; N=; CL="
+            let calls = script.map { call, arguments in "\(call)" + arguments.map { " " + BashOracle.quoted($0) }.joined() }.joined(separator: "; ")
+            let prelude = "\(colorPrelude); JSON=1; BODY=\(BashOracle.quoted(dir + "/bbody")); : >\"$BODY\"; rm -f \"$BODY.det\""
             let dump = "for ((i=0; i<IT_N; i++)); do printf '%s|%s|%s|%s\\n' \"${IT_SEC[i]}\" \"${IT_KIND[i]}\" \"${IT_MSG[i]}\" \"$(awk -F'\\t' -v n=$i '$1==n{print $2}' \"$BODY.det\" 2>/dev/null | paste -sd^ -)\"; done; printf '%s|%s' \"${#WARN[@]}\" \"$ERRS\""
             let got = try BashOracle.run(["{ \(calls); } 2>&1; printf x", "cat \"$BODY\"; printf x", dump], prelude: prelude)
             // the first call's $(…) runs in a subshell: run the lines again for the state
             let state = try BashOracle.run([dump], prelude: prelude + "; { \(calls); } >/dev/null")
             XCTAssertEqual(swiftOut + "x", got[0], "terminal lines, colours \(colors == .on)")
             XCTAssertEqual(swiftBody + "x", got[1], "report")
-            XCTAssertEqual(items.joined(separator: "\n") + "\n\(o.warnings.count)|\(o.errors)", state[0], "--json items, warnings, errors")
+            XCTAssertEqual(items.joined(separator: "\n") + "\n\(output.warnings.count)|\(output.errors)", state[0], "--json items, warnings, errors")
         }
     }
 
     func testStepOnlyOnATerminal() throws {
-        let p = dir + "/o"
-        FileManager.default.createFile(atPath: p, contents: nil)
-        let fd = open(p, O_WRONLY)
-        let o = Output(i18n: I18n(lang: .en, translations: [:]), colors: .on, fd: fd)
-        o.step("Updating %s", "brew")
+        let path = dir + "/o"
+        FileManager.default.createFile(atPath: path, contents: nil)
+        let fd = open(path, O_WRONLY)
+        let output = Output(i18n: I18n(lang: .en, translations: [:]), colors: .on, fd: fd)
+        output.step("Updating %s", "brew")
         close(fd)
-        XCTAssertEqual(try String(contentsOfFile: p, encoding: .utf8), "", "a file is not a terminal")
+        XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), "", "a file is not a terminal")
     }
 
     func testWhichAndHaveFollowPath() throws {
@@ -124,13 +124,13 @@ final class OutputShellTests: XCTestCase {
     func testRunWritesTheCommandAndItsOutput() throws {
         let sh = Shell(env: try env())
         let log = RunLog(raw: dir + "/raw", stepSeconds: 60)
-        let o = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: open("/dev/null", O_WRONLY))
-        XCTAssertEqual(sh.run(["/bin/sh", "-c", "echo out; echo err >&2; exit 2"], log: log, output: o), 2)
+        let output = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: open("/dev/null", O_WRONLY))
+        XCTAssertEqual(sh.run(["/bin/sh", "-c", "echo out; echo err >&2; exit 2"], log: log, output: output), 2)
         XCTAssertEqual(try String(contentsOfFile: dir + "/raw", encoding: .utf8), "$ /bin/sh -c echo out; echo err >&2; exit 2\nout\nerr\n")
         let short = RunLog(raw: dir + "/raw2", stepSeconds: 1)
-        XCTAssertEqual(sh.run(["/bin/sleep", "30"], log: short, output: o), 124)
+        XCTAssertEqual(sh.run(["/bin/sleep", "30"], log: short, output: output), 124)
         XCTAssertEqual(try String(contentsOfFile: dir + "/raw2", encoding: .utf8), "$ /bin/sleep 30\nmacup: stopped after 0 minutes: /bin/sleep 30\n")
-        XCTAssertEqual(o.warnings, ["/bin/sleep: stopped after 0 minutes without finishing (step_timeout_minutes in ~/.config/macup/config)"])
+        XCTAssertEqual(output.warnings, ["/bin/sleep: stopped after 0 minutes without finishing (step_timeout_minutes in ~/.config/macup/config)"])
     }
 
     func testLock() throws {
@@ -152,31 +152,31 @@ final class OutputShellTests: XCTestCase {
     }
 
     func testReportNamesAndTidy() throws {
-        let e = try env()
-        let log = e.logDir
+        let environment = try env()
+        let log = environment.logDir
         try FileManager.default.createDirectory(atPath: log, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(atPath: e.stateDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: environment.stateDir, withIntermediateDirectories: true)
         let date = Date(timeIntervalSince1970: 1_790_000_000)
-        let p = Report.path(logDir: log, date: date, pid: 77)
-        XCTAssertTrue(p.hasPrefix(log + "/macup_20") && p.hasSuffix(".md"))
-        FileManager.default.createFile(atPath: p, contents: nil)
-        XCTAssertEqual(Report.path(logDir: log, date: date, pid: 77), String(p.dropLast(3)) + "_77.md", "two runs in one second")
-        unlink(p)
-        let r = try XCTUnwrap(Report.create(env: e))
-        XCTAssertTrue(r.body.hasPrefix(dir + "/macup.") && FileManager.default.fileExists(atPath: r.body))
-        XCTAssertEqual(r.raw, r.body + ".raw")
+        let path = Report.path(logDir: log, date: date, pid: 77)
+        XCTAssertTrue(path.hasPrefix(log + "/macup_20") && path.hasSuffix(".md"))
+        FileManager.default.createFile(atPath: path, contents: nil)
+        XCTAssertEqual(Report.path(logDir: log, date: date, pid: 77), String(path.dropLast(3)) + "_77.md", "two runs in one second")
+        unlink(path)
+        let report = try XCTUnwrap(Report.create(env: environment))
+        XCTAssertTrue(report.body.hasPrefix(dir + "/macup.") && FileManager.default.fileExists(atPath: report.body))
+        XCTAssertEqual(report.raw, report.body + ".raw")
 
-        for i in 10...40 { FileManager.default.createFile(atPath: "\(log)/macup_2026-01-01_00-00-\(i).md", contents: nil) }
+        for index in 10...40 { FileManager.default.createFile(atPath: "\(log)/macup_2026-01-01_00-00-\(index).md", contents: nil) }
         FileManager.default.createFile(atPath: "\(log)/macup_2026-01-01_00-00-10.log", contents: nil)
-        try (1...1100).map(String.init).joined(separator: "\n").write(toFile: e.history, atomically: true, encoding: .utf8)
+        try (1...1100).map(String.init).joined(separator: "\n").write(toFile: environment.history, atomically: true, encoding: .utf8)
         try (1...450).map { "\($0)\n" }.joined().write(toFile: log + "/schedule.log", atomically: true, encoding: .utf8)
-        let s = Settings(config: Config(path: e.conf), env: e, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
-        Tidy.run(env: e, settings: s, shell: Shell(env: e))
+        let settings = Settings(config: Config(path: environment.conf), env: environment, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
+        Tidy.run(env: environment, settings: settings, shell: Shell(env: environment))
         let left = try FileManager.default.contentsOfDirectory(atPath: log).filter { $0.hasPrefix("macup_") }.sorted()
         XCTAssertEqual(left.count, 19, "keep_reports 20: this run's report makes the 20th")
         XCTAssertEqual(left.last, "macup_2026-01-01_00-00-40.md")
         XCTAssertFalse(left.contains("macup_2026-01-01_00-00-10.log"), "a removed report takes its old .log along")
-        XCTAssertEqual(try String(contentsOfFile: e.history, encoding: .utf8), (601...1100).map(String.init).joined(separator: "\n"))
+        XCTAssertEqual(try String(contentsOfFile: environment.history, encoding: .utf8), (601...1100).map(String.init).joined(separator: "\n"))
         XCTAssertEqual(try String(contentsOfFile: log + "/schedule.log", encoding: .utf8), (251...450).map { "\($0)\n" }.joined())
         XCTAssertEqual(Tidy.lastLines(Data("a\nb\nc".utf8), 2), Data("b\nc".utf8))
         XCTAssertEqual(Tidy.lastLines(Data("a\nb\n".utf8), 5), Data("a\nb\n".utf8))

@@ -40,67 +40,67 @@ public struct Arguments: Equatable {
     public init() {}
 
     public static func parse(_ argv: [String]) throws -> Arguments {
-        var a = Arguments()
-        var i = 0
+        var result = Arguments()
+        var index = 0
         // $2: the next word, "" when there is none (bash then shifts past the end, which ends the loop)
-        func next() -> String { i + 1 < argv.count ? argv[i + 1] : "" }
+        func next() -> String { index + 1 < argv.count ? argv[index + 1] : "" }
         // "schedule weekly": the next word is the command's when it is there and not an option
         func operand() -> String? {
-            let n = next()
-            return n.isEmpty || n.hasPrefix("-") ? nil : n
+            let following = next()
+            return following.isEmpty || following.hasPrefix("-") ? nil : following
         }
-        func value(_ w: String) -> String { String(w[w.index(after: w.firstIndex(of: "=")!)...]) }
-        while i < argv.count {
-            let w = argv[i]
-            switch w {
-            case "check", "-n", "--dry-run": a.dry = true; a.action = "check"
-            case "all", "run": a.action = "all"
-            case "update", "--no-clean": a.doClean = false; a.action = "update"
-            case "clean", "--no-update": a.doUpdate = false; a.action = "clean"
-            case "deep", "--deep": a.deep = true
-            case "--skip": a.cliSkip += "," + next(); i += 1
-            case "--only": a.cliOnly += "," + next(); i += 1
-            case "--enable": a.cliEnable += "," + next(); i += 1
-            case "--pick": a.pick += "," + next(); i += 1
+        func value(_ option: String) -> String { String(option[option.index(after: option.firstIndex(of: "=")!)...]) }
+        while index < argv.count {
+            let word = argv[index]
+            switch word {
+            case "check", "-n", "--dry-run": result.dry = true; result.action = "check"
+            case "all", "run": result.action = "all"
+            case "update", "--no-clean": result.doClean = false; result.action = "update"
+            case "clean", "--no-update": result.doUpdate = false; result.action = "clean"
+            case "deep", "--deep": result.deep = true
+            case "--skip": result.cliSkip += "," + next(); index += 1
+            case "--only": result.cliOnly += "," + next(); index += 1
+            case "--enable": result.cliEnable += "," + next(); index += 1
+            case "--pick": result.pick += "," + next(); index += 1
             case "--level":
-                guard let l = Config.level(next()) else { throw Failure.badLevel }
-                a.level = l; i += 1
+                guard let level = Config.level(next()) else { throw Failure.badLevel }
+                result.level = level; index += 1
             case "--lang":
-                guard let l = Lang.option(next()) else { throw Failure.badLang }
-                a.lang = l; i += 1
-            case "--no-color": a.noColor = true
-            case "-y", "--yes": a.yes = true
-            case "-q", "--quiet": a.quiet = true
-            case "--json": a.json = true; a.quiet = true
-            case "--notify": a.notify = true
-            case "schedule": a.command = .schedule; if let o = operand() { a.schedArg = o; i += 1 }
-            case "lang", "language": a.command = .lang; if let o = operand() { a.langArg = o; i += 1 }
-            case "last", "--last": a.command = .last
-            case "history", "--history": a.command = .history
-            case "reports", "--reports": a.command = .reports; if let o = operand() { a.repArg = o; i += 1 }
-            case "tasks", "--tasks": a.command = .tasks
-            case "config", "--config": a.command = .config
-            case "self-update", "selfupdate", "upgrade": a.command = .selfUpdate
-            case "uninstall": a.command = .uninstall
-            case "help", "-h", "--help": a.command = .help
-            case "version", "-v", "--version": a.command = .version
+                guard let lang = Lang.option(next()) else { throw Failure.badLang }
+                result.lang = lang; index += 1
+            case "--no-color": result.noColor = true
+            case "-y", "--yes": result.yes = true
+            case "-q", "--quiet": result.quiet = true
+            case "--json": result.json = true; result.quiet = true
+            case "--notify": result.notify = true
+            case "schedule": result.command = .schedule; if let argument = operand() { result.schedArg = argument; index += 1 }
+            case "lang", "language": result.command = .lang; if let argument = operand() { result.langArg = argument; index += 1 }
+            case "last", "--last": result.command = .last
+            case "history", "--history": result.command = .history
+            case "reports", "--reports": result.command = .reports; if let argument = operand() { result.repArg = argument; index += 1 }
+            case "tasks", "--tasks": result.command = .tasks
+            case "config", "--config": result.command = .config
+            case "self-update", "selfupdate", "upgrade": result.command = .selfUpdate
+            case "uninstall": result.command = .uninstall
+            case "help", "-h", "--help": result.command = .help
+            case "version", "-v", "--version": result.command = .version
             default:
-                if w.hasPrefix("--skip=") { a.cliSkip += "," + value(w) }
-                else if w.hasPrefix("--only=") { a.cliOnly += "," + value(w) }
-                else if w.hasPrefix("--enable=") { a.cliEnable += "," + value(w) }
-                else if w.hasPrefix("--pick=") { a.pick += "," + value(w) }
-                else if w.hasPrefix("--level=") {
-                    guard let l = Config.level(value(w)) else { throw Failure.badLevel }
-                    a.level = l
-                } else if w.hasPrefix("--lang=") {
-                    guard let l = Lang.option(value(w)) else { throw Failure.badLang }
-                    a.lang = l
-                } else { throw Failure.unknownCommand(w) }
+                if word.hasPrefix("--skip=") { result.cliSkip += "," + value(word) }
+                else if word.hasPrefix("--only=") { result.cliOnly += "," + value(word) }
+                else if word.hasPrefix("--enable=") { result.cliEnable += "," + value(word) }
+                else if word.hasPrefix("--pick=") { result.pick += "," + value(word) }
+                else if word.hasPrefix("--level=") {
+                    guard let level = Config.level(value(word)) else { throw Failure.badLevel }
+                    result.level = level
+                } else if word.hasPrefix("--lang=") {
+                    guard let lang = Lang.option(value(word)) else { throw Failure.badLang }
+                    result.lang = lang
+                } else { throw Failure.unknownCommand(word) }
             }
-            i += 1
+            index += 1
         }
-        a.applyPick()
-        return a
+        result.applyPick()
+        return result
     }
 
     /// --pick: clean exactly the items a check listed (their "key" in --json), nothing else, and run no check either,

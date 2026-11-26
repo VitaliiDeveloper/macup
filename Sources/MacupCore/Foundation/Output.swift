@@ -131,9 +131,10 @@ public final class Output {
     }
 
     /// With --json, a line under the last item.
+    /// The bash build keeps details in a file of "item<TAB>text" lines: only the first line of a detail survives, an empty one none.
     public func detail(_ s: String) {
-        guard json, !items.isEmpty, body != nil else { return }
-        items[items.count - 1].details.append(s)
+        guard json, !items.isEmpty, body != nil, let first = Bash.lines(s).first, !first.isEmpty else { return }
+        items[items.count - 1].details.append(first)
     }
 
     /// The transient "… doing this" line, only on a terminal with colours.

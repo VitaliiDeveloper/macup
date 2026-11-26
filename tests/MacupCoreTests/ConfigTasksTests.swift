@@ -18,6 +18,8 @@ final class ConfigTasksTests: XCTestCase {
         "  skip=update.brew\nskip = update.mas  # later wins\nkeep_reports = 15\nsimulator_days = 0\nstep_timeout_minutes = x\n",
         "skip = a\nskip = # emptied\nlanguage\t=\tru\t\r\nclean_level = aggressive\nproject_dirs = ~/A, ~/B\n",
         "skipper = no\nlanguage = -n\nenable = clean.trash,clean.sim_erase\nonly = check.disk\n",
+        "skip = clean.brew\u{A0}\nenable = clean.trash\u{3000} # ideographic space\nlanguage\u{2003}= uk\nproject_dirs = a\u{85}\nstep_timeout_minutes = 010\n",
+        "step_timeout_minutes = 09\n",
         "",
     ]
     let keys = ["language", "skip", "enable", "keep_reports", "simulator_days", "step_timeout_minutes", "clean_level", "project_dirs", "skipper", "only", "absent"]
@@ -31,6 +33,22 @@ final class ConfigTasksTests: XCTestCase {
         }
         XCTAssertEqual(Config(path: dir + "/none").value("skip", "x"), "x")
         XCTAssertEqual(Config(path: dir).value("skip", "x"), "x", "a folder is not a config file")
+    }
+
+    /// sed stops at the first line that is not UTF-8: keys after it are not read, and conf_set leaves such a file alone.
+    func testInvalidUTF8StopsLikeSed() throws {
+        let bytes = Data("language = ru\n# caf".utf8) + Data([0xE9]) + Data("\nskip = clean.*\n".utf8)
+        try bytes.write(to: URL(fileURLWithPath: confPath))
+        var c = Config(path: confPath)
+        c.reportsErrors = false
+        let got = try BashOracle.run(["conf language x", "conf skip none"], home: dir)
+        XCTAssertTrue(c.sedFails)
+        XCTAssertEqual([c.value("language", "x"), c.value("skip", "none")], got)
+        var latin = Config(path: confPath, utf8: false)
+        latin.reportsErrors = false
+        XCTAssertEqual(latin.value("skip", "none"), "clean.*", "LC_ALL=C: sed reads every byte")
+        try Config.set("language", "uk", path: confPath) { "" }
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: confPath)), bytes)
     }
 
     func testNumAndLevel() {
@@ -91,6 +109,7 @@ final class ConfigTasksTests: XCTestCase {
                 let calls = Tasks.all.map { "if task \($0.id); then echo 1; else echo 0; fi" } + ["printf %s \"$SKIP|$ENABLE|$CLI_ONLY|$LEVEL|$KEEP_RUNS|$STEP_SECS|$SIM_DAYS\""]
                 let got = try BashOracle.run(calls, home: dir, prelude: prelude)
                 for (i, t) in Tasks.all.enumerated() { XCTAssertEqual(sel.runs(t.id) ? "1" : "0", got[i], "task \(t.id) with \(cli) in \(text.debugDescription)") }
+                if s.bashArithmeticFails { XCTAssertEqual(got.last?.contains("||20|3600|"), true, "bash gave up halfway through load_conf"); continue }
                 XCTAssertEqual("\(s.skip)|\(s.enable)|\(s.only)|\(s.level)|\(s.keepReports)|\(s.stepSeconds)|\(s.simulatorDays)", got.last, "load_conf")
             }
         }

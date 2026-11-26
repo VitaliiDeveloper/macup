@@ -27,15 +27,22 @@ tasks-only|config||tasks --only check.*,update.brew --skip check.disk
 tasks-enable|config||tasks --enable clean.trash,clean.sim_erase --no-color
 tasks-pick|config||tasks --pick some:key
 tasks-xdg|config|XDG_CONFIG_HOME=@H/xdg|tasks --json
-tasks-after-check|config||check tasks'
+tasks-after-check|config||check tasks
+tasks-unicode-blanks|blanks||tasks
+tasks-latin1-config|latin1||tasks --json
+help-latin1-config|latin1|MACUP_LANG=|help
+tasks-step-09|octal||tasks'
 
 fix_config(){ mkdir -p "$1/.config/macup" "$1/xdg/macup"
   printf 'language = en\nskip = check.docker, update.*  # not these\nenable = clean.trash\nclean_level = standard\n' >"$1/.config/macup/config"
   printf 'skip = clean.*\n' >"$1/xdg/macup/config"; }
+fix_blanks(){ mkdir -p "$1/.config/macup"; printf 'skip = clean.brew\302\240\nenable = clean.trash\343\200\200 # ideographic space\n' >"$1/.config/macup/config"; }
+fix_latin1(){ mkdir -p "$1/.config/macup"; printf 'language = uk\n# caf\351\nskip = clean.*\n' >"$1/.config/macup/config"; }   # sed stops at the byte
+fix_octal(){ mkdir -p "$1/.config/macup"; printf 'step_timeout_minutes = 09\n' >"$1/.config/macup/config"; }   # bash's arithmetic fails
 fix_lang(){ mkdir -p "$1/.config/macup"; printf 'language = ru\n' >"$1/.config/macup/config"; }
 
 # what may differ between two runs: dates and times, durations, report names, temporary paths, pids; on a terminal the
-# transient step and tick lines
+# transient step and tick lines; the script's name in bash's own diagnostics (the Swift build runs it as /dev/fd/N)
 norm(){ # file home
   perl -pe '
     s/\r\e\[K  \e\[2m… [^\r\n]*(?=\r)//g;
@@ -45,6 +52,7 @@ norm(){ # file home
     s/macup_DATE(?:_\d+)?\.md/macup_DATE.md/g;
     s{\Q'"${TMPDIR:-/tmp}"'\E/?macup[.-][A-Za-z0-9.]+}{TMP}g;
     s/\bpid \d+/pid N/g;
+    s{^(?:/dev/fd/\d+|\S*macup): line (\d+): }{macup: line $1: }mg;
   ' "$1" | sed "s|$2|HOME|g"
 }
 

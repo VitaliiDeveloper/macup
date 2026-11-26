@@ -69,6 +69,7 @@ public struct I18n {
 /// Like bash, the format is used again while arguments are left, and a missing argument is "" (or 0 for %d).
 public enum Printf {
     public static func format(_ fmt: String, _ args: [String]) -> String {
+        if fmt.hasPrefix("-") { return "" }   // printf takes it for an option and prints nothing
         let f = Array(fmt.unicodeScalars)
         var out = String.UnicodeScalarView()
         var next = 0
@@ -130,10 +131,16 @@ public enum Printf {
         return i + 1
     }
 
-    /// An argument of %d as bash reads it: leading blanks, a sign, then decimal, 0x hex or 0 octal; 0 for none.
+    /// An argument of %d as bash reads it: leading blanks, a sign, then decimal, 0x hex or 0 octal, and nothing after;
+    /// anything else is 0 (bash also says "invalid number" on stderr).
     static func integer(_ s: String) -> Int64 {
-        let t = s.drop(while: { $0 == " " || $0 == "\t" || $0 == "\n" })
+        let t = String(s.drop(while: { $0 == " " || $0 == "\t" || $0 == "\n" }))
         if let q = t.first, q == "'" || q == "\"" { return Int64(t.dropFirst().unicodeScalars.first?.value ?? 0) }
-        return t.withCString { strtoll($0, nil, 0) }
+        return t.withCString { p -> Int64 in
+            var end: UnsafeMutablePointer<CChar>?
+            let v = strtoll(p, &end, 0)
+            guard let e = end, e != UnsafeMutablePointer(mutating: p), e.pointee == 0 else { return 0 }
+            return v
+        }
     }
 }

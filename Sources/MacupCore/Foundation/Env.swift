@@ -76,6 +76,12 @@ public struct Env {
         return "en_US.UTF-8"
     }
 
+    /// The tools run in a UTF-8 locale: core.sh makes LC_CTYPE one, unless LC_ALL overrides it with another.
+    public var utf8Locale: Bool {
+        guard let all = vars["LC_ALL"], !all.isEmpty else { return true }
+        return ["UTF-8", "utf-8", "UTF8", "utf8"].contains { all.contains($0) }
+    }
+
     /// The environment of the tools macup runs.
     public var childVars: [String: String] {
         var v = vars

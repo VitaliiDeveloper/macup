@@ -46,13 +46,20 @@ enum BashExec {
     }
 
     /// The path this binary was started by, as the bash build's $0 was: the path the shell found in PATH, a symlink kept as
-    /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at), a relative path kept relative.
-    private static func selfPath() -> String {
+    /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at). Not resolved to the real file.
+    /// A binary in a checkout's .build is the build output, like ./macup there: it is named as ./macup, so uninstall leaves it.
+    static func selfPath() -> String {
         var size: UInt32 = 0
         _NSGetExecutablePath(nil, &size)
         var buf = [CChar](repeating: 0, count: Int(size) + 1)
         guard _NSGetExecutablePath(&buf, &size) == 0 else { return CommandLine.arguments[0] }
-        return String(cString: buf)
+        let path = String(cString: buf)
+        if let r = path.range(of: "/.build/", options: .backwards) {
+            let checkout = String(path[..<r.lowerBound])
+            let fm = FileManager.default
+            if fm.fileExists(atPath: checkout + "/build.sh"), fm.fileExists(atPath: checkout + "/src") { return checkout + "/macup" }
+        }
+        return path
     }
 
     private static func fail(_ msg: String) -> Never {

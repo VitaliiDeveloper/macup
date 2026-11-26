@@ -63,14 +63,15 @@ public final class Shell {
         var fa: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&fa)
         defer { posix_spawn_file_actions_destroy(&fa) }
+        // POSIX_SPAWN_CLOEXEC_DEFAULT below: only these three reach the tool, so no pipe or report of macup's stays open in it
         switch stdin {
-        case .inherit: break
+        case .inherit: posix_spawn_file_actions_addinherit_np(&fa, 0)
         case .null: posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0)
         case .fd(let f): posix_spawn_file_actions_adddup2(&fa, f, 0)
         }
         for (target, out) in [(Int32(1), stdout), (Int32(2), stderr)] {
             switch out {
-            case .inherit: break
+            case .inherit: posix_spawn_file_actions_addinherit_np(&fa, target)
             case .null: posix_spawn_file_actions_addopen(&fa, target, "/dev/null", O_WRONLY, 0)
             case .fd(let f): posix_spawn_file_actions_adddup2(&fa, f, target)
             case .file(let p): posix_spawn_file_actions_addopen(&fa, target, p, O_WRONLY | O_CREAT | O_APPEND, 0o644)
@@ -86,7 +87,7 @@ public final class Shell {
         for s in signalsToReset { sigaddset(&reset, s) }
         posix_spawnattr_setsigmask(&attr, &none)
         posix_spawnattr_setsigdefault(&attr, &reset)
-        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
+        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_CLOEXEC_DEFAULT))
 
         let cArgs = argv.map { strdup($0) } + [nil]
         let cEnv = vars.map { strdup("\($0.key)=\($0.value)") } + [nil]

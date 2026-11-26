@@ -63,6 +63,17 @@ final class RoutingTests: XCTestCase {
         }
     }
 
+    func testConfigBashCannotComputeGoesToBash() throws {
+        let e = try env()
+        try FileManager.default.createDirectory(atPath: e.confDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: e.home) }
+        try "step_timeout_minutes = 09\n".write(toFile: e.conf, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Router.route(["tasks"], env: e), .bash)
+        XCTAssertNotEqual(Router.route(["help"], env: e), .bash)
+        try "step_timeout_minutes = 010\n".write(toFile: e.conf, atomically: true, encoding: .utf8)
+        XCTAssertNotEqual(Router.route(["tasks"], env: e), .bash)
+    }
+
     func testRunsRouteOnlyWhenEveryTaskIsPorted() throws {
         let e = try env()
         let ported: Set<String> = ["run", "help"]

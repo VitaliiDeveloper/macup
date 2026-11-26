@@ -6,7 +6,7 @@ public enum OneOff {
     public static func run(_ a: Arguments, env: Env, translations: String) -> Int32 {
         env.apply()
         let shell = Shell(env: env)
-        let config = Config(path: env.conf)
+        let config = Config(env: env)
         lazy var lang: Lang = a.lang ?? Lang.initial(env: env, config: config, shell: shell)
         var colors = Colors.initial(env: env)
         if a.noColor { colors = .off }

@@ -13,14 +13,22 @@ public enum Router {
 
     public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks) -> Route {
         guard let a = try? Arguments.parse(argv) else { return .bash }
+        func settings() -> Settings {
+            var config = Config(env: env)
+            config.reportsErrors = false   // bash says it, once it has the run
+            return Settings(config: config, env: env, cliSkip: a.cliSkip, cliOnly: a.cliOnly, cliEnable: a.cliEnable, cliLevel: a.level)
+        }
         if let c = a.command {
-            if unavailable.contains(c) || ported.contains(c.rawValue) { return .swift(a) }
-            return .bash
+            if unavailable.contains(c) { return .swift(a) }
+            guard ported.contains(c.rawValue) else { return .bash }
+            // the one-off commands that load the config (load_conf) share its arithmetic
+            if c == .tasks, settings().bashArithmeticFails { return .bash }
+            return .swift(a)
         }
         // no command word: a run (check, all, update, clean, or --deep alone); without one, the menu or the help
         guard a.action != nil || a.deep, ported.contains("run") else { return .bash }
-        let settings = Settings(config: Config(path: env.conf), env: env, cliSkip: a.cliSkip, cliOnly: a.cliOnly, cliEnable: a.cliEnable, cliLevel: a.level)
-        guard Tasks.unknown("\(settings.only),\(a.cliSkip),\(a.cliEnable)").isEmpty else { return .bash }
+        let settings = settings()
+        guard !settings.bashArithmeticFails, Tasks.unknown("\(settings.only),\(a.cliSkip),\(a.cliEnable)").isEmpty else { return .bash }
         return Selection(settings).selected.allSatisfy(portedTasks.contains) ? .swift(a) : .bash
     }
 }

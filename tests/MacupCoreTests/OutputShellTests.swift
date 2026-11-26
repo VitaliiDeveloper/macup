@@ -85,6 +85,16 @@ final class OutputShellTests: XCTestCase {
         XCTAssertEqual(Shell(env: try env(["PATH": "/usr/bin:/bin", "MACUP_PATH": ""])).vars["PATH"]?.hasPrefix("/opt/homebrew/bin:"), true)
     }
 
+    /// A tool gets only stdin, stdout and stderr: a helper it leaves running does not hold macup's pipe open.
+    func testToolsGetNoOtherDescriptors() throws {
+        let sh = Shell(env: try env())
+        let t0 = Date()
+        XCTAssertEqual(sh.capture(["/bin/sh", "-c", "sleep 4 >/dev/null 2>&1 </dev/null & echo hi"]).output, "hi\n")
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 2)
+        let fds = sh.capture(["/bin/sh", "-c", "ls /dev/fd"]).output.split(separator: "\n").compactMap { Int($0.filter(\.isNumber)) }
+        XCTAssertEqual(fds.filter { $0 > 4 }, [], "0–2, and what ls itself opens to list /dev/fd")
+    }
+
     /// tl: a command past its time is stopped with what it started, and the status is 124.
     func testTlStopsTheCommandAndItsChildren() throws {
         let sh = Shell(env: try env())

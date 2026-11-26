@@ -20,7 +20,7 @@ final class PathsI18nTests: XCTestCase {
         let cases: [(String, [String])] = [
             ("%s", ["a"]), ("%s and %s", ["a"]), ("%s=%d", ["x", "12"]), ("%d%%", ["7"]), ("a%sb", ["1", "2", "3"]),
             ("%s: %s → %s", ["Foo", "1.0", "1.1"]), ("no args", ["extra"]), ("%d", [""]), ("%d", ["0x1F"]), ("%d", ["010"]),
-            ("%d", [" 42"]), ("tab\\there\\n", []), ("100%", []), ("%s%%)", ["5"]), ("\\101\\x41", []),
+            ("%d", [" 42"]), ("tab\\there\\n", []), ("100%", []), ("%s%%)", ["5"]), ("\\101\\x41", []), ("%d", ["1.5"]), ("%d|%d", ["3 ", "12abc"]), ("-x %s", ["a"]),
             ("Mode: %s · macup %s · took %s", ["check", "2.9.2", "0m 1s"]),
         ]
         let got = try BashOracle.run(cases.map { c in "printf \(BashOracle.q(c.0))" + c.1.map { " " + BashOracle.q($0) }.joined() })

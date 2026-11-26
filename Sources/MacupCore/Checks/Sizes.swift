@@ -7,7 +7,6 @@ extension Checks {
         if run.task("check.creative") { creative(run) }
     }
 
-    /// An info line with the size, when it is at least `atLeast` KB.
     static func mention(_ run: Run, _ size: Int64, atLeast: Int64, _ fmt: String) {
         if size >= atLeast { run.out.info(fmt, Size.hum(size)) }
     }
@@ -86,7 +85,6 @@ extension Checks {
         return lstat(path, &info) == 0
     }
 
-    /// `ls "$folder"` succeeds.
     static func readable(_ folder: String) -> Bool {
         guard let handle = opendir(folder) else { return false }
         closedir(handle)

@@ -144,7 +144,6 @@ enum Checks {
     }
 }
 
-/// Small pieces of bash and awk the checks share.
 extension Checks {
     /// `$(tool 2>/dev/null)`.
     static func output(_ run: Run, _ argv: [String]) -> String {
@@ -156,7 +155,6 @@ extension Checks {
         Bash.substitution(result.output + (result.status == 0 ? "" : fallback + "\n"))
     }
 
-    /// The lines awk reads from a tool's output; none for no output.
     static func records(_ output: String) -> [String] {
         let text = Bash.substitution(output)
         return text.isEmpty ? [] : Bash.lines(text)
@@ -167,7 +165,6 @@ extension Checks {
         Bash.lines(output).filter { $0.contains(key) }.map { field($0, 2, separator: separator) }
     }
 
-    /// Field `number` of an awk record whose field separator is a regular expression.
     static func field(_ record: String, _ number: Int, separator: String) -> String {
         let expression = try! NSRegularExpression(pattern: separator)
         let text = record as NSString
@@ -185,9 +182,12 @@ extension Checks {
         value == value.rounded(.towardZero) && abs(value) < 1e18 ? String(Int64(value)) : Awk.format("%.6g", value)
     }
 
-    /// The number `[ "$x" -lt 15 ]` reads: blanks around it allowed, anything else is not a number and the test is false.
+    /// The number `[ "$x" -lt 15 ]` reads (bash's legal_number): any white space before it, only blanks and tabs after;
+    /// anything else is not a number and the test is false.
     static func integer(_ text: String) -> Int64? {
-        Int64(text.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n\r\u{0B}\u{0C}")))
+        var scalars = Substring(text).unicodeScalars.drop(while: { " \t\n\r\u{0B}\u{0C}".unicodeScalars.contains($0) })
+        while let last = scalars.last, last == " " || last == "\t" { scalars = scalars.dropLast() }
+        return Int64(String(String.UnicodeScalarView(scalars)))
     }
 
     static func matches(_ expression: NSRegularExpression, _ line: String) -> Bool {
@@ -197,9 +197,13 @@ extension Checks {
     /// A bash glob of names in one folder, sorted as bash sorts them (strcoll in the locale); a leading dot only matches a dot.
     static func glob(_ folder: String, _ pattern: String) -> [String] {
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).filter { fnmatch(pattern, $0, FNM_PERIOD) == 0 }
-        setlocale(LC_COLLATE, "")   // bash sorts in the collation of LC_ALL, LC_COLLATE or LANG
+        _ = collation
         return names.sorted { strcoll($0, $1) < 0 }.map { "\(folder)/\($0)" }
     }
+
+    /// bash sorts in the collation of LC_ALL, LC_COLLATE or LANG; only strcoll and fnmatch ranges read it, and the checks
+    /// set it once, on the main thread.
+    static let collation: Void = { setlocale(LC_COLLATE, "") }()
 }
 
 /// The sed that cuts `uptime` down to how long the Mac has been up.

@@ -98,12 +98,13 @@ fix_reports(){ local log="$1/Library/Logs/macup" state="$1/Library/Application S
 
 # checks unit: the system tools answer from FAKE_* (tests/checks_fakes.sh); FAKE_SYSTEM=1 turns them on
 # shellcheck source=tests/checks_fakes.sh
-. tests/checks_fakes.sh; checks_fakes "$work/bin"; fakes "$work/bin" launchctl
+. tests/checks_fakes.sh; checks_fakes "$work/bin"
 CASES="$CASES
 chk-system||FAKE_SYSTEM=1|check --only check.system,check.memory,check.cpu,check.battery
 chk-system-json||FAKE_SYSTEM=1 FAKE_BATT=83%|check --only check.system,check.memory,check.cpu,check.battery --json
 chk-system-warn||FAKE_SYSTEM=1 FAKE_UP_DAYS=20 FAKE_UPTIME=4:05 FAKE_MEMFREE=9 FAKE_SWAP_USED=7.5G FAKE_LOAD=13.00 FAKE_THERM=CPU_Speed_Limit=80 FAKE_BATT=83% FAKE_CAPACITY=76%|check --only check.system,check.memory,check.cpu,check.battery
 chk-system-odd||FAKE_SYSTEM=1 FAKE_MEMFREE= FAKE_SWAP_USED=x FAKE_LOAD=busy FAKE_CORES=x FAKE_MODEL= FAKE_BATT=55% FAKE_CONDITION=Service FAKE_CYCLES= FAKE_CAPACITY=|check --only check.system,check.memory,check.cpu,check.battery
+chk-trends|historyfilling|FAKE_SYSTEM=1 FAKE_BATT=83% FAKE_CYCLES=650 FAKE_CAPACITY=76% FAKE_SWAP_USED=3.5G|check --only check.trends,check.memory,check.battery
 chk-security||FAKE_SYSTEM=1 FAKE_TM_DEST=Backup FAKE_TM_DAYS=2|check --only check.security
 chk-security-off||FAKE_SYSTEM=1 FAKE_FILEVAULT=Off FAKE_SIP=disabled FAKE_GATEKEEPER=disabled FAKE_AUTO_CHECK=0 FAKE_TM_DEST=Backup FAKE_TM_DAYS=30 FAKE_PROCS=ARDAgent|check --only check.security
 chk-security-none||FAKE_SYSTEM=1 FAKE_FILEVAULT= FAKE_SIP= FAKE_GATEKEEPER= FAKE_CRITICAL=0|check --only check.security

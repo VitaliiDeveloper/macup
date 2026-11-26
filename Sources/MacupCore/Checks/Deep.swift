@@ -29,7 +29,11 @@ extension Checks {
         guard Run.isDirectory(folder) else { return }
         let old = records(run.shell.capture(["find", folder, "-mindepth", "1", "-maxdepth", "1", "-mtime", "+90"], stdin: .inherit).output)
         if !old.isEmpty {
-            let total = records(run.shell.capture(["du", "-sk"] + old, stdin: .null).output).reduce(0.0) { $0 + Awk.number(Awk.firstField($1)) }
+            // what xargs leaves for paths: ARG_MAX less 4 KB, the environment and du's own words, each with its NUL and pointer
+            let room = Int(sysconf(_SC_ARG_MAX)) - 4096 - (run.shell.vars.map { "\($0.key)=\($0.value)" } + ["du", "-sk"]).reduce(0) { $0 + $1.utf8.count + 9 }
+            let total = batches(old, room: room).reduce(0.0) { sum, batch in
+                records(run.shell.capture(["du", "-sk"] + batch, stdin: .null).output).reduce(sum) { $0 + Awk.number(Awk.firstField($1)) }
+            }
             out.info("Downloads older than 90 days: %s items, %s — review and delete what you don't need", String(Run.count(old.joined(separator: "\n"))), Size.hum(awkNumber(total)))
         }
         let big = records(run.shell.capture(["find", folder, "-type", "f", "-size", "+1G"], stdin: .inherit).output).prefix(10)
@@ -37,6 +41,18 @@ extension Checks {
             out.info("Files over 1 GB in Downloads:")
             for file in big { out.sub("\(Size.hum(run.kb(file)))  \(run.env.paths.tildify(file))") }
         }
+    }
+
+    /// The du runs of `xargs -0 du -sk`: BSD xargs gives a command at most 5000 paths, and fewer when they would not fit
+    /// in `room` bytes (hard links count once per du).
+    static func batches(_ paths: [String], room: Int) -> [[String]] {
+        var all: [[String]] = [], batch: [String] = [], bytes = 0
+        for path in paths {
+            if batch.count == 5000 || (!batch.isEmpty && bytes + path.utf8.count + 1 > room) { all.append(batch); batch = []; bytes = 0 }
+            batch.append(path)
+            bytes += path.utf8.count + 1
+        }
+        return batch.isEmpty ? all : all + [batch]
     }
 
     static func artifacts(_ run: Run) {

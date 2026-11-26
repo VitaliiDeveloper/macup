@@ -68,9 +68,17 @@ final class ChecksTests: XCTestCase {
     }
 
     func testIntegerTestsAsBracket() throws {
-        let samples = ["9", " 76 ", "9.5", "", "+7", "-3", "7x", "1\n2"]
+        let samples = ["9", " 76 ", "9.5", "", "+7", "-3", "7x", "1\n2", "75\r", "\n 7", "7\n", "7\t"]
         let bash = try BashOracle.run(samples.map { "[ \(BashOracle.quoted($0)) -lt 15 ] 2>/dev/null && echo yes || echo no" })
         XCTAssertEqual(samples.map { (Checks.integer($0).map { $0 < 15 } ?? false) ? "yes" : "no" }, bash)
+    }
+
+    func testDownloadBatchesAsXargs() {
+        let paths = (1...12_001).map { "/Users/me/Downloads/item \($0)" }
+        XCTAssertEqual(Checks.batches(paths, room: 1_000_000).map(\.count), [5000, 5000, 2001])
+        XCTAssertEqual(Checks.batches(["/a", "/bb", "/ccc"], room: 7).map(\.count), [2, 1])
+        XCTAssertEqual(Checks.batches(["/far too long for the room"], room: 4).map(\.count), [1])
+        XCTAssertEqual(Checks.batches([], room: 100).count, 0)
     }
 
     func testProtectionStates() {
@@ -94,9 +102,10 @@ final class ChecksTests: XCTestCase {
         for name in ["dev", "Library", "_x", "apple", "Zed", "e", ".hidden", "..dots", ".a", "f.sqlite", ".g.sqlite"] {
             FileManager.default.createFile(atPath: "\(folder)/\(name)", contents: nil)
         }
+        _ = Checks.collation
+        defer { setlocale(LC_COLLATE, "") }
         for locale in ["en_US.UTF-8", "C"] {
-            setenv("LC_ALL", locale, 1)
-            defer { unsetenv("LC_ALL") }
+            setlocale(LC_COLLATE, locale)
             let patterns = ["*", ".[!.]*", "*.sqlite", "nothing*"]
             let bash = try BashOracle.run(patterns.map { "for name in \(BashOracle.quoted(folder))/\($0); do [ -e \"$name\" ] && echo \"$name\"; done" }, env: ["LC_ALL": locale])
             XCTAssertEqual(patterns.map { Checks.glob(folder, $0).joined(separator: "\n") }, bash, locale)

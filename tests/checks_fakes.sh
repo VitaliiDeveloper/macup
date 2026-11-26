@@ -26,7 +26,7 @@ case "$2" in
   *) exec /usr/sbin/sysctl "$@" ;;
 esac
 FAKE
-    sw_vers) echo '[ "$1" = -productVersion ] && echo 15.1 || echo 24B83' ;;
+    sw_vers) echo 'case "$*" in -productVersion) echo 15.1 ;; -buildVersion) echo 24B83 ;; *) exec /usr/bin/sw_vers "$@" ;; esac' ;;
     memory_pressure) echo 'printf "The system has 17179869184 (1048576 pages with a page size of 16384).\n\n"; [ -z "${FAKE_MEMFREE-42}" ] || echo "System-wide memory free percentage: ${FAKE_MEMFREE-42}%"' ;;
     # the first three lines matter: odd spacing, a comma in a name, a fourth line that is cut
     ps) cat <<'FAKE' ;;
@@ -41,6 +41,7 @@ case "$2" in
   therm) printf '%s\n' "${FAKE_THERM-Note: No thermal warning level has been recorded}" ;;
   batt) if [ -n "${FAKE_BATT:-}" ]; then printf "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=4653155)\t%s; discharging; 4:10 remaining present: true\n" "$FAKE_BATT"
         else echo "Now drawing from 'AC Power'"; fi ;;
+  *) exec /usr/bin/pmset "$@" ;;
 esac
 FAKE
     system_profiler) cat <<'FAKE' ;;

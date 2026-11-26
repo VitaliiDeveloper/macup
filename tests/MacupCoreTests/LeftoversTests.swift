@@ -153,4 +153,21 @@ final class LeftoversTests: XCTestCase {
         XCTAssertTrue(swift("check --only clean.dev_containers"), "nothing to scan without a terminal")
         XCTAssertFalse(swift("clean --only clean.dev_containers", terminal: true), "the scan needs lsof")
     }
+
+    /// registerDevContainers stops at a preconditionFailure past its guard: no run the Swift build takes may pass the guard.
+    func testNoRouteReachesTheDevContainerScan() throws {
+        try "dev_container_prefixes = dev.me\n".write(toFile: home + "/.config/macup/config", atomically: true, encoding: .utf8)
+        let environment = try Env(["HOME": home, "PATH": "/usr/bin:/bin"])
+        for action in ["check", "clean", "all", "update", ""] {
+            for selection in ["--only clean.dev_containers", "--enable clean.dev_containers", "--only clean.dev_containers,clean.orphan_data,check.startup"] {
+                for flags in ["", "--quiet", "--json", "--level aggressive"] {
+                    for terminal in [false, true] {
+                        let argv = "\(action) \(selection) \(flags)".split(separator: " ").map(String.init)
+                        guard case .swift(let arguments) = Router.route(argv, env: environment, terminal: terminal) else { continue }
+                        XCTAssertFalse(terminal && !arguments.quiet, "\(argv) on a terminal reaches the dev container scan")
+                    }
+                }
+            }
+        }
+    }
 }

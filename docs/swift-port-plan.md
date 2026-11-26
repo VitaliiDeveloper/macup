@@ -292,6 +292,19 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 
 (empty)
 
+## Bash bugs the port reproduces until phase 4
+
+Not worth a release from `main`: the Swift port copies them so `diff.sh` stays exact, and phase 4 fixes them in Swift, each with a test and a line in the 3.0.0 CHANGELOG.
+
+- [ ] `show_history`: awk's `h()` assigns the global `b`, which is also the bold colour (`-v b="$B"`), so "Free space trend:" starts with the last freed value in bytes and is never bold (found by the commands unit, PR #13).
+
+## Follow-ups queued
+
+- [ ] After wave A: move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Owner: the commands unit's session.
+- [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
+- [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
+- [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
+
 ## Progress
 
 | Phase | Unit | Branch | PR | State |

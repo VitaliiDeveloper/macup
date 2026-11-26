@@ -10,6 +10,8 @@ MACUP_VERSION="2.9.2"
 MACUP_REPO="${MACUP_REPO:-VitaliiDeveloper/macup}"
 MACUP_RAW="https://raw.githubusercontent.com/$MACUP_REPO"   # + /<branch or tag>/<file>
 set -o pipefail
+# data parsing lives in src/py/macup_helpers.py, embedded here by build.sh; run as: python3 -c "$MACUP_PY" <command> args…
+@py src/py/macup_helpers.py
 # every path below hangs off $HOME: with none, "$HOME/Library/Caches" would be the system's /Library/Caches
 case "${HOME:-}" in /?*) ;; *) echo "macup: HOME is not set" >&2; exit 1 ;; esac
 

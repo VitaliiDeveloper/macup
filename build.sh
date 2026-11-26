@@ -3,6 +3,7 @@
 #   ./build.sh --check   fails if macup or macup.sha256 is out of date (used by tests and CI)
 # Translations live in src/i18n/translations.json ({"English": {"uk": …, "ru": …}}) and are
 # embedded at build time, so macup itself needs no JSON parser.
+# `@py file` embeds a Python file as $MACUP_PY: python3 stays optional and macup stays one file.
 set -eo pipefail
 cd "$(dirname "$0")"
 
@@ -30,10 +31,17 @@ sys.exit(bad)
 PY
 }
 
+PY_END=MACUP_PY_END
+py(){ # Python file → a bash statement that sets MACUP_PY to its text
+  python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], feature_version=(3, 9))' "$1" || { echo "build.sh: $1 does not compile" >&2; return 1; }
+  ! grep -qx "$PY_END" "$1" || { echo "build.sh: $1 has a line $PY_END" >&2; return 1; }
+  printf "IFS= read -r -d '' MACUP_PY <<'%s' || :\n" "$PY_END"; awk 1 "$1"; printf '%s\n' "$PY_END"
+}
+
 tmp=$(mktemp "${TMPDIR:-/tmp}/macup-build.XXXXXX"); trap 'rm -f "$tmp"' EXIT
 for name in $ORDER; do
   while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in "@i18n "*) i18n "${line#@i18n }" ;; *) printf '%s\n' "$line" ;; esac
+    case "$line" in "@i18n "*) i18n "${line#@i18n }" ;; "@py "*) py "${line#@py }" ;; *) printf '%s\n' "$line" ;; esac
   done <"src/$name.sh"
 done >"$tmp"
 /bin/bash -n "$tmp"

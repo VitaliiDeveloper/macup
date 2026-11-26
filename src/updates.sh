@@ -12,16 +12,7 @@ if task update.claude && have claude; then
     ver_gt "$latest" "$v2" && info "%s: %s is on npm (fine if you're on the stable channel)" "Claude Code" "$latest"
   fi
   PJSON="$HOME/.claude/plugins/installed_plugins.json"
-  plugins(){ [ -f "$PJSON" ] && have python3 && python3 - "$PJSON" <<'PY' 2>/dev/null
-import json, sys
-d = json.load(open(sys.argv[1])); pl = d.get("plugins", d)
-for k, v in sorted(pl.items()):
-    es = v if isinstance(v, list) else [v]
-    e = next((x for x in es if isinstance(x, dict) and x.get("scope", "user") == "user"), None)
-    if e is None: continue   # project/local plugins belong to their project
-    print(k, e.get("version") or (e.get("gitCommitSha") or "")[:7] or "?")
-PY
-  }
+  plugins(){ [ -f "$PJSON" ] && have python3 && python3 -c "$MACUP_PY" plugins "$PJSON" </dev/null 2>/dev/null; }
   P1=$(plugins)
   if UPD; then
     step 'Plugin marketplaces'
@@ -53,16 +44,7 @@ node_ok(){
 if task update.npm && have npm && have python3 && node_ok "$(_ 'npm globals')"; then
   step 'npm globals'
   # skips npm-link'ed packages and anything whose versions don't look like registry versions
-  NO=$(tl 180 npm outdated -g --json 2>/dev/null | python3 -c '
-import json, os, sys, re
-try: d = json.load(sys.stdin)
-except Exception: d = {}
-root = sys.argv[1]
-ver = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+")
-for k, v in d.items():
-    c, l = str(v.get("current", "")), str(v.get("latest", ""))
-    if os.path.islink(os.path.join(root, k)) or not ver.match(c) or not ver.match(l) or c == l: continue
-    print(k, c, l)' "$(npm root -g 2>/dev/null)" 2>/dev/null)
+  NO=$(tl 180 npm outdated -g --json 2>/dev/null | python3 -c "$MACUP_PY" npm-outdated "$(npm root -g 2>/dev/null)" 2>/dev/null)
   if [ -z "$NO" ]; then ok 'npm globals: up to date'
   else
     UPD || warn 'npm globals: %s outdated' "$(cnt "$NO")"
@@ -80,10 +62,7 @@ fi
 
 LOCK="$HOME/.agents/.skill-lock.json"; LATER_SKILLS=""
 if task update.skills && [ -f "$LOCK" ] && have npx && have python3 && node_ok "$(_ 'Agent skills')"; then
-  skills(){ python3 -c '
-import json, sys
-d = json.load(open(sys.argv[1]))
-for k, v in sorted(d.get("skills", {}).items()): print(k, v.get("skillFolderHash", "")[:7])' "$LOCK" 2>/dev/null; }
+  skills(){ python3 -c "$MACUP_PY" skills "$LOCK" 2>/dev/null; }
   S1=$(skills)
   if UPD; then
     step 'Agent skills'
@@ -178,35 +157,7 @@ if task update.apps && have curl && have python3; then
   # -z: downloads the catalog (about 20 MB) only when it changed; a failed download keeps the last copy
   if [ -s "$CJ" ]; then ZF=(-z "$CJ"); else ZF=(); fi
   curl -fsSL --compressed --max-time 60 "${ZF[@]}" -o "$CJ.new" https://formulae.brew.sh/api/cask.json 2>/dev/null && [ -s "$CJ.new" ] && mv "$CJ.new" "$CJ"; rm -f "$CJ.new"
-  if ! OA=$([ -s "$CJ" ] && python3 - "$CJ" "$HOME/Applications" <<'PY' 2>/dev/null
-import json, os, plistlib, re, subprocess, sys
-def key(v): return [int(x) for x in re.findall(r"\d+", v)]
-try: brewed = set(subprocess.run(["brew", "list", "--cask"], capture_output=True, text=True).stdout.split())
-except OSError: brewed = set()
-casks = {}
-for c in json.load(open(sys.argv[1])):
-    if "@" in c["token"]: continue   # beta and other channels of the same app
-    for art in c.get("artifacts", []):
-        for a in (art.get("app") or [])[:1]:
-            if isinstance(a, str): casks.setdefault(a, []).append((c["token"], str(c.get("version", "")).split(",")[0]))
-# brew upgrade covers casks brew installed; two casks with one app name and different versions are different apps (Telegram)
-latest = {a: v[0][1] for a, v in casks.items() if not brewed & {t for t, _ in v} and len({n for _, n in v}) == 1}
-checked, behind = 0, []
-for d in ("/Applications", sys.argv[2]):
-    if not os.path.isdir(d): continue
-    for a in sorted(os.listdir(d)):
-        p = os.path.join(d, a)
-        if a not in latest or os.path.isdir(p + "/Contents/_MASReceipt"): continue
-        try: i = plistlib.load(open(p + "/Contents/Info.plist", "rb"))
-        except Exception: continue
-        have = str(i.get("CFBundleShortVersionString") or i.get("CFBundleVersion") or "").split(" ")[0]
-        new = latest[a]
-        if not have or new == "latest": continue
-        checked += 1
-        if key(new) > key(have): behind.append("%s %s → %s" % (a[:-4], have, new))
-print(checked); print("\n".join(behind))
-PY
-); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
+  if ! OA=$([ -s "$CJ" ] && python3 -c "$MACUP_PY" apps-behind "$CJ" "$HOME/Applications" </dev/null 2>/dev/null); then warn '%s: could not check for updates' "$(_ 'Apps outside Homebrew and the App Store')"
   else
     AN=$(printf '%s\n' "$OA" | head -1); OA=$(printf '%s\n' "$OA" | tail -n +2)
     # the names go into the warning itself: the summary shows warnings without their detail lines

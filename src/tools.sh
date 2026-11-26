@@ -24,13 +24,7 @@ if task check.xcode; then
     ok 'Developer tools: %s (%s)' "${XV:-$(_ 'Command Line Tools only')}" "$(tildify "$XP")"
   else warn 'Developer tools: not installed or broken — run: xcode-select --install'; fi
   if have xcrun && have python3; then
-    RT=$(xcrun simctl runtime list -j 2>/dev/null | python3 -c '
-import json, sys
-try: d = json.load(sys.stdin)
-except Exception: sys.exit()
-rs = sorted(d.values(), key=lambda r: (r.get("platformIdentifier",""), r.get("version","")))
-print(len(rs), sum(r.get("sizeBytes", 0) for r in rs) // 1024)
-for r in rs: print("%s %s · %.1f GB" % (r.get("platformIdentifier","").split(".")[-1].replace("platform",""), r.get("version","?"), r.get("sizeBytes",0)/1e9))' 2>/dev/null)
+    RT=$(xcrun simctl runtime list -j 2>/dev/null | python3 -c "$MACUP_PY" sim-runtimes 2>/dev/null)
     if [ -n "$RT" ]; then
       read -r RN RK <<EOF
 $(printf '%s\n' "$RT" | head -1)
@@ -50,7 +44,7 @@ if task check.devtools; then
   have flutter && tool Flutter   "$(flutter --version 2>/dev/null | head -1 | sed 's/^Flutter //; s/ •.*//')"
   have node    && tool Node      "$(node --version 2>/dev/null | sed 's/^v//')"
   have ruby    && tool Ruby      "$(ruby -e 'print RUBY_VERSION' 2>/dev/null)"
-  have python3 && tool Python    "$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null)"
+  have python3 && tool Python    "$(python3 -c "$MACUP_PY" python-version 2>/dev/null)"
   have codex   && tool Codex     "$(codex --version 2>/dev/null | head -1 | awk '{print $NF}')"
   [ -n "$TOOLS" ] && info '%s' "$TOOLS"
   [ -d /Applications/Claude.app ] && info 'Claude Desktop %s (updates itself)' "$(defaults read /Applications/Claude.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null)"
@@ -59,52 +53,7 @@ if task check.commands && have python3; then
   step 'Checking commands'
   # a script whose interpreter is gone stays on PATH and only fails when run ("env: node: No such file or directory"):
   # an unlinked keg-only node@24, a pipx venv whose Python was removed by brew, a link to a deleted file
-  CMDS=$(python3 - "$HOME/.local/bin" "$HOME/.npm-global/bin" /opt/homebrew/bin /usr/local/bin <<'PY' 2>/dev/null
-import os, re, shutil, sys
-n, groups, gone = 0, {}, {}
-dirs = {}
-home = os.path.normpath(os.path.expanduser("~"))
-for x in sys.argv[1:]:
-    if os.path.isdir(x): dirs.setdefault(os.path.realpath(x), x)
-for d in dirs.values():
-    try: entries = list(os.scandir(d))
-    except OSError: continue
-    for e in entries:
-        p = e.path
-        # files Homebrew installed are brew doctor's job (libevent ships an `env python` script nobody runs)
-        if "/Cellar/" in os.path.realpath(p): continue
-        if not os.path.exists(p):
-            if os.path.islink(p):
-                groups.setdefault(("-", d), set()).add(e.name)
-                # what was removed, so people know whose leftovers these are: Python.framework, Foo.app, node_modules/quicktype
-                t = os.path.normpath(os.path.join(d, os.readlink(p)))
-                m = re.search(r"[^/]+\.(?:framework|app)|node_modules/(?:@[^/]+/)?[^/]+", t)
-                t = m.group(0) if m else os.path.dirname(t)
-                gone.setdefault(d, set()).add("~" + t[len(home):] if t.startswith(home + "/") else t)
-            continue
-        if not os.path.isfile(p) or not os.access(p, os.X_OK): continue
-        try:
-            with open(p, "rb") as f: head = f.readline(256)
-        except OSError: continue
-        if not head.startswith(b"#!"): continue
-        n += 1
-        args = head[2:].decode("utf-8", "replace").split()
-        if not args: continue
-        if os.path.basename(args[0]) == "env":
-            rest = [a for a in args[1:] if not a.startswith("-") and "=" not in a]
-            if not rest or shutil.which(rest[0]): continue
-            name = rest[0]
-        elif os.access(args[0], os.X_OK): continue
-        else: name = os.path.basename(args[0])
-        uv = re.search(r"/uv/tools/([^/]+)/", os.path.realpath(p) + " " + args[0])
-        hint = "pipx reinstall-all" if "/pipx/venvs/" in os.path.realpath(p) else f"uv tool install --reinstall {uv.group(1)}" if uv else "-"
-        groups.setdefault((name, hint), set()).add(e.name)
-print(n)
-for (name, hint), names in sorted(groups.items()):
-    names = sorted(names)
-    print(name, hint, ", ".join(names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""), ", ".join(sorted(gone.get(hint, ()))), sep="\t")
-PY
-)
+  CMDS=$(python3 -c "$MACUP_PY" commands "$HOME/.local/bin" "$HOME/.npm-global/bin" /opt/homebrew/bin /usr/local/bin </dev/null 2>/dev/null)
   if [ -z "$CMDS" ]; then :   # the scan itself failed: no false "all can start"
   elif [ -z "$(printf '%s\n' "$CMDS" | tail -n +2)" ]; then ok 'Commands: all %s scripts in your bin folders can start' "$(printf '%s\n' "$CMDS" | head -1)"
   else
@@ -140,58 +89,12 @@ if task check.gh && have gh && [ -s "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.
 fi
 # signing certificates: Xcode says nothing until the build fails on the day one expires
 if task check.certs && have security && have openssl && have python3; then
-  CE=$(security find-identity -v -p codesigning 2>/dev/null | python3 -c '
-import datetime, re, subprocess, sys
-names = set(re.findall(r"\x22([^\x22]+)\x22", sys.stdin.read()))
-if not names: sys.exit()
-pems = re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", subprocess.run(["security", "find-certificate", "-a", "-p"], capture_output=True, text=True).stdout, re.S)
-soon, newest = 30 * 86400, {}
-def x(pem, *a): return subprocess.run(["openssl", "x509", "-noout", *a], input=pem, capture_output=True, text=True)
-for pem in pems:
-    m = re.search(r"^\s*commonName\s*=\s*(.+)$", x(pem, "-subject", "-nameopt", "multiline").stdout, re.M)   # one field per line: a comma in the name stays
-    name = m.group(1).strip() if m else ""
-    if name not in names or x(pem, "-checkend", "0").returncode != 0: continue   # already expired: it signs nothing, Keychain Access shows it
-    end = datetime.datetime.strptime(x(pem, "-enddate").stdout.strip().split("=")[1], "%b %d %H:%M:%S %Y %Z")
-    if name not in newest or end > newest[name][0]: newest[name] = (end, pem)   # renewed in Xcode: same name, the newer one counts
-for name in sorted(newest):
-    if x(newest[name][1], "-checkend", str(soon)).returncode != 0: print(name)' 2>/dev/null)
+  CE=$(security find-identity -v -p codesigning 2>/dev/null | python3 -c "$MACUP_PY" certs-expiring 2>/dev/null)
   [ -n "$CE" ] && { warn 'Signing certificates that expire within 30 days: %s — renew them in Xcode → Settings → Accounts' "$(cnt "$CE")"; lines "$CE"; }
 fi
 # an app that keeps crashing: the reports are in ~/Library/Logs/DiagnosticReports, and in Retired/ once macOS has sent them
 if task check.crashes && have python3 && [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
-  CR=$(python3 -c '
-import collections, datetime, glob, json, os, re, time
-home = os.path.expanduser("~")
-d = home + "/Library/Logs/DiagnosticReports"
-now = time.time()
-apps, system, seen = collections.Counter(), 0, set()
-def mine(path): return path.startswith("/Applications/") or path.startswith(home + "/Applications/")
-for f in sorted(glob.glob(d + "/*.ips") + glob.glob(d + "/Retired/*.ips") + glob.glob(d + "/*.crash") + glob.glob(d + "/Retired/*.crash")):
-    base = os.path.basename(f)
-    if base in seen or base.startswith("ExcUserFault_"): continue
-    seen.add(base)
-    try:
-        text = open(f, errors="replace").read()
-        when, name, path = os.path.getmtime(f), re.sub(r"[-_][0-9]{4}-[0-9][0-9]-[0-9][0-9].*", "", base), ""
-        if f.endswith(".ips"):
-            head, _, body = text.partition("\n")
-            h = json.loads(head)
-            if str(h.get("bug_type")) != "309": continue
-            name = h.get("app_name") or h.get("name") or name
-            try: when = datetime.datetime.strptime(h["timestamp"], "%Y-%m-%d %H:%M:%S.%f %z").timestamp()
-            except Exception: pass
-            m = re.search(r"\x22procPath\x22\s*:\s*(\x22(?:[^\x22\\]|\\.)*\x22)", body)
-            path = json.loads(m.group(1)) if m else ""
-        else:
-            m = re.search(r"^Path:\s+(.+)$", text, re.M)
-            path = m.group(1).strip() if m else ""
-    except Exception: continue
-    if now - when > 7 * 86400: continue
-    if mine(path): apps[name] += 1
-    else: system += 1
-print("S", system)
-for n, c in apps.most_common():
-    if c >= 3: print("A", c, n)' 2>/dev/null)
+  CR=$(python3 -c "$MACUP_PY" crashes 2>/dev/null)
   CRA=$(printf '%s\n' "$CR" | awk '$1 == "A" {n=$2; $1=$2=""; sub(/^ +/,""); printf "%s ×%d\n", $0, n}' | head -5 | paste -sd, - | sed 's/,/, /g')
   CRS=$(printf '%s\n' "$CR" | awk '$1 == "S" {print $2}')
   [ -n "$CRA" ] && info 'Crashed 3 or more times in the last 7 days: %s' "$CRA"

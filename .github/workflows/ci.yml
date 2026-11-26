@@ -25,6 +25,10 @@ jobs:
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
           shellcheck -s bash -S warning macup install.sh build.sh tests/*.sh tools/*.sh
+      - name: Python helpers
+        run: |
+          python3 tests/test_helpers.py
+          pipx run ruff check --select F src/py tests/*.py
 
   macos:
     strategy:

@@ -42,7 +42,7 @@ case "$1" in
 esac
 snap=0; while [ "$snap" -lt "${FAKE_SNAPS:-0}" ]; do snap=$((snap + 1)); echo "com.apple.TimeMachine.2026-11-0$snap-101010.local"; done
 FAKE
-      # Homebrew: every call is logged in the home; outdated answers from $HOME/.fake/brew-{formulae,casks,greedy},
+      # Homebrew: every call is logged in the home; outdated and list answer from $HOME/.fake/brew-{formulae,casks,greedy,list},
       # `update` prints a line that is not UTF-8 with FAKE_BREW_BYTES and sleeps FAKE_BREW_SLEEP seconds, `upgrade` exits with FAKE_BREW_FAIL
       brew) cat <<'FAKE' ;;
 #!/bin/bash
@@ -53,14 +53,17 @@ case "$1" in
   update) echo '==> Updating Homebrew...'; [ -z "${FAKE_BREW_BYTES:-}" ] || printf 'caf\351 is not UTF-8\nafter it\n'; [ -z "${FAKE_BREW_SLEEP:-}" ] || exec sleep "$FAKE_BREW_SLEEP" ;;   # exec: no shell left to report the kill
   upgrade) printf '==> Upgrading \033[1m2\033[0m outdated packages\r\n'; exit "${FAKE_BREW_FAIL:-0}" ;;
   outdated) case "$*" in *greedy*) list=greedy ;; *--cask*) list=casks ;; *) list=formulae ;; esac; cat "$HOME/.fake/brew-$list" 2>/dev/null ;;
+  list) cat "$HOME/.fake/brew-list" 2>/dev/null ;;   # the casks brew installed (update.apps)
 esac
 exit 0
 FAKE
-      # sudo: logged in the home; `sudo -n true` (a password is cached) exits with FAKE_SUDO_RC, 1 by default
+      # sudo: logged in the home; `sudo -n true` (a password is cached) exits with FAKE_SUDO_RC, 1 by default;
+      # `sudo -v` (the password asked for) with FAKE_SUDO_ASK_RC, 0 by default
       sudo) cat <<'FAKE' ;;
 #!/bin/bash
 echo "sudo $*" >>"$HOME/sudo.log"
 [ "$1 $2" = "-n true" ] && exit "${FAKE_SUDO_RC:-1}"
+[ "$1" = -v ] && exit "${FAKE_SUDO_ASK_RC:-0}"
 exit 0
 FAKE
       *) echo "fakes: no fake $tool" >&2; return 1 ;;
@@ -68,3 +71,37 @@ FAKE
     chmod +x "$dir/$tool"
   done
 }
+
+# updates unit: fakes for the updaters (claude, npm, mas, pipx…), written into DIR
+#   answering DIR tool…   each answers from $HOME/.fake/<tool>/<key>, where the key is all its arguments ("/" read as "_")
+#                         or, when nothing is there for those, the first one: <key> is printed, <key>.rc is the exit status,
+#                         <key>.then is sourced afterwards (to change later answers), <key>.sleep holds seconds to wait.
+#                         A call with nothing to print is an action and goes into $HOME/calls.log, so the files a run
+#                         leaves say what it changed. curl copies $HOME/.fake/cask.json to its -o file, or fails.
+answering(){
+  local dir=$1 tool; shift; mkdir -p "$dir"
+  for tool in "$@"; do
+    if [ "$tool" = curl ]; then cat <<'FAKE'
+#!/bin/bash
+echo "curl $*" >>"$HOME/calls.log"
+while [ $# -gt 0 ]; do [ "$1" = -o ] && target=$2; shift; done
+[ -f "$HOME/.fake/cask.json" ] && [ -n "$target" ] && cp "$HOME/.fake/cask.json" "$target" || exit 22
+FAKE
+    else cat <<'FAKE'
+#!/bin/bash
+tool=${0##*/} all="$*"; dir="$HOME/.fake/$tool" key=$1
+for try in "${all//\//_}" "$1"; do
+  for suffix in '' .rc .then .sleep; do [ -e "$dir/$try$suffix" ] && { key=$try; break 2; }; done
+done
+if [ -f "$dir/$key" ]; then cat "$dir/$key"
+else where=""; [ "$(pwd -P)" = "$(cd "$HOME" && pwd -P)" ] && where=" (in ~)"; echo "$tool $*$where" >>"$HOME/calls.log"; fi
+[ -f "$dir/$key.then" ] && . "$dir/$key.then"
+[ -f "$dir/$key.sleep" ] && exec sleep "$(cat "$dir/$key.sleep")"
+exit "$(cat "$dir/$key.rc" 2>/dev/null || echo 0)"
+FAKE
+    fi >"$dir/$tool"
+    chmod +x "$dir/$tool"
+  done
+}
+# answer HOME tool key text: what the fake <tool> prints for <key> (see answering)
+answer(){ mkdir -p "$1/.fake/$2"; printf '%s\n' "$4" >"$1/.fake/$2/$3"; }

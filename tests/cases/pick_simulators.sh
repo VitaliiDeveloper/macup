@@ -79,18 +79,31 @@ if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" co
 else echo "SKIP no node: node is installed here"; fi
 
 # --- App Store: the list comes first, then one app at a time with its own result; no password means nothing runs
-# mas and sudo are exported functions: macup puts /opt/homebrew/bin first in PATH, so a fake file would lose to the real mas
-home="$work/mas"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
-mas(){ case $1 in outdated) printf '        1  Foo          (1.0    -> 1.1)\n123456789  Bar Baz Pro  (2.10.3 -> 3.0)\n' ;; upgrade) echo "mas $*" >>"$HOME/mas.log"; [ "$2" = 1 ] ;; esac; }
-sudo(){ [ -z "$NOSUDO" ]; }
-export -f mas sudo
-env HOME="$home" macup_run update --only update.mas --no-color </dev/null >"$work/mas.out" 2>&1
+# file fakes and MACUP_PATH=keep: macup would otherwise put /opt/homebrew/bin, with a real mas in it, first in PATH
+home="$work/mas"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; answering "$home/bin" mas; fakes "$home/bin" sudo
+answer "$home" mas outdated "$(printf '        1  Foo          (1.0    -> 1.1)\n123456789  Bar Baz Pro  (2.10.3 -> 3.0)')"; echo 1 >"$home/.fake/mas/upgrade 123456789.rc"
+mas_env=(HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin")
+env "${mas_env[@]}" FAKE_SUDO_RC=0 macup_run update --only update.mas --no-color </dev/null >"$work/mas.out" 2>&1
 grep -q '^      Bar Baz Pro (2.10.3 → 3.0)$' "$work/mas.out" && grep -q '✓ App Store: Foo (1.0 → 1.1)$' "$work/mas.out" \
   && grep -q '✗ App Store: updates not installed: Bar Baz Pro (2.10.3 → 3.0) — open the App Store' "$work/mas.out" \
-  && [ "$(cat "$home/mas.log")" = "$(printf 'mas upgrade 1\nmas upgrade 123456789')" ] && pass "App Store: list, then each app with its result" \
-  || { fail "App Store update"; grep 'App Store\|→' "$work/mas.out"; cat "$home/mas.log" 2>/dev/null; }
-rm -f "$home/mas.log"; env NOSUDO=1 HOME="$home" macup_run update --only update.mas --no-color </dev/null >"$work/mas.out" 2>&1
-grep -q 'updates not installed: 2 — they need your Mac password' "$work/mas.out" && [ ! -e "$home/mas.log" ] && pass "App Store: no password, mas never runs" \
+  && [ "$(cat "$home/calls.log")" = "$(printf 'mas upgrade 1\nmas upgrade 123456789')" ] && pass "App Store: list, then each app with its result" \
+  || { fail "App Store update"; grep 'App Store\|→' "$work/mas.out"; cat "$home/calls.log" 2>/dev/null; }
+rm -f "$home/calls.log"; env "${mas_env[@]}" FAKE_SUDO_ASK_RC=1 macup_run update --only update.mas --no-color </dev/null >"$work/mas.out" 2>&1
+grep -q 'updates not installed: 2 — they need your Mac password' "$work/mas.out" && [ ! -e "$home/calls.log" ] && pass "App Store: no password, mas never runs" \
   || { fail "App Store without a password"; grep 'App Store' "$work/mas.out"; }
-unset -f mas sudo
+
+# --- intended differences of the Swift build (docs/swift-port-plan.md): each build is held to its own behaviour
+# without python3 (here: no Command Line Tools, so /usr/bin/python3 does not count) bash skips npm globals; Swift reads npm's JSON itself
+home="$work/nopy"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; answering "$home/bin" npm node xcode-select
+answer "$home" xcode-select -p /nonexistent; answer "$home" npm outdated '{"aaa":{"current":"1.0.0","latest":"2.0.0"}}'
+env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" macup_run check --only update.npm --no-color </dev/null >"$work/nopy.out" 2>&1
+if [ "$MACUP_BUILD" = swift ]; then grep -q 'npm globals: 1 outdated' "$work/nopy.out"; else ! grep -q 'npm globals' "$work/nopy.out"; fi \
+  && pass "no python3: npm globals as the $MACUP_BUILD build does it" || { fail "no python3 ($MACUP_BUILD)"; cat "$work/nopy.out"; }
+# a step run from the home folder that is stopped: bash runs it in a subshell and loses its warning from the summary and --json
+home="$work/skillslow"; mkdir -p "$home/.config/macup" "$home/.agents"; printf 'language = en\n' >"$home/.config/macup/config"; echo '{"skills":{}}' >"$home/.agents/.skill-lock.json"
+answering "$home/bin" npx node; mkdir -p "$home/.fake/npx"; echo 30 >"$home/.fake/npx/-y.sleep"
+env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" MACUP_STEP_SECS=2 macup_run update --only update.skills --json </dev/null >"$work/skillslow.json" 2>/dev/null
+stopped=$(jq "$work/skillslow.json" 'print(sum("stopped after" in line for line in data["needs_attention"]))' 2>/dev/null)
+[ "$stopped" = "$([ "$MACUP_BUILD" = swift ] && echo 1 || echo 0)" ] && pass "a stopped step run from the home folder: its warning as the $MACUP_BUILD build counts it" \
+  || { fail "stopped step from the home folder ($MACUP_BUILD: $stopped)"; cat "$work/skillslow.json"; }
 

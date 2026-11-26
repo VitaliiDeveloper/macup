@@ -32,7 +32,8 @@ jobs:
       - name: Python helpers
         run: |
           [ ! -f tests/test_helpers.py ] || python3 tests/test_helpers.py
-          pipx run ruff check --select F $(git ls-files '*.py')
+          py=$(git ls-files 'src/*.py' 'tests/*.py')   # tools/ stays out, as before
+          [ -z "$py" ] || pipx run ruff check --select F $py
 
   swift:
     runs-on: macos-26

@@ -125,9 +125,11 @@ public final class SudoKeep {
         guard stopping == nil else { return }
         let semaphore = DispatchSemaphore(value: 0)
         stopping = semaphore
-        Thread { [shell] in
+        let loopShell = Shell(env: shell.env)   // its own environment: the main thread may still add to the run's
+        loopShell.signalsToReset = shell.signalsToReset
+        Thread { [loopShell] in
             while semaphore.wait(timeout: .now() + 50) == .timedOut {
-                if shell.tl(0, ["sudo", "-n", "-v"], stdin: .null, stdout: .null, stderr: .null) != 0 { break }
+                if loopShell.tl(0, ["sudo", "-n", "-v"], stdin: .null, stdout: .null, stderr: .null) != 0 { break }
             }
         }.start()
     }

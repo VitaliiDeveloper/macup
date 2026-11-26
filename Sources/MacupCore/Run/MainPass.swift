@@ -78,8 +78,7 @@ public enum MainPass {
             var text = "# " + i18n.format("macup report — %s", args: [Run.date("%Y-%m-%d %H:%M")]) + "\n\n"
             text += i18n.format("Mode: %s · macup %s · took %s", args: [run.mode, Env.version, run.took]) + "\n\n"
             text += "**" + i18n.translate("Interrupted: this report is incomplete.") + "**\n\n"
-            let body = FileManager.default.contents(atPath: run.report.body) ?? Data()
-            FileManager.default.createFile(atPath: run.report.path, contents: Data(text.utf8) + body + Data(Summary.rawSection(run).utf8))
+            run.writeReport(text)
         }
         let colors = run.out.colors
         Shell.writeText("\n\(colors.yellow)\(run.out.i18n.format("Interrupted. Report: %s", args: [run.env.paths.tildify(run.report.path)]))\(colors.reset)\n", to: 2)
@@ -88,6 +87,15 @@ public enum MainPass {
 }
 
 extension Run {
+    /// In place and through a symlink, as `>"$REPORT"` writes it.
+    func writeReport(_ header: String) {
+        let body = FileManager.default.contents(atPath: report.body) ?? Data()
+        let descriptor = open(report.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard descriptor >= 0 else { return }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        try? handle.write(contentsOf: Data(header.utf8) + body + Data(Summary.rawSection(self).utf8))
+    }
+
     func end(_ status: Int32) -> Never {
         measure.stop()
         try? out.body?.close()

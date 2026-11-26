@@ -44,8 +44,7 @@ enum Summary {
             text += "- " + i18n.translate("Needs attention: nothing") + "\n"
         }
         if !newer.isEmpty { text += "- " + i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand(run)]) + "\n" }
-        let body = FileManager.default.contents(atPath: run.report.body) ?? Data()
-        FileManager.default.createFile(atPath: run.report.path, contents: Data(text.utf8) + body + Data(rawSection(run).utf8))
+        run.writeReport(text)
         run.reportDone = true
 
         if let saved = run.quietDescriptor { dup2(saved, 1); close(saved) }
@@ -95,7 +94,7 @@ enum Summary {
         out.info("Full history: macup history")
     }
 
-    private static func number(_ text: String) -> Int64 { Int64(text) ?? 0 }
+    private static func number(_ text: String) -> Int64 { Int64(text.trimmingCharacters(in: .whitespaces)) ?? 0 }
 
     static func rawSection(_ run: Run) -> String {
         guard let raw = FileManager.default.contents(atPath: run.report.raw), !raw.isEmpty else { return "" }

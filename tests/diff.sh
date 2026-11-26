@@ -181,7 +181,15 @@ upd-agy-update|agy|$upd_path|update --only update.agy
 upd-agy-fails|agyfail|$upd_path|update --only update.agy
 upd-all-check|everything|$upd_path|check --only update.* --enable update.gem
 upd-all-update|everything|$upd_path FAKE_SUDO_RC=0|update --only update.* --enable update.gem
-upd-all-json|everything|$upd_path FAKE_SUDO_RC=0|update --only update.* --json"
+upd-all-json|everything|$upd_path FAKE_SUDO_RC=0|update --only update.* --json
+upd-macos-check|macos|$upd_path|check --only check.macos_updates
+upd-macos-json|macos|$upd_path|check --only check.macos_updates --json
+upd-macos-labels|macoslabels|$upd_path|update --only check.macos_updates
+upd-macos-none|macosnone|$upd_path|check --only check.macos_updates
+upd-macos-timeout|macosslow|$upd_path|check --only check.macos_updates
+upd-macos-offline|macosoffline|$upd_path|check --only check.macos_updates
+upd-macos-offline-rc0|macosnonet|$upd_path|check --only check.macos_updates
+upd-macos-missing||$upd_path|check --only check.macos_updates"
 
 upd_tools(){ local home=$1; shift; answering "$home/.fake/bin" "$@"; }
 fix_claude(){ upd_tools "$1" claude npm node; mkdir -p "$1/.claude/plugins"
@@ -238,6 +246,18 @@ fix_grokbrew(){ fix_grok "$1"; answer "$1" grok 'update --check --json' '{"curre
 fix_grokcurrent(){ fix_grok "$1"; answer "$1" grok 'update --check --json' '{"currentVersion":"1.0.77","latestVersion":"1.0.77","installer":"internal"}'; }
 fix_agy(){ upd_tools "$1" agy; answer "$1" agy --version 1.2.0; echo 'echo 1.3.0 >"$HOME/.fake/agy/--version"' >"$1/.fake/agy/update.then"; }
 fix_agyfail(){ fix_agy "$1"; rm "$1/.fake/agy/update.then"; echo 1 >"$1/.fake/agy/update.rc"; }
+su_head=$'Software Update Tool\n\nFinding available software'
+fix_macos(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nSoftware Update found the following new or updated software:
+* Label: Command Line Tools for Xcode-16.0\n\tTitle: Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, 
+* Label: macOS Sequoia 15.1-24B83\n\tTitle: macOS Sequoia 15.1, Version: 15.1, Size: 6283533KiB, Recommended: YES, Action: restart, 
+* Label: Safari18.1VenturaAuto-18.1\n\tTitle: Safari, Version: 18.1, Size: 160000KiB, Recommended: YES, 
+* Label: BridgeOSUpdateCustomer\n  Title: BridgeOS\n* Label: Blank-1\n\tTitle: Blank, Version: , Size: 1KiB, '; }
+fix_macoslabels(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nAn error occurred reading one catalog\n * Label: Command Line Tools for Xcode-16.0\n\t* Label: macOS Sequoia 15.1-24B83'; }
+fix_macosnone(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nNo new software available.'; }
+fix_macosslow(){ fix_macos "$1"; echo 124 >"$1/.fake/softwareupdate/-l.rc"; }
+fix_macosoffline(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"; echo 1 >"$1/.fake/softwareupdate/-l.rc"
+  echo "echo 'Software Update Tool: could not reach the server' >&2" >"$1/.fake/softwareupdate/-l.then"; }
+fix_macosnonet(){ upd_tools "$1" softwareupdate; answer "$1" softwareupdate -l "$su_head"$'\nNO INTERNET connection'; }
 fix_everything(){ fix_brew "$1"; fix_claude "$1"; fix_npm "$1"; fix_skills "$1"; fix_mas "$1"; fix_apps "$1"; fix_simple "$1"; fix_grok "$1"; fix_agy "$1"; }
 
 # commands unit

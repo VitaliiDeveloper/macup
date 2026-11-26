@@ -197,6 +197,21 @@ final class UpdatesTests: XCTestCase {
         for (list, expected) in zip(lists, bash) { XCTAssertEqual(list.max(by: Updates.versionOrder), expected, "\(list)") }
     }
 
+    func testMacOSTitlesAsAwkShortensThem() throws {
+        let titles = ["Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, ", "macOS Sequoia 15.1, Version: 15.1, Size: 1",
+                      "Safari, Version: 18.1", "BridgeOS", "Blank, Version: , Size: 1", "", ", Version: 2", "A, Version: 1, Version: 2",
+                      "Café, Version: é", "X, Version: 1.0,2", "Tools 16.0.1, Version: 16.0"]
+        let bash = try BashOracle.run(titles.map { "printf '%s\\n' \(BashOracle.quoted($0)) | awk -F', Version: ' '{v=$2; sub(/,.*/, \"\", v); print (v == \"\" || index($1, v)) ? $1 : $1 \" \" v}'" })
+        for (title, expected) in zip(titles, bash) { XCTAssertEqual(Updates.title(title), expected, title) }
+    }
+
+    func testMacOSOfflineAsGrepFindsIt() throws {
+        let texts = ["No new software available.", "Software Update Tool: could not reach the server", "ERROR", "Not Connected", "no\ninternet",
+                     "No Internet connection", "unable  to", "OffLine", "terror", "", "Unable to"]
+        let bash = try BashOracle.run(texts.map { "printf '%s\\n' \(BashOracle.quoted($0)) | grep -qiE 'error|could not|unable to|not connected|no internet|offline' && echo yes || echo no" })
+        for (text, expected) in zip(texts, bash) { XCTAssertEqual(Updates.saysOffline(text) ? "yes" : "no", expected, text) }
+    }
+
     func testJSONReaderRefusesWhatPythonRefuses() {
         let deep = String(repeating: "[", count: 5000) + String(repeating: "]", count: 5000)
         for bad in ["", "{", "[1,]", "{\"a\":1,}", "01", "1.", ".5", "\"tab\there\"", "{\"a\" 1}", "[1] [2]", "tru", "\"\\x\"", "\"\\u+abc\"", "\u{FEFF}{}", deep] {

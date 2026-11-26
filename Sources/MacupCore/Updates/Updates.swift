@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// updates.sh: every update.* task, in the order bash runs them.
+/// updates.sh: every update.* task, in the order bash runs them, then check.macos_updates.
 enum Updates {
     static func run(_ run: Run) {
         guard run.wantsUpdates else { return }
@@ -22,6 +22,7 @@ enum Updates {
         if run.task("update.grok"), shell.have("grok") { grok(run) }
         if run.task("update.agy"), shell.have("agy"), homeBin(run, "agy") { agy(run, later: &later) }
         if !later.isEmpty { run.out.info("Not checked in this mode, updated by macup update: %s", later.joined(separator: ", ")) }
+        if run.task("check.macos_updates") { macOS(run) }
     }
 
     static func brew(_ run: Run) {
@@ -81,8 +82,9 @@ enum Updates {
         Bash.substitution(run.shell.capture(argv, stdin: .inherit).output)
     }
 
-    /// `$(tl seconds tool… 2>/dev/null)`: what the tool printed before it ended or was stopped, and its status (124 when stopped).
-    static func timedOutput(_ run: Run, _ seconds: Int, _ argv: [String]) -> (status: Int32, text: String) {
+    /// `$(tl seconds tool… 2>/dev/null)`, or `2>&1` with `errors`: what the tool printed before it ended or was stopped,
+    /// and its status (124 when stopped).
+    static func timedOutput(_ run: Run, _ seconds: Int, _ argv: [String], errors: Bool = false) -> (status: Int32, text: String) {
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { return (127, "") }
         var data = Data()
@@ -92,7 +94,8 @@ enum Updates {
             data = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true).readDataToEndOfFile()
             drained.signal()
         }.start()
-        let status = run.shell.tl(seconds, argv, stdout: .fd(fds[1]), stderr: .null)
+        // .fd rather than .stdout: a missing tool's "command not found" goes into the capture, as with 2>&1
+        let status = run.shell.tl(seconds, argv, stdout: .fd(fds[1]), stderr: errors ? .fd(fds[1]) : .null)
         close(fds[1])
         drained.wait()
         return (status, Bash.substitution(String(decoding: data, as: UTF8.self)))

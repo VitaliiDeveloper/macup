@@ -29,7 +29,7 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 3. **Whole runs are routed, never split.** The Swift binary runs a command or a run itself only when every task it would touch is ported. Otherwise it hands the whole run to the embedded bash build (see "Routing"). Nothing ships half and half: the hybrid exists only on `swift/main`, for testing.
 4. **Nothing is ported blind.** A unit counts as done when the runs that cover its tasks go through Swift and pass both tests.
 5. **Sequential where pieces depend on each other, parallel where they do not.** A parallel wave starts only after the work it builds on is merged into `swift/main`.
-6. **Foundation only:** Swift 5.9 tools and no third-party packages. The deployment target is decided under "Decisions for the owner".
+6. **Foundation only:** Swift 5.9 tools, macOS 13 deployment target, no third-party packages.
 7. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each fix is merged into `swift/main` and adds a line to "Bash fixes to carry over". A unit that ports the touched code ticks its line. This list is a checklist item on every merge (see "Every pull request").
 
 ## Routing
@@ -237,7 +237,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 - `tests/run.sh` stays, minus the bash-only tests.
 - `install.sh` and the bootstrap stay bash.
 
-**Docs.** README requirements and install options (curl and Homebrew; see "Decisions for the owner" about downloads from a browser), CHANGELOG 3.0.0 with the intended differences.
+**Docs.** README requirements and install options (curl and Homebrew only; see "Decisions"), CHANGELOG 3.0.0 with the intended differences.
 
 ### Phase 6: final review and release (coordinator)
 
@@ -266,17 +266,11 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 - **State that bash shares through globals and the environment.** It becomes typed run state, never a re-read file. For example, `HOMEBREW_NO_AUTO_UPDATE` must still hold for `brew doctor` and `brew cleanup -n` later in the run.
 - **Regex literals need macOS 13.** Below that, use `NSRegularExpression`.
 
-## Decisions for the owner
+## Decisions (taken 2026-11-26)
 
-1. **Deployment target.**
-   - macOS 12 matches today's README ("should work"), but no CI runner can test it, and regex literals are unavailable.
-   - macOS 13 allows regex literals and is still untested.
-   - Recommendation: 13, with the bootstrap keeping older Macs on 2.9.x.
-2. **Downloads from a browser.**
-   - curl and Homebrew downloads carry no quarantine attribute, so they run without notarization.
-   - A tarball downloaded in a browser is quarantined and, most likely, blocked without notarization (not verified).
-   - Either notarize (an Apple Developer account and a signing step in the release workflow), or have the README offer curl and Homebrew only.
-   - Recommendation: curl and Homebrew only for 3.0.0.
+1. **Deployment target: macOS 13.** Regex literals are available; newer targets add nothing a CLI needs. CI tests 15 and 26; 13 and 14 are built for but untested, and the README says so. The bootstrap keeps Macs older than 13 on the last 2.9.x.
+2. **Shipping: curl and Homebrew only for 3.0.0.** Neither sets the quarantine attribute, so no notarization is needed. The binary is ad hoc signed and `codesign -v` checks both slices. The README offers no browser download. Notarization (an Apple Developer account exists) can come later if a browser download is ever wanted.
+3. **Authority.** The owner lets the coordinator run every phase and merge each reviewed, green pull request into `swift/main` without asking. The final pull request into `main` and the 3.0.0 tag still wait for the owner's word.
 
 ## Bash fixes to carry over
 
@@ -286,4 +280,4 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 
 | Phase | Unit | Branch | PR | State |
 |---|---|---|---|---|
-| 0 | foundation and harness | `swift/foundation` | | not started |
+| 0 | foundation and harness | `swift/foundation` | | in progress |

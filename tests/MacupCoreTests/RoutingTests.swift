@@ -39,6 +39,8 @@ final class RoutingTests: XCTestCase {
         XCTAssertThrowsError(try Arguments.parse(["--lang"]))
         XCTAssertThrowsError(try Arguments.parse(["help", "bogus"])) { XCTAssertEqual($0 as? Arguments.Failure, .unknownCommand("bogus")) }
         XCTAssertEqual(try Arguments.parse(["--level=aggressive"]).level, 3)
+        XCTAssertTrue(try Arguments.parse(["--deep"]).dry)
+        XCTAssertFalse(try Arguments.parse(["update", "--deep"]).dry)
     }
 
     func testRoutes() throws {
@@ -57,7 +59,9 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(route("check tasks"), "tasks", "a one-off command runs before the check")
         XCTAssertEqual(route("self-update"), "self_update")
         XCTAssertEqual(route("schedule weekly"), "schedule")
-        for line in ["", "check", "all --only check.disk", "--deep", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
+        XCTAssertEqual(route("check --only check.disk"), "run")
+        XCTAssertEqual(route("all --only check.disk,update.brew,clean.derived_data --json"), "run")
+        for line in ["", "check", "all --only check.memory", "--deep", "check --deep --only check.disk", "clean --pick clean.derived_data:1", "last", "history --json", "reports", "config", "lang uk", "uninstall --yes",
                   "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
             XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }
@@ -85,8 +89,32 @@ final class RoutingTests: XCTestCase {
         XCTAssertFalse(route(["check", "--only", "check.disk,check.memory"], ["check.disk"]))
         XCTAssertFalse(route(["check", "--only", "chek.disk"], ["check.disk"]), "an unknown id goes to bash, which says so")
         XCTAssertFalse(route(["check"], ["check.disk"]))
-        XCTAssertTrue(route(["check"], Set(Tasks.all.filter(\.on).map(\.id))), "a full check once every default task is ported")
+        XCTAssertFalse(route(["check"], Set(Tasks.all.filter(\.on).map(\.id))), "opt-in tasks register what they find too")
+        XCTAssertTrue(route(["check"], Set(Tasks.all.map(\.id))), "a full check once every task is ported")
         XCTAssertFalse(route([], Set(Tasks.all.map(\.id))), "no command: the menu or the help, still bash")
+    }
+
+    func testRunsThatReachUnportedCodeGoToBash() throws {
+        let environment = try env()
+        let ported: Set<String> = ["run"], tasks: Set<String> = ["check.disk", "clean.derived_data"]
+        func swift(_ line: String, terminal: Bool = false, commands: Set<String> = ported, dryTasks: Set<String> = []) -> Bool {
+            let route = Router.route(line.split(separator: " ").map(String.init), env: environment, ported: commands, portedTasks: tasks,
+                                     dryTasks: dryTasks, terminal: terminal)
+            if case .swift = route { return true }
+            return false
+        }
+        XCTAssertFalse(swift("check --only clean.derived_data,clean.trash"), "an opt-in task off by default still registers what it finds")
+        XCTAssertTrue(swift("check --only clean.derived_data"))
+        XCTAssertFalse(swift("check --only clean.derived_data", terminal: true), "the pick at the end of a check")
+        XCTAssertTrue(swift("check --only clean.derived_data --quiet", terminal: true))
+        XCTAssertTrue(swift("check --only check.disk", terminal: true), "no cleanup, no pick")
+        XCTAssertTrue(swift("clean --only clean.derived_data", terminal: true))
+        XCTAssertTrue(swift("check --only clean.derived_data", terminal: true, commands: ["run", "pick"]))
+        XCTAssertFalse(swift("--deep --only check.disk"))
+        XCTAssertTrue(swift("--deep --only check.disk", commands: ["run", "deep"]))
+        XCTAssertFalse(swift("clean --pick clean.derived_data:1 --only clean.derived_data"))
+        XCTAssertTrue(swift("check --only clean.spm", dryTasks: ["clean.spm"]), "registered in Swift, listed by a check")
+        XCTAssertFalse(swift("clean --only clean.spm", dryTasks: ["clean.spm"]), "but not cleaned by it yet")
     }
 
     func testEnvironment() throws {

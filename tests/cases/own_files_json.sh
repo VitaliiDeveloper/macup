@@ -61,6 +61,21 @@ kill -TERM "$pid" 2>/dev/null; wait "$pid"; rc=$?
 report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 [ -n "$report" ] && grep -q 'agy is downloading' "$report" && grep -q 'incomplete' "$report" && pass "SIGTERM: the report keeps what the commands printed" || { fail "SIGTERM (rc=$rc)"; cat "$work/term.out"; }
 
+# the same in a step the Swift build runs itself: Ctrl-C while brew downloads, and a kill that waits for the step to end
+home="$work/intb"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; fakes "$work/intbin" brew sudo df
+brew_env=(HOME="$home" MACUP_PATH=keep PATH="$work/intbin:$PATH")   # started straight from here, so the pid is macup's
+brew_started(){ local tries; for tries in $(seq 1 100); do grep -q '^brew update' "$home/brew.log" 2>/dev/null && return; sleep 0.2; done; }
+set -m; env "${brew_env[@]}" FAKE_BREW_SLEEP=30 macup_run update --only update.brew --no-color </dev/null >"$work/intb.out" 2>&1 & pid=$!; set +m
+brew_started; kill -INT -- -"$pid" 2>/dev/null; wait "$pid"; rc=$?
+report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
+[ $rc = 130 ] && [ -n "$report" ] && grep -q 'Interrupted. Report: ~/Library/Logs/macup/macup_' "$work/intb.out" && grep -q 'Updating Homebrew' "$report" && grep -q 'incomplete' "$report" \
+  && [ ! -e "$home/Library/Application Support/macup/lock" ] && pass "Ctrl-C during brew update: the report keeps what brew printed, the lock is gone" || { fail "Ctrl-C during brew update (rc=$rc)"; cat "$work/intb.out" "$report"; }
+rm -rf "$home/Library/Logs/macup" "$home/brew.log"
+env "${brew_env[@]}" FAKE_BREW_SLEEP=3 macup_run update --only update.brew --no-color </dev/null >"$work/intb.out" 2>&1 & pid=$!
+brew_started; kill -TERM "$pid" 2>/dev/null; wait "$pid"; rc=$?
+report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
+[ $rc = 130 ] && grep -q 'incomplete' "$report" && [ "$(grep -c . "$home/brew.log")" = 1 ] && pass "SIGTERM: the run stops once the running step ends" || { fail "SIGTERM after a step (rc=$rc)"; cat "$work/intb.out" "$home/brew.log"; }
+
 # --- since the last run: swap that grew is not "something is filling the disk"
 home="$work/swp"; SW="$work/swpbin"; mkdir -p "$SW" "$home/.config/macup" "$home/Library/Application Support/macup"; printf 'language = en\n' >"$home/.config/macup/config"
 printf '#!/bin/bash\ncase "$*" in *vm.swapusage*) echo "total = 12288.00M  used = ${FAKE_SWAP_MB}.00M  free = 100.00M  (encrypted)" ;; *) exec /usr/sbin/sysctl "$@" ;; esac\n' >"$SW/sysctl"; chmod +x "$SW/sysctl"

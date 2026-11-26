@@ -78,7 +78,10 @@ enum Awk {
     }
 
     /// `$1` of a record with the default field separator (blanks, tabs).
-    static func firstField(_ record: String) -> String {
-        record.unicodeScalars.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map { String(String.UnicodeScalarView($0)) } ?? ""
+    static func firstField(_ record: String) -> String { field(record, 1) }
+
+    static func field(_ record: String, _ number: Int) -> String {
+        let fields = record.unicodeScalars.split(whereSeparator: { $0 == " " || $0 == "\t" })
+        return fields.count >= number ? String(String.UnicodeScalarView(fields[number - 1])) : ""
     }
 }

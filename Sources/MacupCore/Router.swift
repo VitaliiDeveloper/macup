@@ -1,3 +1,5 @@
+import Darwin
+
 /// Which build runs an invocation (the plan's "Routing"). Whole runs are routed, never split: the Swift build runs a
 /// command itself only when it is ported and, for a run, every task it would do is ported. Anything else, a command line
 /// arguments.sh would reject included, goes whole to the bash build, which then says what it always says.
@@ -11,7 +13,9 @@ public enum Router {
     /// the bash self-update would write a script over the binary, the bash schedule would run the binary with /bin/bash.
     public static let unavailable: Set<Arguments.Command> = [.selfUpdate, .schedule]
 
-    public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks) -> Route {
+    /// `terminal`: stdin and stdout are a terminal, where a check ends with the pick.
+    public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks,
+                             dryTasks: Set<String> = Ported.dryTasks, terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
         guard let arguments = try? Arguments.parse(argv) else { return .bash }
         func settings() -> Settings {
             var config = Config(env: env)
@@ -27,8 +31,15 @@ public enum Router {
         }
         // no command word: a run (check, all, update, clean, or --deep alone); without one, the menu or the help
         guard arguments.action != nil || arguments.deep, ported.contains("run") else { return .bash }
+        // the deep scan is no task; --pick and the pick at the end of a check on a terminal come with phase 3
+        if arguments.deep, !ported.contains("deep") { return .bash }
+        if !arguments.pick.isEmpty, !ported.contains("pick") { return .bash }
         let settings = settings()
         guard !settings.bashArithmeticFails, Tasks.unknown("\(settings.only),\(arguments.cliSkip),\(arguments.cliEnable)").isEmpty else { return .bash }
-        return Selection(settings).selected.allSatisfy(portedTasks.contains) ? .swift(arguments) : .bash
+        // allowed, not only on: a cleaner registers what it finds for an opt-in task too, to be picked
+        let allowed = Tasks.all.map(\.id).filter(Selection(settings).allowed)
+        if arguments.dry, terminal, !arguments.quiet, !ported.contains("pick"), allowed.contains(where: { $0.hasPrefix("clean.") }) { return .bash }
+        let runnable = arguments.dry ? portedTasks.union(dryTasks) : portedTasks
+        return allowed.allSatisfy(runnable.contains) ? .swift(arguments) : .bash
     }
 }

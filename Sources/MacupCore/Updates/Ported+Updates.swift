@@ -1,3 +1,3 @@
 extension Ported {
-    static let updates = Unit(commands: [], tasks: [])
+    static let updates = Unit(commands: [], tasks: ["update.brew"])
 }

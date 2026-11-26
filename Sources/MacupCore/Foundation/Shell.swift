@@ -6,8 +6,8 @@ import Foundation
 /// A tool runs in macup's process group: Ctrl-C and sudo's password prompt reach it.
 public final class Shell {
     public let env: Env
-    /// The tools' environment (PATH with Homebrew first, LC_CTYPE).
-    public let vars: [String: String]
+    /// The tools' environment (PATH with Homebrew first, LC_CTYPE); a run adds what bash exports on the way.
+    public var vars: [String: String]
     /// Signals the run handles through a dispatch source (and so ignores): a tool gets them back at their default.
     public var signalsToReset: [Int32] = []
 
@@ -101,6 +101,7 @@ public final class Shell {
     public static func wait(_ pid: pid_t) -> Int32 {
         var st: Int32 = 0
         while waitpid(pid, &st, 0) < 0 { if errno != EINTR { return 127 } }
+        Interrupt.check()
         if st & 0x7F == 0 { return (st >> 8) & 0xFF }
         return 128 + (st & 0x7F)
     }
@@ -124,11 +125,16 @@ public final class Shell {
     /// everything it started (found through `ps`) get SIGTERM; whatever is still there 5 seconds later gets SIGKILL,
     /// unless the tool has ended by then. 127 when the tool is not there.
     public func tl(_ seconds: Int, _ argv: [String], stdin: Input = .inherit, stdout: Out = .inherit, stderr: Out = .inherit) -> Int32 {
+        let result = timed(seconds, argv, stdin: stdin, stdout: stdout, stderr: stderr)
+        return result.stopped ? 124 : result.status
+    }
+
+    func timed(_ seconds: Int, _ argv: [String], stdin: Input, stdout: Out, stderr: Out) -> (status: Int32, stopped: Bool) {
         guard let pid = spawn(argv, stdin: stdin, stdout: stdout, stderr: stderr) else {
             notFound(argv, stderr: stderr)
-            return 127
+            return (127, false)
         }
-        guard seconds > 0 else { return Shell.wait(pid) }
+        guard seconds > 0 else { return (Shell.wait(pid), false) }
         let ended = DispatchSemaphore(value: 0)
         let stopped = ManagedFlag()
         let watchdog = Thread { [self] in
@@ -143,7 +149,7 @@ public final class Shell {
         let rc = Shell.wait(pid)
         ended.signal()
         ended.signal()
-        return stopped.isSet ? 124 : rc
+        return (rc, stopped.isSet)
     }
 
     /// The process and every process below it, from `ps -Ao pid=,ppid=` (as core.sh's tl finds them).

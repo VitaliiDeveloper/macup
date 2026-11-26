@@ -6,10 +6,13 @@ public enum Ported {
         public var commands: [String] = []
         /// Task ids.
         public var tasks: [String] = []
+        /// Task ids that a run which deletes nothing (a check) may do: their candidates register, but cleaning them is not ported yet.
+        public var dryTasks: [String] = []
     }
 
     static let units: [Unit] = [run, cleanup, checks, updates, tools, cleaners, leftovers, commandsUnit]
 
     public static let commands: Set<String> = Set(units.flatMap(\.commands))
     public static let tasks: Set<String> = Set(units.flatMap(\.tasks))
+    public static let dryTasks: Set<String> = Set(units.flatMap(\.dryTasks))
 }

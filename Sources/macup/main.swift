@@ -14,6 +14,8 @@ do {
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()
+case .swift(let arguments) where arguments.command == nil:
+    MainPass.run(arguments, env: env, translations: Translations.json)
 case .swift(let arguments):
     exit(OneOff.run(arguments, env: env, translations: Translations.json))
 }

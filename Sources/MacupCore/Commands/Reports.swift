@@ -5,9 +5,7 @@ import Foundation
 enum Reports {
     /// `macup last`: the newest report without its command output, which can be thousands of lines of brew.
     static func last(_ context: OneOff.Context) -> Data {
-        let mds = markdown(context.env.logDir)
-        let order = Files.order(context.env)
-        guard let newest = mds.max(by: { older($0, than: $1, order) }) else {
+        guard let newest = Checks.glob(context.env.logDir, "macup_*.md").max(by: older) else {
             return Data((context.i18n.translate("No reports yet. Run: macup check") + "\n").utf8)
         }
         let lines = Files.records(FileManager.default.contents(atPath: newest) ?? Data())
@@ -24,7 +22,7 @@ enum Reports {
 
     static func run(_ context: OneOff.Context) -> Int32 {
         let env = context.env, i18n = context.i18n, out = context.out
-        let dir = env.logDir, mds = markdown(dir).sorted(by: Files.order(env))
+        let dir = env.logDir, mds = Checks.glob(dir, "macup_*.md")
         let kb = du(ownFiles(dir), context.shell)
         switch context.arguments.repArg {
         case "": break
@@ -64,24 +62,15 @@ enum Reports {
         return 0
     }
 
-    private static func markdown(_ dir: String) -> [String] {
-        names(dir).filter { $0.hasPrefix("macup_") && $0.hasSuffix(".md") }.map { "\(dir)/\($0)" }
-    }
-
     private static func ownFiles(_ dir: String) -> [String] {
-        names(dir).filter { $0.hasPrefix("macup_") && ($0.hasSuffix(".md") || $0.hasSuffix(".log")) }.map { "\(dir)/\($0)" }
-            .filter { Files.isRegular($0, followingLinks: false) }
-    }
-
-    private static func names(_ dir: String) -> [String] {
-        ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { !$0.hasPrefix(".") }
+        (Checks.glob(dir, "macup_*.md") + Checks.glob(dir, "macup_*.log")).filter { Files.isRegular($0, followingLinks: false) }
     }
 
     /// `ls -t` order: the newer file first, the same time by name.
-    private static func older(_ left: String, than right: String, _ order: (String, String) -> Bool) -> Bool {
+    private static func older(_ left: String, than right: String) -> Bool {
         let leftTime = mtime(left), rightTime = mtime(right)
         if leftTime != rightTime { return leftTime < rightTime }
-        return order(right, left)
+        return strcoll(right, left) < 0   // Checks.glob has set the collation
     }
 
     private static func mtime(_ path: String) -> Double {

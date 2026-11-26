@@ -20,7 +20,7 @@ enum Uninstall {
             if dir.hasSuffix(":$PATH\"") { dir = String(dir.dropLast(7)) }
             if let home = dir.range(of: "$HOME") { dir.replaceSubrange(home, with: env.home) }
             // the line also serves whatever else lives in that folder
-            let others = neighbours(dir, Files.order(env))
+            let others = neighbours(dir)
             if others.isEmpty { pathLines.append((rc, line)) }
             else { kept.append(i18n.format("Kept: the PATH line in %s, because %s also has %s", paths.tildify(rc), paths.tildify(dir), others)) }
         }
@@ -86,10 +86,9 @@ enum Uninstall {
     private static let marker = Data("# macup".utf8)
 
     /// Up to three other names in the folder, as `"$dir"/* "$dir"/.[!.]*` lists them, joined with ", ".
-    private static func neighbours(_ dir: String, _ order: (String, String) -> Bool) -> String {
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).sorted(by: order)
-        let visible = names.filter { !$0.hasPrefix(".") }, hidden = names.filter { $0.hasPrefix(".") && !$0.hasPrefix("..") && $0.count > 1 }
-        return (visible + hidden).filter { $0 != "macup" }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
+    private static func neighbours(_ dir: String) -> String {
+        let names = (Checks.glob(dir, "*") + Checks.glob(dir, ".[!.]*")).map { String($0.dropFirst(dir.count + 1)) }
+        return names.filter { $0 != "macup" }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
     }
 
     private static func temporaryFiles(_ tmpDir: String) -> [String] {

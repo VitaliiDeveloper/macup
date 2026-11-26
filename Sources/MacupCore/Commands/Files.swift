@@ -15,15 +15,4 @@ enum Files {
         if lines.last?.isEmpty == true { lines.removeLast() }
         return lines
     }
-
-    /// The order of bash's globs and of ls: the collation of LC_ALL, LC_COLLATE or LANG, not the bytes.
-    static func order(_ env: Env) -> (String, String) -> Bool {
-        let name = Env.nonEmpty(env.vars, "LC_ALL") ?? Env.nonEmpty(env.vars, "LC_COLLATE") ?? Env.nonEmpty(env.vars, "LANG") ?? "C"
-        guard let locale = newlocale(LC_COLLATE_MASK, name, nil) ?? newlocale(LC_COLLATE_MASK, "C", nil) else { return { $0.utf8.lexicographicallyPrecedes($1.utf8) } }
-        return { left, right in
-            let previous = uselocale(locale)
-            defer { uselocale(previous) }
-            return strcoll(left, right) < 0
-        }
-    }
 }

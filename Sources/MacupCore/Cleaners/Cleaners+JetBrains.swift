@@ -1,6 +1,5 @@
 import Foundation
 
-
 /// JetBrains IDEs keep one cache folder per product and version, and re-index after it is emptied. The app names differ
 /// (IntelliJ IDEA, PyCharm, …), so an open IDE is found by its open files.
 extension Cleaners {

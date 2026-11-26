@@ -273,6 +273,8 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 5. **Code rules** (ground rule 8) hold for every file the PR adds or changes.
 6. **The coordinator** reads the result and verifies a claim or two itself. It checks that no carry-over line touching the unit's code is left unticked, then merges.
 
+**Waiting for CI.** Many sessions share one GitHub account and its 5000 API calls an hour; on 2026-11-26 polling used them all up. Never `gh pr checks --watch`, `gh run watch` or `gh` in a loop. Use the app's PR status, or one `gh event listen --resource <pr url> --event com.github.pull_request.check_suite.status.changed.v1` and a single `gh pr view` after each event. On a 403 rate limit, wait for the reset.
+
 ## Known traps
 
 - **`HOME`, `PATH` and the hooks.** See `Env`.

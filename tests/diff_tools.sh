@@ -46,7 +46,7 @@ tool-crashes-json|crashes|$tools_path|check --only check.crashes --json
 tool-crashes-few|crashesfew|$tools_path|check --only check.crashes
 tool-all|toolsall|$tools_path FAKE_SUDO_RC=0|all --only $tools_ids"
 
-tools_fakes(){ local home=$1; shift; answering "$home/.fake/bin" "$@"; }
+tools_fakes(){ local home=$1 tool; shift; answering "$home/.fake/bin" "$@"; for tool; do mkdir -p "$home/.fake/$tool"; done; }
 
 fix_mcp(){ tools_fakes "$1" claude
   answer "$1" claude 'mcp list' "$(printf 'Checking MCP server health...\n\nfigma: https://mcp.figma.com/mcp (HTTP) - \033[32m✓ Connected\033[0m\nlinear: npx -y linear-mcp - \033[31m✗ Failed to connect\033[0m\nnotion: https://mcp.notion.com/mcp (HTTP) - ⚠️ Needs authentication\nsentry: https://mcp.sentry.dev/mcp (SSE) - ✔ connected\nlocal: ./server.js - ✘ failed\n')"; }
@@ -102,7 +102,7 @@ fix_commandsuv(){ local uv="$1/.local/share/uv/tools/sometool/bin"; mkdir -p "$u
   mkdir -p "$1/.npm-global"; ln -s ../.local/bin "$1/.npm-global/bin"; }   # the same folder twice: scanned once
 fix_commandsok(){ mkdir -p "$1/.local/bin"; printf '#!/bin/sh\n' >"$1/.local/bin/fine"; chmod +x "$1/.local/bin/fine"; }
 
-fix_docker(){ tools_fakes "$1" docker; : >"$1/.fake/docker/info"
+fix_docker(){ tools_fakes "$1" docker; answer "$1" docker info ''
   answer "$1" docker system "$(printf 'Images 2.4GB, 1.2GB (50%%) reclaimable\nContainers 12.3MB, 12.3MB (100%%) reclaimable\nLocal Volumes 3.2GB, 3.2GB (100%%) reclaimable\nBuild Cache 1.5GB, 1.5GB reclaimable')"
   answer "$1" docker volume "$(printf 'vol1\nvol2\n')"; }
 fix_dockernone(){ fix_docker "$1"; : >"$1/.fake/docker/system"; : >"$1/.fake/docker/volume"; }
@@ -127,7 +127,9 @@ fix_certs(){ tools_certs; tools_fakes "$1" security; cp "$work/certs.pem" "$1/.f
 fix_certsnone(){ fix_certs "$1"; printf '     0 valid identities found\n' >"$1/.fake/security/find-identity"; }
 
 # crash reports: .ips (a JSON line, then the report) and the older .crash, in DiagnosticReports and Retired
-tools_ago(){ date -u -v-"$1"d '+%Y-%m-%d %H:%M:%S.00 +0000'; }
+# one time for the whole script: the bash and the Swift run of a case must find the same files
+tools_now=$(date +%s)
+tools_ago(){ date -u -r $((tools_now - $1 * 86400)) "+%Y-%m-%d %H:%M:%S${2:-.00 +0000}"; }
 tools_ips(){ # file app bug_type days-ago procPath
   printf '{"app_name":"%s","timestamp":"%s","bug_type":"%s","name":"%s"}\n{"procPath":"%s","procName":"%s"}\n' "$2" "$(tools_ago "$4")" "$3" "$2" "$5" "$2" >"$1"; }
 fix_crashes(){ local reports="$1/Library/Logs/DiagnosticReports" index app
@@ -151,7 +153,7 @@ fix_crashes(){ local reports="$1/Library/Logs/DiagnosticReports" index app
   printf '{"bug_type":309,"timestamp":"%s"}\n{"procPath":"/Applications/Number Bug.app/x"}\n' "$(tools_ago 1)" >"$reports/Number Bug-2026-11-25.ips"
   printf '{"app_name":"Bad Stamp","bug_type":"309","timestamp":"yesterday"}\n{"procPath":"/Applications/Bad.app/x"}\n' >"$reports/Bad Stamp-1.ips"
   cp "$reports/Bad Stamp-1.ips" "$reports/Bad Stamp-2.ips"; touch -t 202001010000 "$reports/Bad Stamp-2.ips"
-  printf '{"app_name":"Zone App","bug_type":"309","timestamp":"%s"}\n{"procPath":"/Applications/Zone.app/x"}\n' "$(date -u -v-1d '+%Y-%m-%d %H:%M:%S.123456 +01:00')" >"$reports/Zone App-1.ips"
+  printf '{"app_name":"Zone App","bug_type":"309","timestamp":"%s"}\n{"procPath":"/Applications/Zone.app/x"}\n' "$(tools_ago 1 '.123456 +01:00')" >"$reports/Zone App-1.ips"
   printf 'not json\n{"procPath":"/Applications/Crashy App.app/x"}\n' >"$reports/Crashy App-broken.ips"
   printf '{"app_name":"Escape","bug_type":"309"}\n{"procPath":"/Applications/\\q.app"}\n' >"$reports/Escape-1.ips"
   tools_ips "$reports/.Crashy App-hidden.ips" 'Crashy App' 309 1 '/Applications/Crashy App.app/x'; mkdir -p "$reports/Folder.ips"; ln -s "$1/gone" "$reports/Dead-1.ips"; }

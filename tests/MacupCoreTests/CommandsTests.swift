@@ -85,6 +85,13 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(values.map { History.awkString(Awk.number($0)) }.joined(separator: "\n") + "\n", awk)
     }
 
+    func testVersionLineIsSeds() throws {
+        let lines = ["MACUP_VERSION=\"2.9.2\"", "MACUP_VERSION=\"3.0\"  # \"x\" y", "MACUP_VERSION=\"", "MACUP_VERSION=\"\"", " MACUP_VERSION=\"1\"",
+                     "MACUP_VERSION=1", "MACUP_VERSION=\"1.0\" tail"]
+        let bash = try BashOracle.run(lines.map { "printf '%s\\n' \(BashOracle.quoted($0)) | sed -n 's/^MACUP_VERSION=\"\\(.*\\)\"/\\1/p'; echo ." })
+        XCTAssertEqual(lines.map { (Version.versionLine($0).map { $0 + "\n" } ?? "") + "." }, bash)
+    }
+
     func testAnswersThatMeanYes() {
         XCTAssertEqual(["y", "Y", "т", "Т", "д", "Д", "yes", "n", ""].map(Terminal.isYes), [true, true, true, true, true, true, false, false, false])
     }

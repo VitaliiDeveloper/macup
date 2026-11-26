@@ -243,7 +243,9 @@ fix_everything(){ fix_brew "$1"; fix_claude "$1"; fix_npm "$1"; fix_skills "$1";
 # commands unit
 # open and the editor only say what they were asked; the reports fixture has a cut report, one in Ukrainian and one with no mode
 printf '#!/bin/bash\necho "open $*" >>"$HOME/open.log"\n' >"$work/bin/open"; printf '#!/bin/bash\necho "editor $*" >>"$HOME/editor.log"\n' >"$work/bin/editor"
-chmod +x "$work/bin/open" "$work/bin/editor"; fakes "$work/bin" launchctl
+# main's macup as the version check fetches it: $HOME/.fake/remote-macup, a failed download without it; other URLs are real
+printf '#!/bin/bash\nfor url; do :; done\ncase "$url" in */main/macup) ;; *) exec /usr/bin/curl "$@" ;; esac\necho "curl $url" >>"$HOME/curl.log"\ncat "$HOME/.fake/remote-macup" 2>/dev/null || exit 22\n' >"$work/bin/curl"
+chmod +x "$work/bin/open" "$work/bin/editor" "$work/bin/curl"; fakes "$work/bin" launchctl
 CASES="$CASES"'
 cmd-history-none|||history
 cmd-history|cmd_history||history
@@ -281,6 +283,16 @@ cmd-lang-bad|||lang xx
 cmd-lang-asked||ANSWERS=2|lang
 cmd-lang-asked-code|lang|ANSWERS=en|language
 cmd-lang-asked-nonsense||ANSWERS=5|lang
+cmd-newer|cmd_remote_newer||check --only check.self_update
+cmd-newer-json|cmd_remote_newer||check --only check.self_update --json
+cmd-newer-brew|cmd_remote_newer_brew|MACUP_AT=@H/../brew/bin/macup|check --only check.self_update
+cmd-newer-same|cmd_remote_same||check --only check.self_update
+cmd-newer-older|cmd_remote_older||check --only check.self_update
+cmd-newer-offline|||check --only check.self_update --no-color
+cmd-newer-asked-this-week|cmd_stamp_fresh||check --only check.self_update
+cmd-newer-asked-long-ago|cmd_stamp_stale||check --only check.self_update
+cmd-newer-no-repo|cmd_remote_newer|MACUP_REPO=__REPO__|check --only check.self_update
+cmd-newer-skipped|cmd_remote_newer||check --only check.disk
 cmd-uninstall-nothing|cmd_tmp|TMPDIR=@H/tmp/|uninstall
 cmd-uninstall-yes|cmd_uninstall|TMPDIR=@H/tmp/|uninstall --yes
 cmd-uninstall-yes-self|cmd_uninstall_self|TMPDIR=@H/tmp/ MACUP_AT=@H/.local/bin/macup|uninstall --yes --no-color
@@ -318,6 +330,15 @@ fix_cmd_reports_uk(){ fix_cmd_reports "$1"; touch -t 202611011000 "$1/Library/Lo
 fix_cmd_reports_kept(){ fix_cmd_reports "$1"; mkdir -p "$1/.config/macup"; printf 'keep_reports_days = 007\nkeep_reports = 0\n' >"$1/.config/macup/config"; }
 fix_cmd_reports_latin1(){ fix_cmd_reports "$1"; fix_latin1 "$1"; }
 fix_cmd_tmp(){ mkdir -p "$1/tmp"; }
+remote_macup(){ mkdir -p "$1/.fake"; printf '#!/bin/bash\n# macup\nMACUP_VERSION="%s"\nMACUP_VERSION="0.0.1"\n' "$2" >"$1/.fake/remote-macup"; }
+fix_cmd_remote_newer(){ remote_macup "$1" 9.9.9; }
+fix_cmd_remote_same(){ remote_macup "$1" 2.9.2; }
+fix_cmd_remote_older(){ remote_macup "$1" 2.10.0-beta; }   # sort -n reads 10-beta as 10: newer
+fix_cmd_remote_newer_brew(){ local prefix="$1/../brew" copy; [ "$build" = swift ] && copy=$MACUP_BIN || copy=$PWD/macup   # next to the home: not compared
+  rm -rf "$prefix"; mkdir -p "$prefix/Cellar/macup/3.0.0/bin" "$prefix/bin"; cp "$copy" "$prefix/Cellar/macup/3.0.0/bin/macup"
+  ln -s ../Cellar/macup/3.0.0/bin/macup "$prefix/bin/macup"; remote_macup "$1" 3.0.0; }
+fix_cmd_stamp_fresh(){ local state="$1/Library/Application Support/macup"; mkdir -p "$state"; echo 9.9.9 >"$state/last_version_check"; remote_macup "$1" 2.0.0; }
+fix_cmd_stamp_stale(){ fix_cmd_stamp_fresh "$1"; touch -t 202001010000 "$1/Library/Application Support/macup/last_version_check"; }
 # 2.9 copies are found by their version line; the build under test ($build of run()) is copied where it runs itself
 fix_cmd_uninstall(){ local home=$1
   mkdir -p "$home/tmp" "$home/.local/bin" "$home/.npm-global/bin" "$home/.config/macup" "$home/Library/Logs/macup" "$home/Library/Application Support/macup" \

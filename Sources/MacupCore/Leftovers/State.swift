@@ -44,14 +44,10 @@ extension Leftovers {
         init(interactive: Bool) { self.interactive = interactive }
     }
 
-    private static weak var owner: Run?
-    private static var current: State?
-
     public static func state(_ run: Run) -> State {
-        if let current, owner === run { return current }
+        if let state = run.leftovers { return state }
         let state = State(interactive: !run.arguments.quiet && isatty(0) == 1 && isatty(1) == 1)
-        owner = run
-        current = state
+        run.leftovers = state
         return state
     }
 

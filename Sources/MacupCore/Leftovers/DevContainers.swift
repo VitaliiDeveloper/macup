@@ -9,6 +9,30 @@ extension Leftovers {
         preconditionFailure("the dev container scan needs lsof, which comes with the pick")
     }
 
+    /// `app_for`: Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id
+    /// has an app: dev.app for dev.app.share, and for dev.app-LaunchAtLoginHelper.
+    static func appFor(_ run: Run, _ id: String) -> Bool {
+        var id = id
+        while true {
+            if !(Bash.lines(run.shell.capture(["mdfind", "kMDItemCFBundleIdentifier == '\(id)'c"]).output).first ?? "").isEmpty { return true }
+            guard let cut = id.unicodeScalars.lastIndex(where: { $0 == "." || $0 == "-" }) else { return false }
+            let up = String(id.unicodeScalars[..<cut])
+            guard up.contains(".") else { return false }
+            id = up
+        }
+    }
+
+    /// `newest`: the date of the container's newest file; the folder's own date and macOS's marker say when it was made.
+    static func newest(_ run: Run, _ container: String) -> String {
+        let times = run.shell.capture(["find", container, "-type", "f", "!", "-name", ".com.apple.containermanagerd.metadata.plist", "-exec", "stat", "-f", "%m", "{}", "+"])
+        var newest = Bash.lines(times.output).compactMap { Int(Awk.firstField($0)) }.max()
+        if newest == nil {
+            var info = stat()
+            if lstat(container, &info) == 0 { newest = info.st_mtimespec.tv_sec }
+        }
+        return Run.date("%F", time_t(newest ?? 0))
+    }
+
     private static let prefixPattern = try! NSRegularExpression(pattern: "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$")
 
     /// `dev_prefixes`: a prefix needs a dot and never names Apple's own apps.

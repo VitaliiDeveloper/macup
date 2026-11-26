@@ -59,7 +59,10 @@ fix_lo(){ local home=$1 library="$1/Library" support="$1/Library/Application Sup
   echo h >"$support/Comet/Default/History"; lo_prog "$support/Comet/Default/Cache" 4096; echo x >"$library/Perplexity/x"
   echo x >"$library/Containers/ai.perplexity.mac.Notif/x"; echo x >"$library/Group Containers/group.ai.perplexity.app/x"; echo x >"$library/Group Containers/7S8W4W365S.shared/x"
   echo mine >"$support/Downloader/x"; lo_app "$home/Apps/Downloader.app" local.vitalii.downloader; lo_prog "$support/Teamed/data" 64
-  echo x >"$library/Containers/com.teamed.dev.App/x"; mkdir -p "$home/.config/macup"; printf 'dev_container_prefixes = com.teamed.dev\n' >"$home/.config/macup/config"
+  echo x >"$library/Containers/com.teamed.dev.App/x"; mkdir -p "$home/.config/macup"
+  # sizes a clean run shows only in its total, each its own number of megabytes: containers, a system item's folder, a dev container
+  lo_prog "$library/Containers/ai.perplexity.mac.Notif/blob" 3072; lo_prog "$library/Group Containers/7S8W4W365S.shared/blob" 5120
+  lo_prog "$sys/Application Support/Teamed/svc/blob" 7168; lo_prog "$library/Containers/com.teamed.dev.App/blob" 9216; printf 'dev_container_prefixes = com.teamed.dev\n' >"$home/.config/macup/config"
 }
 # the same Mac after Comet was installed again: its updater, its data and its folders are the app's again
 fix_loapp(){ fix_lo "$1"; lo_app "$1/Applications/Comet.app" ai.perplexity.comet; }

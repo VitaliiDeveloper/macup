@@ -108,9 +108,10 @@ extension Leftovers {
         }
     }
 
-    /// `cap`: awk's toupper on the first character.
+    /// `cap`: awk's toupper on the first character. awk's substr cuts bytes, so a name that starts with a letter beyond ASCII
+    /// is an illegal byte sequence to awk in a UTF-8 locale, and it prints nothing.
     static func capitalized(_ text: String) -> String {
-        guard let first = text.unicodeScalars.first else { return "" }
+        guard let first = text.unicodeScalars.first, first.isASCII else { return "" }
         return Awk.upper(String(first)) + String(String.UnicodeScalarView(text.unicodeScalars.dropFirst()))
     }
 

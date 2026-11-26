@@ -256,7 +256,8 @@ norm(){ # file home
 run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,files}
   local build=$1 lang=$2 tty=$3 fix=$4 envs=$5 home="$work/home" out="$work/$1"; shift 5
   rm -rf "$home"; mkdir -p "$home"; [ -n "$fix" ] && "fix_$fix" "$home"
-  local vars=(HOME="$home" MACUP_LANG="$lang" MACUP_BUILD="$build" PATH="$PATH" MACUP_PATH=keep)
+  # bash runs python3, which on some Macs (Xcode's 3.9) leaves its bytecode in the fake home's Library/Caches/com.apple.python
+  local vars=(HOME="$home" MACUP_LANG="$lang" MACUP_BUILD="$build" PATH="$PATH" MACUP_PATH=keep PYTHONDONTWRITEBYTECODE=1)
   for word in $envs; do vars+=("${word//@H/$home}"); done
   if [ "$tty" = tty ]; then
     # the terminal's input stays open, with nothing in it: at its end script would echo a ^D somewhere into the output

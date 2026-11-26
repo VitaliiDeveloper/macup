@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # globals of tests/run.sh
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: static checks, commands, check and clean levels, AI tools, open apps.
 # --- static
 if bash_only "build, syntax, shellcheck"; then

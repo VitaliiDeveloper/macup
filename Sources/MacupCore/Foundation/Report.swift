@@ -67,11 +67,7 @@ public enum Tidy {
     /// Keeps the last `keep` lines of a file that has more than twice as many; the file stays the same file.
     static func trim(_ path: String, keep: Int) {
         defer { unlink(path + ".tmp") }
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue,
-              let contents = FileManager.default.contents(atPath: path) else { return }
-        let newlines = contents.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
-        guard newlines > keep * 2 else { return }
+        guard let contents = Bash.regularFileContents(path), Bash.lineCount(contents) > keep * 2 else { return }
         let tail = lastLines(contents, keep)
         guard let handle = FileHandle(forWritingAtPath: path) else { return }
         try? handle.truncate(atOffset: 0)

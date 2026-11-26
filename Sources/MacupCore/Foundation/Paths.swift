@@ -7,7 +7,7 @@ public struct Paths {
     public init(home: String) { self.home = home }
 
     public func tildify(_ path: String) -> String {
-        Bash.substitution(Bash.lines(stripEcho(path)).map { line -> String in
+        Bash.substitution(Bash.lines(Bash.echoed(path)).map { line -> String in
             guard let prefix = homePrefixLength(line) else { return line }
             return "~" + String(String.UnicodeScalarView(line.unicodeScalars.dropFirst(prefix)))
         }.joined(separator: "\n"))
@@ -15,16 +15,10 @@ public struct Paths {
 
     public func expand(_ path: String) -> String {
         let replacement = Self.sedReplacement(home, match: "~")
-        return Bash.substitution(Bash.lines(stripEcho(path)).map { line -> String in
+        return Bash.substitution(Bash.lines(Bash.echoed(path)).map { line -> String in
             guard line.unicodeScalars.first == "~" else { return line }
             return replacement + String(String.UnicodeScalarView(line.unicodeScalars.dropFirst()))
         }.joined(separator: "\n"))
-    }
-
-    /// What `echo "$1"` hands to sed, without the newline it adds (sed keeps lines as they come).
-    private func stripEcho(_ text: String) -> String {
-        let echoed = Bash.echo(text)
-        return echoed.isEmpty ? "" : String(String.UnicodeScalarView(echoed.unicodeScalars.dropLast()))
     }
 
     /// How many scalars at the start of the line match HOME read as a basic regular expression, nil when it does not match.

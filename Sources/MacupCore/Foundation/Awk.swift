@@ -74,9 +74,7 @@ enum Awk {
 
     /// The records awk reads from `echo "$1"`: the lines of the value, the newline echo adds ending the last one.
     static func records(echoing text: String) -> [String] {
-        let out = Bash.echo(text)
-        guard !out.isEmpty else { return [] }
-        return Bash.lines(String(out.unicodeScalars.dropLast()))
+        Bash.echo(text).isEmpty ? [] : Bash.lines(Bash.echoed(text))
     }
 
     /// `$1` of a record with the default field separator (blanks, tabs).

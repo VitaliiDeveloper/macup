@@ -83,7 +83,7 @@ public struct Env {
     }
 
     /// The variable when it is set and not empty, as bash's ${VAR:-default} reads it.
-    static func nonEmpty(_ vars: [String: String], _ key: String) -> String? {
+    public static func nonEmpty(_ vars: [String: String], _ key: String) -> String? {
         guard let value = vars[key], !value.isEmpty else { return nil }
         return value
     }

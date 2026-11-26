@@ -17,7 +17,7 @@ public struct RunLog {
     func append(_ text: String) {
         let fd = open(raw, O_WRONLY | O_CREAT | O_APPEND, 0o644)
         guard fd >= 0 else { return }
-        _ = text.withCString { Darwin.write(fd, $0, strlen($0)) }
+        Shell.writeText(text, to: fd)
         close(fd)
     }
 }
@@ -70,8 +70,7 @@ public extension Shell {
     }
 
     private func lineCount(_ path: String) -> Int {
-        guard let contents = FileManager.default.contents(atPath: path) else { return 0 }
-        return contents.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
+        FileManager.default.contents(atPath: path).map(Bash.lineCount) ?? 0
     }
 
     /// The word after the last "==> " at the start of a line, from line `from` on.

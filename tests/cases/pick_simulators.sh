@@ -1,9 +1,7 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # globals of tests/run.sh
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: picking after a check, simulators, npm without node, App Store.
 # --- picking after an interactive check
-# keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)
-until_done(){ local tries=0; while [ $tries -lt 240 ]; do grep -qE 'Report: |Звіт: |Отчёт: ' "$1" 2>/dev/null && return; sleep 0.5; tries=$((tries + 1)); done; }
 pick(){ # answer [confirm] → files deleted
   local home="$work/p"; tests/fixture.sh "$home"; (cd "$home" && find . -type f | sort) >"$work/pb"
   (sleep 2; printf '%s\n' "$1"; sleep 1; printf '%s\n' "${2:-}"; until_done "$work/po") | script -q /dev/null env HOME="$home" macup_run check --no-color --skip "$quick_skip" ${PL:+--lang $PL} >"$work/po" 2>&1

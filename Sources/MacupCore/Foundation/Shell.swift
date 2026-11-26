@@ -165,13 +165,18 @@ public final class Shell {
     private func notFound(_ argv: [String], stderr: Out) {
         let msg = "macup: \(argv.first ?? ""): command not found\n"
         switch stderr {
-        case .inherit, .stdout: _ = msg.withCString { write(2, $0, strlen($0)) }
+        case .inherit, .stdout: Shell.writeText(msg, to: 2)
         case .null: break
-        case .fd(let descriptor): _ = msg.withCString { write(descriptor, $0, strlen($0)) }
+        case .fd(let descriptor): Shell.writeText(msg, to: descriptor)
         case .file(let file):
             let descriptor = open(file, O_WRONLY | O_CREAT | O_APPEND, 0o644)
-            if descriptor >= 0 { _ = msg.withCString { write(descriptor, $0, strlen($0)) }; close(descriptor) }
+            if descriptor >= 0 { Shell.writeText(msg, to: descriptor); close(descriptor) }
         }
+    }
+
+    /// One write(2) of the text, as far as its first NUL byte.
+    static func writeText(_ text: String, to fd: Int32) {
+        _ = text.withCString { write(fd, $0, strlen($0)) }
     }
 }
 

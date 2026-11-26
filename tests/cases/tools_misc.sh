@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # globals of tests/run.sh
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: bump-formula, hanging step tree, certificates, crashes, sharing, PATH, MACUP_PATH=keep.
 # --- tools/bump-formula.sh: a fake curl and a fake git (it answers ls-remote, everything else goes to the real git) keep it off the network; the tap is a throwaway repository
 GIT=$(command -v git); TB="$work/bumpbin"; TAP="$work/tap"; mkdir -p "$TB" "$TAP/Formula"

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MacupCore
 
 /// Hands the invocation to the bash build: `exec /bin/bash /dev/fd/N args…` on the script written to an unlinked file.
 /// execve, not a child process, so macup keeps its pid (the lock, the watchdogs, the suite's kill), its terminal and its
@@ -19,7 +20,7 @@ enum BashExec {
     /// The script on a descriptor of its own, 10 or above: the script itself uses 3 and 4.
     private static func scriptDescriptor() -> Int32 {
         // /tmp when TMPDIR cannot take it: the bash build runs its one-off commands without a temp folder
-        let dirs = [ProcessInfo.processInfo.environment["TMPDIR"].flatMap { $0.isEmpty ? nil : $0 }, "/tmp"].compactMap { $0 }
+        let dirs = [Env.nonEmpty(ProcessInfo.processInfo.environment, "TMPDIR"), "/tmp"].compactMap { $0 }
         var template: [CChar] = []
         var writeDescriptor: Int32 = -1
         for dir in dirs where writeDescriptor < 0 {

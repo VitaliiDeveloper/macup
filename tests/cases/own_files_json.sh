@@ -1,8 +1,7 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154,SC2034  # globals of tests/run.sh; a wait loop that counts nothing
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: tidying, reports, Ctrl-C, swap, --json and --pick, --enable.
 # ============================ 2.9
-jq(){ python3 -c "import json,sys; data=json.load(open(sys.argv[1])); $2" "$1"; }   # file, python that reads data
 
 # --- macup tidies its own files on every run, a check too: old reports, too many reports, history, the schedule's log, temp files of killed runs
 home="$work/tidy"; LG="$home/Library/Logs/macup"; ST="$home/Library/Application Support/macup"; TT="$work/tidytmp"; mkdir -p "$LG" "$ST" "$TT" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
@@ -47,6 +46,7 @@ printf '#!/bin/bash\ncase "$1" in --version) echo 1.0 ;; update) echo "agy is do
 set -m   # its own process group, and SIGINT not ignored as it is for a background job without job control
 env HOME="$home" macup_run update --only update.agy --no-color </dev/null >"$work/int.out" 2>&1 & pid=$!
 set +m
+# shellcheck disable=SC2034  # waits, counts nothing
 for tries in $(seq 1 100); do [ -e "$home/started" ] && break; sleep 0.2; done
 kill -INT -- -"$pid" 2>/dev/null; wait "$pid"; rc=$?
 report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
@@ -55,6 +55,7 @@ report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 # the same for a terminal that closes (SIGHUP) or a kill (SIGTERM)
 home="$work/term"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; cp "$work/int/.local/bin/agy" "$home/.local/bin/agy"
 env HOME="$home" macup_run update --only update.agy --no-color </dev/null >"$work/term.out" 2>&1 & pid=$!
+# shellcheck disable=SC2034  # waits, counts nothing
 for tries in $(seq 1 100); do [ -e "$home/started" ] && break; sleep 0.2; done
 kill -TERM "$pid" 2>/dev/null; wait "$pid"; rc=$?
 report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)

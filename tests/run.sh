@@ -17,6 +17,7 @@ esac
 echo "testing the $MACUP_BUILD build: $build_path"
 # tests that only make sense for the script (its syntax, its own self-update, the installer, the schedule until phase 4)
 bash_only(){ [ "$MACUP_BUILD" = bash ] && return 0; echo "SKIP $* (bash build only)"; return 1; }
+# shellcheck disable=SC2034  # read by tests/cases/*.sh
 quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.go_mod,clean.sim_unavailable,clean.quicklook,clean.docker,clean.docker_images,clean.docker_containers,clean.brew_autoremove,check.*'
 
 # `running` asks pgrep which apps are open; a fake one answers from FAKE_RUNNING (command lines, one per line), so results never depend on this machine
@@ -42,15 +43,14 @@ deleted(){ # fixture-dir macup-args… → files the run deleted
   (cd "$home" && find . \( -type f -o -type l \) | sort) >"$home.a"
   comm -23 "$home.b" "$home.a" | grep -v -e '^./Library/Logs/macup/' -e '^./Library/Application Support/macup/'
 }
+# keeps the fake terminal open until macup has written its report (slow machines need longer than a fixed sleep)
+until_done(){ local tries=0; while [ $tries -lt 240 ]; do grep -qE 'Report: |Звіт: |Отчёт: ' "$1" 2>/dev/null && return; sleep 0.5; tries=$((tries + 1)); done; }
+jq(){ python3 -c "import json,sys; data=json.load(open(sys.argv[1])); $2" "$1"; }   # file, python that reads data
 
-. tests/cases/basics.sh
-. tests/cases/pick_simulators.sh
-. tests/cases/commands_uninstall.sh
-. tests/cases/runs_dev_containers.sh
-. tests/cases/system_schedule_install.sh
-. tests/cases/own_files_json.sh
-. tests/cases/stale_busy_docker.sh
-. tests/cases/tools_misc.sh
+for case_file in basics pick_simulators commands_uninstall runs_dev_containers system_schedule_install own_files_json stale_busy_docker tools_misc; do   # the order the suite has always run in
+  # shellcheck source=/dev/null
+  if [ -f "tests/cases/$case_file.sh" ]; then . "tests/cases/$case_file.sh"; else fail "tests/cases/$case_file.sh is missing"; fi
+done
 
 # --- leftovers of deleted apps
 tests/leftovers.sh || failed=1

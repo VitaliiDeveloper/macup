@@ -107,7 +107,7 @@ public struct Arguments: Equatable {
     /// unless --only names some.
     mutating func applyPick() {
         guard !pick.isEmpty else { return }
-        pick = "," + Bash.substitution(String(Bash.echo(pick).unicodeScalars.filter { $0 != " " })) + ","
+        pick = "," + Bash.echoWithoutSpaces(pick) + ","
         dry = false; doUpdate = false; doClean = true; action = "clean"
         if cliOnly.isEmpty { cliOnly = "clean.*" }
     }

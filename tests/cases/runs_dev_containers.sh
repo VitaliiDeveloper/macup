@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154,SC2088  # globals of tests/run.sh; the literal ~ is meant, as in the report and the installer
+# shellcheck disable=SC2154,SC2088  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh; SC2088: a literal ~ as users type it
 # Sourced by tests/run.sh: exit status, --quiet, --json, hangs, lock, --deep, Full Disk Access, dev containers.
 # --- exit status, --quiet, --json, a step that hangs, two runs at once
 home="$work/rc"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"

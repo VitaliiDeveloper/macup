@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154,SC2088  # globals of tests/run.sh; the literal ~ is meant, as in the report and the installer
+# shellcheck disable=SC2154,SC2088  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh; SC2088: a literal ~ as users type it
 # Sourced by tests/run.sh: system checks, schedule, --notify, self-update, config file, installer, task ids.
 # --- system checks read the output of macOS tools: fakes with real samples, so a format change shows up here
 SB="$work/sbin"; mkdir -p "$SB"; home="$work/sys"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"

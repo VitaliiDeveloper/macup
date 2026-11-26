@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # globals of tests/run.sh
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: stale build folders, caches in use, Docker.
 # --- stale build folders (opt-in): only next to their build file, never tracked by git, never built recently
 home="$work/art"; tests/fixture.sh "$home"; code="$home/Code"

@@ -4,7 +4,7 @@
 # Runs against fake homes, a fake /Applications (MACUP_APPS) and a fake /Library (MACUP_SYSLIB). tests/run.sh calls it.
 cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-leftovers.XXXXXX"); trap 'chflags -R nouchg "$work" 2>/dev/null; rm -rf "$work"' EXIT
-F=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; F=1; }
+failed=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; failed=1; }
 
 mkdir -p "$work/bin"
 cat >"$work/bin/pgrep" <<'FAKE'
@@ -20,20 +20,20 @@ FAKE
 # codesign answers from FAKE_SIGN lines "path-prefix|TEAM|Name"; anything else is unsigned
 cat >"$work/bin/codesign" <<'FAKE'
 #!/bin/bash
-p="${!#}"; echo "$p" >>"$HOME/codesign.log"
+path="${!#}"; echo "$path" >>"$HOME/codesign.log"
 while IFS='|' read -r pre team name; do
   [ -n "$pre" ] || continue
-  case "$p" in "$pre"*) echo "Authority=Developer ID Application: $name ($team)" >&2; echo "TeamIdentifier=$team" >&2; exit 0 ;; esac
+  case "$path" in "$pre"*) echo "Authority=Developer ID Application: $name ($team)" >&2; echo "TeamIdentifier=$team" >&2; exit 0 ;; esac
 done <<EOF
 ${FAKE_SIGN:-}
 EOF
-echo "$p: code object is not signed at all" >&2; exit 1
+echo "$path: code object is not signed at all" >&2; exit 1
 FAKE
 # launchctl records what macup asked; `print` finds only the labels in FAKE_LOADED
 cat >"$work/bin/launchctl" <<'FAKE'
 #!/bin/bash
 echo "$*" >>"$HOME/launchctl.log"
-if [ "$1" = print ]; then for l in ${FAKE_LOADED:-}; do case "$2" in */"$l") exit 0 ;; esac; done; exit 113; fi
+if [ "$1" = print ]; then for label in ${FAKE_LOADED:-}; do case "$2" in */"$label") exit 0 ;; esac; done; exit 113; fi
 exit 0
 FAKE
 cat >"$work/bin/sfltool" <<'FAKE'
@@ -67,9 +67,9 @@ app(){ # dir bundle-id
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>%s</string></dict></plist>\n' "$2" >"$1/Contents/Info.plist"
 }
 agent(){ # file label program [assoc-id]
-  local a=""; [ -n "$4" ] && a="<key>AssociatedBundleIdentifiers</key><array><string>$4</string></array>"
+  local assoc=""; [ -n "$4" ] && assoc="<key>AssociatedBundleIdentifiers</key><array><string>$4</string></array>"
   mkdir -p "$(dirname "$1")"
-  printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>Label</key><string>%s</string><key>ProgramArguments</key><array><string>%s</string></array><key>StartInterval</key><integer>3600</integer>%s</dict></plist>\n' "$2" "$3" "$a" >"$1"
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>Label</key><string>%s</string><key>ProgramArguments</key><array><string>%s</string></array><key>StartInterval</key><integer>3600</integer>%s</dict></plist>\n' "$2" "$3" "$assoc" >"$1"
 }
 empty_plist(){ mkdir -p "$(dirname "$1")"; printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict/>\n</plist>\n' >"$1"; }
 prog(){ mkdir -p "$(dirname "$1")"; dd if=/dev/zero of="$1" bs=1024 count="${2:-2048}" 2>/dev/null; chmod +x "$1"; }
@@ -103,17 +103,17 @@ lo(){ # dir macup-args… — runs macup on that fake home and Mac
 
 # --- check.startup reports exactly the leftovers
 home="$work/lo"; leftovers_home "$home"; lo "$home" check --only check.startup --no-color </dev/null >"$work/lo.out" 2>&1
-o=$(tr -d '\r' <"$work/lo.out"); sec=$(printf '%s\n' "$o" | sed -n '/Leftovers of deleted apps/,$p'); bad=0
-for l in ai.perplexity.CometUpdater.wake ai.perplexity.keystone.agent com.gone.thing; do
-  printf '%s\n' "$sec" | grep -q "$l" || { fail "leftovers: $l not reported"; bad=1; }; done
-for l in steamclean com.imagetasks.helper com.tool.agent homebrew.mxcl.redis com.me.script com.locked.empty; do
-  printf '%s\n' "$sec" | grep -q "$l" && { fail "leftovers: live $l reported"; bad=1; }; done
-printf '%s\n' "$o" | grep -q 'broken.plist.*cannot be read' || { fail "leftovers: broken plist not reported"; bad=1; }
-printf '%s\n' "$o" | grep -qE 'line [0-9]+:|command not found|unbound' && { fail "leftovers: errors in output"; bad=1; }
-[ $bad = 0 ] && pass "leftovers: report flags exactly the orphans" || printf '%s\n' "$o" | tail -25
+output=$(tr -d '\r' <"$work/lo.out"); sec=$(printf '%s\n' "$output" | sed -n '/Leftovers of deleted apps/,$p'); bad=0
+for label in ai.perplexity.CometUpdater.wake ai.perplexity.keystone.agent com.gone.thing; do
+  printf '%s\n' "$sec" | grep -q "$label" || { fail "leftovers: $label not reported"; bad=1; }; done
+for label in steamclean com.imagetasks.helper com.tool.agent homebrew.mxcl.redis com.me.script com.locked.empty; do
+  printf '%s\n' "$sec" | grep -q "$label" && { fail "leftovers: live $label reported"; bad=1; }; done
+printf '%s\n' "$output" | grep -q 'broken.plist.*cannot be read' || { fail "leftovers: broken plist not reported"; bad=1; }
+printf '%s\n' "$output" | grep -qE 'line [0-9]+:|command not found|unbound' && { fail "leftovers: errors in output"; bad=1; }
+[ $bad = 0 ] && pass "leftovers: report flags exactly the orphans" || printf '%s\n' "$output" | tail -25
 
 # --- clean.orphan_agents: picked leftovers go to the Trash, with their own folder
-until_done(){ local i=0; while [ $i -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev/null && return; sleep 0.5; i=$((i + 1)); done; }
+until_done(){ local tries=0; while [ $tries -lt 240 ]; do grep -q 'Report: ' "$1" 2>/dev/null && return; sleep 0.5; tries=$((tries + 1)); done; }
 pk(){ # dir answer confirm [command run before answering] — interactive check of clean.orphan_agents
   local home=$1 out="$1.out"
   (sleep 2; [ -n "$4" ] && eval "$4"; printf '%s\n' "$2"; sleep 1; printf '%s\n' "$3"; until_done "$out") 2>/dev/null \
@@ -125,9 +125,9 @@ pk(){ # dir answer confirm [command run before answering] — interactive check 
 nm(){ tr -d '\r' <"$1" | grep -E "^ +[0-9]+ .*$2" | head -1 | awk '{print $1}'; }
 AS="Library/Application Support"
 home="$work/pa"; leftovers_home "$home"; pk "$home" '' ''
-o=$(tr -d '\r' <"$home.out")
-printf '%s\n' "$o" | grep -q 'Leftovers of deleted apps — found' && printf '%s\n' "$o" | grep -q 'What:' && printf '%s\n' "$o" | grep -q 'Why:' \
-  && ! printf '%s\n' "$o" | grep -q 'Application Support' && pass "orphan_agents: entries explain what and why, without paths" || { fail "orphan_agents: list"; printf '%s\n' "$o" | sed -n '/What can be cleaned/,$p' | head -30; }
+output=$(tr -d '\r' <"$home.out")
+printf '%s\n' "$output" | grep -q 'Leftovers of deleted apps — found' && printf '%s\n' "$output" | grep -q 'What:' && printf '%s\n' "$output" | grep -q 'Why:' \
+  && ! printf '%s\n' "$output" | grep -q 'Application Support' && pass "orphan_agents: entries explain what and why, without paths" || { fail "orphan_agents: list"; printf '%s\n' "$output" | sed -n '/What can be cleaned/,$p' | head -30; }
 nu=$(nm "$home.out" 'Perplexity AI · update program'); ne=$(nm "$home.out" 'Perplexity AI · empty startup file')
 
 leftovers_home "$home"; FAKE_LOADED=ai.perplexity.CometUpdater.wake pk "$home" "$nu" y
@@ -156,27 +156,27 @@ leftovers_home "$home"; lo "$home" clean --level aggressive --only clean.orphan_
 
 # --- clean.orphan_data: data of a vendor whose agent was orphaned
 data_home(){ # dir
-  local home=$1 L="$1/Library"; leftovers_home "$home"
-  mkdir -p "$L/Preferences" "$L/HTTPStorages/ai.perplexity.CometUpdater" "$L/Application Support/Comet/Default" "$L/Perplexity" \
-    "$L/Containers/ai.perplexity.mac.Notif" "$L/Group Containers/group.ai.perplexity.app" "$L/Application Support/Downloader"
-  for f in ai.perplexity.comet ai.perplexity.downloader com.segment.analytics com.other.app; do empty_plist "$L/Preferences/$f.plist"; done
-  echo h >"$L/Application Support/Comet/Default/History"; prog "$L/Application Support/Comet/Default/Cache" 4096
-  echo x >"$L/Perplexity/x"; echo x >"$L/Containers/ai.perplexity.mac.Notif/x"; echo x >"$L/Group Containers/group.ai.perplexity.app/x"
-  echo mine >"$L/Application Support/Downloader/x"; app "$home/Apps/Downloader.app" local.vitalii.downloader
+  local home=$1 library="$1/Library"; leftovers_home "$home"
+  mkdir -p "$library/Preferences" "$library/HTTPStorages/ai.perplexity.CometUpdater" "$library/Application Support/Comet/Default" "$library/Perplexity" \
+    "$library/Containers/ai.perplexity.mac.Notif" "$library/Group Containers/group.ai.perplexity.app" "$library/Application Support/Downloader"
+  for file in ai.perplexity.comet ai.perplexity.downloader com.segment.analytics com.other.app; do empty_plist "$library/Preferences/$file.plist"; done
+  echo h >"$library/Application Support/Comet/Default/History"; prog "$library/Application Support/Comet/Default/Cache" 4096
+  echo x >"$library/Perplexity/x"; echo x >"$library/Containers/ai.perplexity.mac.Notif/x"; echo x >"$library/Group Containers/group.ai.perplexity.app/x"
+  echo mine >"$library/Application Support/Downloader/x"; app "$home/Apps/Downloader.app" local.vitalii.downloader
 }
 home="$work/da"; data_home "$home"; PK_ONLY=clean.orphan_data pk "$home" '' ''
 nd=$(nm "$home.out" 'Perplexity AI · data of a deleted app')
-o=$(tr -d '\r' <"$home.out")
-printf '%s\n' "$o" | grep -q '⚠ Perplexity AI · data of a deleted app' && printf '%s\n' "$o" | grep -q 'saved passwords' && printf '%s\n' "$o" | grep -q 'macOS may ask once' \
-  && ! printf '%s\n' "$o" | grep -q 'Other ·' && pass "orphan_data: one warned entry per orphaned vendor, none for others" || { fail "orphan_data: list"; printf '%s\n' "$o" | sed -n '/What can be cleaned/,$p' | head -20; }
-data_home "$home"; PK_ONLY=clean.orphan_data pk "$home" "$nd" y; T="$home/.Trash"
-[ -f "$T/ai.perplexity.comet.plist" ] && [ -f "$T/ai.perplexity.downloader.plist" ] && [ -d "$T/ai.perplexity.CometUpdater" ] && [ -d "$T/Comet" ] && [ -d "$T/Perplexity" ] \
-  && [ -d "$T/ai.perplexity.mac.Notif" ] && [ -d "$T/group.ai.perplexity.app" ] \
-  && pass "orphan_data: prefs, profile, vendor folders and containers in the Trash" || { fail "orphan_data: move"; ls "$T"; }
+output=$(tr -d '\r' <"$home.out")
+printf '%s\n' "$output" | grep -q '⚠ Perplexity AI · data of a deleted app' && printf '%s\n' "$output" | grep -q 'saved passwords' && printf '%s\n' "$output" | grep -q 'macOS may ask once' \
+  && ! printf '%s\n' "$output" | grep -q 'Other ·' && pass "orphan_data: one warned entry per orphaned vendor, none for others" || { fail "orphan_data: list"; printf '%s\n' "$output" | sed -n '/What can be cleaned/,$p' | head -20; }
+data_home "$home"; PK_ONLY=clean.orphan_data pk "$home" "$nd" y; trash="$home/.Trash"
+[ -f "$trash/ai.perplexity.comet.plist" ] && [ -f "$trash/ai.perplexity.downloader.plist" ] && [ -d "$trash/ai.perplexity.CometUpdater" ] && [ -d "$trash/Comet" ] && [ -d "$trash/Perplexity" ] \
+  && [ -d "$trash/ai.perplexity.mac.Notif" ] && [ -d "$trash/group.ai.perplexity.app" ] \
+  && pass "orphan_data: prefs, profile, vendor folders and containers in the Trash" || { fail "orphan_data: move"; ls "$trash"; }
 [ -f "$home/Library/Application Support/Downloader/x" ] && [ -f "$home/Library/Preferences/com.segment.analytics.plist" ] && [ -f "$home/Library/Preferences/com.other.app.plist" ] \
   && pass "orphan_data: another app's folder of the same name and other vendors stay" || fail "orphan_data: took too much"
-data_home "$home"; lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-grep -q 'Application Support/Comet' "$r" && ! grep -q 'Containers' "$r" && pass "orphan_data: unattended runs list paths in the report, never containers" || { fail "orphan_data: unattended"; grep -n 'Comet\|Containers' "$r" | head; }
+data_home "$home"; lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+grep -q 'Application Support/Comet' "$report" && ! grep -q 'Containers' "$report" && pass "orphan_data: unattended runs list paths in the report, never containers" || { fail "orphan_data: unattended"; grep -n 'Comet\|Containers' "$report" | head; }
 
 # --- system leftovers: one password for all picked ones; a vendor prefix alone never qualifies
 sys_home(){ # dir
@@ -215,13 +215,13 @@ rv_home(){ # dir
   prog "$AS/MyScripts/bin/run" 1; agent "$LA/mybackup.plist" mybackup "$AS/MyScripts/bin/run"
 }
 home="$work/rv"; rv_home "$home"; PK_ONLY=clean.orphan_agents,clean.orphan_data,check.startup pk "$home" '' ''
-nf=$(nm "$home.out" 'Flat · update program'); ns=$(nm "$home.out" 'Valvesoftware ·'); r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-! grep -q 'mybackup —' "$r" && pass "review: a label without a vendor is never an orphan" || fail "review: mybackup flagged"
-! grep -q '~/Library/Mail`' "$r" && ! grep -q 'Application Support/AddressBook' "$r" && pass "review: data never takes folders of Apple's apps" || { fail "review: Apple folder offered"; grep -n 'Mail\\|AddressBook' "$r"; }
+nf=$(nm "$home.out" 'Flat · update program'); ns=$(nm "$home.out" 'Valvesoftware ·'); report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'mybackup —' "$report" && pass "review: a label without a vendor is never an orphan" || fail "review: mybackup flagged"
+! grep -q '~/Library/Mail`' "$report" && ! grep -q 'Application Support/AddressBook' "$report" && pass "review: data never takes folders of Apple's apps" || { fail "review: Apple folder offered"; grep -n 'Mail\\|AddressBook' "$report"; }
 rv_home "$home"; PK_ONLY=clean.orphan_agents,clean.orphan_data,check.startup pk "$home" "$nf,$ns" y
 [ -f "$home/.Trash/com.flat.updater.plist" ] && [ -f "$home/Library/Application Support/Flat/Profile/data" ] && pass "review: a program right in the vendor folder takes only its plist" || { fail "review: vendor folder taken"; ls "$home/.Trash"; }
 [ -f "$home/.Trash/com.valvesoftware.steamold.plist" ] && [ -f "$home/Library/Application Support/Steam/SteamApps/steamclean" ] && pass "review: a missing program takes only its plist" || { fail "review: missing took a folder"; ls "$home/.Trash"; }
-home="$work/cs"; leftovers_home "$home"; for f in "$home"/Library/LaunchAgents/*; do case "$f" in *steamclean*) ;; *) chflags nouchg "$f"; rm -f "$f" ;; esac; done
+home="$work/cs"; leftovers_home "$home"; for file in "$home"/Library/LaunchAgents/*; do case "$file" in *steamclean*) ;; *) chflags nouchg "$file"; rm -f "$file" ;; esac; done
 env HOME="$home" MACUP_APPS="$home/Apps" MACUP_SYSLIB="$home/SysLib" FAKE_SIGN="$home/Library/Application Support/Steam|MXGJJ98X76|Valve Corporation" macup_run check --only check.startup --no-color </dev/null >/dev/null 2>&1
 ! grep -q "$home/Apps" "$home/codesign.log" 2>/dev/null && pass "review: no codesign of every app when the vendor alone settles it" || fail "review: codesign ran on apps"
 home="$work/op"; data_home "$home"; PK_ONLY=clean.orphan_data pk "$home" '' ''; nd=$(nm "$home.out" 'data of a deleted app')
@@ -230,19 +230,19 @@ data_home "$home"; FAKE_OPEN="$home/Library/Application Support/Comet/Default/Hi
 
 # --- totals count a folder once, even when two entries contain it
 home="$work/tt"; data_home "$home"; PK_ONLY=clean.orphan_agents,clean.orphan_data pk "$home" '' ''
-o=$(tr -d '\r' <"$home.out")
-ht=$(printf '%s\n' "$o" | sed -n 's/.*Leftovers of deleted apps — found [0-9]*, total \(.*\)$/\1/p')
-dz=$(printf '%s\n' "$o" | grep 'data of a deleted app' | awk '{print $3, $4}')
-pm=$(printf '%s\n' "$o" | sed -n 's/.*More with a higher level or by picking: ~\(.*\)$/\1/p')
+output=$(tr -d '\r' <"$home.out")
+ht=$(printf '%s\n' "$output" | sed -n 's/.*Leftovers of deleted apps — found [0-9]*, total \(.*\)$/\1/p')
+dz=$(printf '%s\n' "$output" | grep 'data of a deleted app' | awk '{print $3, $4}')
+pm=$(printf '%s\n' "$output" | sed -n 's/.*More with a higher level or by picking: ~\(.*\)$/\1/p')
 [ -n "$dz" ] && [ "$ht" = "$dz" ] && [ "$pm" = "$dz" ] && pass "totals: a folder inside two entries is counted once" || fail "totals: heading '$ht', more '$pm', data entry '$dz'"
 
 # --- a folder named like the deleted app but holding an installed app's files stays
 home="$work/hd"; data_home "$home"; app "$home/Apps/Writer.app" com.example.writer
 echo s >"$home/Library/Application Support/Comet/Default/com.example.writer.state"
 mkdir -p "$home/Library/Perplexity/Writer"
-lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-! grep -q 'Application Support/Comet`' "$r" && ! grep -q '~/Library/Perplexity`' "$r" && grep -q 'Preferences/ai.perplexity.comet.plist' "$r" \
-  && pass "data: a folder that holds an installed app's files stays" || { fail "data: shared folder offered"; sed -n '/What can be cleaned/,$p' "$r" | head -20; }
+lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/Comet`' "$report" && ! grep -q '~/Library/Perplexity`' "$report" && grep -q 'Preferences/ai.perplexity.comet.plist' "$report" \
+  && pass "data: a folder that holds an installed app's files stays" || { fail "data: shared folder offered"; sed -n '/What can be cleaned/,$p' "$report" | head -20; }
 
 # --- deferred minors
 home="$work/mh"; leftovers_home "$home"; mkdir -p "$home/SysLib/PrivilegedHelperTools"; echo bin >"$home/SysLib/PrivilegedHelperTools/com.gone.thing"
@@ -254,8 +254,8 @@ lo "$home" check --only check.startup --no-color </dev/null >"$home.out" 2>&1; c
 ! grep -q 'com.me.script.plist cannot be read (not a valid plist)' "$home.out" && grep -q 'broken.plist cannot be read' "$home.out" && pass "minor: a plist we may not read is not called invalid" || fail "minor: unreadable plist called invalid"
 home="$work/mp"; leftovers_home "$home"; prog "$home/Library/Application Support/FooTool/x/y" 1; agent "$home/Library/LaunchAgents/io.github.foo.agent.plist" io.github.foo.agent "$home/Library/Application Support/FooTool/x/y"
 empty_plist "$home/Library/Preferences/io.github.foo.plist"; empty_plist "$home/Library/Preferences/io.github.bar.plist"
-lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-grep -q 'io.github.foo.plist' "$r" && ! grep -q 'io.github.bar.plist' "$r" && pass "minor: a shared hosting prefix (io.github) is not one vendor" || { fail "minor: io.github swept"; grep -n 'io.github' "$r"; }
+lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+grep -q 'io.github.foo.plist' "$report" && ! grep -q 'io.github.bar.plist' "$report" && pass "minor: a shared hosting prefix (io.github) is not one vendor" || { fail "minor: io.github swept"; grep -n 'io.github' "$report"; }
 
 # --- second review
 home="$work/ob"; data_home "$home"; PK_ONLY=clean.orphan_data pk "$home" '' ''; nd=$(nm "$home.out" 'data of a deleted app')
@@ -263,11 +263,11 @@ data_home "$home"; FAKE_LSOF_PAD=40000 FAKE_OPEN="$home/Library/Application Supp
 [ -d "$home/Library/Application Support/Comet" ] && pass "review2: an open file is seen in a real-sized lsof listing" || fail "review2: open file missed in a big lsof listing"
 home="$work/hu"; data_home "$home"; app "$home/Apps/Writer.app" com.example.writer; echo s >"$home/Library/Application Support/Comet/com.example.writer.state"
 mkdir -p "$home/Library/Application Support/Comet/Locked"; chmod 000 "$home/Library/Application Support/Comet/Locked"
-lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; chmod 755 "$home/Library/Application Support/Comet/Locked"; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-! grep -q 'Application Support/Comet`' "$r" && pass "review2: an unreadable subfolder does not hide an installed app's files" || fail "review2: held failed open on an unreadable subfolder"
+lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; chmod 755 "$home/Library/Application Support/Comet/Locked"; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/Comet`' "$report" && pass "review2: an unreadable subfolder does not hide an installed app's files" || fail "review2: held failed open on an unreadable subfolder"
 home="$work/ws"; data_home "$home"; empty_plist "$home/Library/Preferences/ai.perplexity.my app.plist"; mkdir -p "$home/Library/Application Support/My"; echo x >"$home/Library/Application Support/My/x"
-lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-! grep -q 'Application Support/My`' "$r" && grep -q 'ai.perplexity.my app.plist' "$r" && pass "review2: an id with a space is one id" || fail "review2: id split on a space"
+lo "$home" check --only clean.orphan_data --no-color </dev/null >/dev/null 2>&1; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+! grep -q 'Application Support/My`' "$report" && grep -q 'ai.perplexity.my app.plist' "$report" && pass "review2: an id with a space is one id" || fail "review2: id split on a space"
 home="$work/gn"; leftovers_home "$home"; prog "$home/Library/Application Support/FooTool/x/y" 1; agent "$home/Library/LaunchAgents/io.github.foo.agent.plist" io.github.foo.agent "$home/Library/Application Support/FooTool/x/y"
 lo "$home" check --only check.startup --no-color </dev/null >"$home.out" 2>&1
 grep -q 'Foo · io.github.foo.agent' "$home.out" && pass "review2: a three-part vendor is named by its owner" || { fail "review2: vendor name"; grep 'io.github' "$home.out"; }
@@ -281,8 +281,8 @@ PK_ONLY=clean.orphan_data pk "$home" "$nd" y; chmod 755 "$home/Library/Container
 
 # --- a dev build's container belongs to clean.dev_containers, never offered twice
 home="$work/dv"; data_home "$home"; printf 'language = en\ndev_container_prefixes = ai.perplexity.mac\n' >"$home/.config/macup/config"
-PK_ONLY=clean.orphan_data pk "$home" '' ''; r=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
-grep -q 'Group Containers/group.ai.perplexity.app' "$r" && ! grep -q 'Containers/ai.perplexity.mac.Notif' "$r" && pass "dev containers: a dev build's container is not also app data" || { fail "dev containers: offered twice"; grep -n Containers "$r"; }
+PK_ONLY=clean.orphan_data pk "$home" '' ''; report=$(ls "$home"/Library/Logs/macup/*.md | tail -1)
+grep -q 'Group Containers/group.ai.perplexity.app' "$report" && ! grep -q 'Containers/ai.perplexity.mac.Notif' "$report" && pass "dev containers: a dev build's container is not also app data" || { fail "dev containers: offered twice"; grep -n Containers "$report"; }
 
 # --- plutil on macOS 15 prints "Could not extract value" to stdout for a missing key: never read as a value
 mkdir -p "$work/bin15"; cat >"$work/bin15/plutil" <<'FAKE'
@@ -303,4 +303,4 @@ printf '%s\n' "$sec" | grep -q 'ai.perplexity.CometUpdater.wake — app is not i
 home="$work/rg"; data_home "$home"; PK_ONLY=clean.orphan_agents,clean.orphan_data pk "$home" '1-30' y
 [ -f "$home/Library/LaunchAgents/ai.perplexity.CometUpdater.wake.plist" ] && [ -d "$home/Library/Application Support/Comet" ] && pass "range: leftovers are never picked by a range" || { fail "range: leftovers taken by 1-30"; ls "$home/.Trash"; }
 
-[ $F = 0 ] || exit 1
+[ $failed = 0 ] || exit 1

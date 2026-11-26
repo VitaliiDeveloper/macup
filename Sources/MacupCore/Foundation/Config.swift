@@ -19,9 +19,7 @@ public struct Config {
     public init(path: String, utf8: Bool = true) {
         self.path = path
         self.utf8 = utf8
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue,
-              let contents = FileManager.default.contents(atPath: path) else { lines = []; sedFails = false; return }
+        guard let contents = Bash.regularFileContents(path) else { lines = []; sedFails = false; return }
         var out: [String] = [], fails = false
         for raw in contents.split(separator: 0x0A, omittingEmptySubsequences: false) {
             if let line = String(bytes: raw, encoding: .utf8) { out.append(line); continue }
@@ -34,7 +32,7 @@ public struct Config {
 
     /// `conf key default`: the last `key = value` line, without a trailing `# comment` and blanks; the default when that is empty.
     public func value(_ key: String, _ def: String) -> String {
-        if sedFails, reportsErrors { _ = "sed: RE error: illegal byte sequence\n".withCString { write(2, $0, strlen($0)) } }
+        if sedFails, reportsErrors { Shell.writeText("sed: RE error: illegal byte sequence\n", to: 2) }
         var result = ""
         for line in lines {
             if let rest = match(line, key) { result = stripComment(rest) }
@@ -192,11 +190,9 @@ public struct Settings {
 
     public init(config: Config, env: Env, cliSkip: String, cliOnly: String, cliEnable: String, cliLevel: Int?) {
         func nospace(_ text: String) -> String { String(text.unicodeScalars.filter { $0 != " " }) }
-        // $(echo "$x" | tr -d ' '): the spaces go first, then $(…) drops the trailing newlines
-        func cli(_ text: String) -> String { Bash.substitution(nospace(Bash.echo(text))) }
-        skip = ",\(nospace(config.value("skip", ""))),\(cli(cliSkip)),"
-        enable = ",\(nospace(config.value("enable", ""))),\(cli(cliEnable)),"
-        only = cli(cliOnly)
+        skip = ",\(nospace(config.value("skip", ""))),\(Bash.echoWithoutSpaces(cliSkip)),"
+        enable = ",\(nospace(config.value("enable", ""))),\(Bash.echoWithoutSpaces(cliEnable)),"
+        only = Bash.echoWithoutSpaces(cliOnly)
         deviceSupportDays = Config.num(config.value("device_support_days", "90"), 90)
         keepReportsDays = Config.num(config.value("keep_reports_days", "30"), 30)
         keepReports = Config.num(config.value("keep_reports", "20"), 20)

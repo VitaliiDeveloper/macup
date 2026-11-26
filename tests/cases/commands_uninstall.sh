@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # globals of tests/run.sh
+# shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: commands that cannot start, Time Machine, uninstall, sizes, grok, apps, stale node_modules, big caches, DerivedData.
 # --- commands that cannot start: missing interpreter, pipx venv whose Python is gone, broken link; working ones stay quiet
 home="$work/cmds"; local_bin="$home/.local/bin"; venv_bin="$home/.local/pipx/venvs/tool/bin"; mkdir -p "$local_bin" "$home/.npm-global/bin" "$venv_bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"

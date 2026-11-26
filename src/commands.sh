@@ -168,7 +168,8 @@ show_history(){
 ver_gt(){ # true when version $1 is newer than $2
   [ -n "$1" ] && [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" = "$1" ]
 }
-resolve_self(){ local p="$0"; case "$p" in */*) ;; *) p=$(command -v "$p") ;; esac; echo "$p"; }
+# MACUP_SELF: the Swift binary runs this script as /dev/fd/N and says where it is itself
+resolve_self(){ local p="${MACUP_SELF:-$0}"; case "$p" in */*) ;; *) p=$(command -v "$p") ;; esac; echo "$p"; }
 brew_prefix(){ # a macup path → the Homebrew prefix that installed it; nothing for any other install
   case "$1" in
     */Cellar/macup/*)      echo "${1%%/Cellar/macup/*}"; return ;;

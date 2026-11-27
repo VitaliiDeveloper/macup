@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2154  # work, CASES and the fake helpers come from tests/diff.sh and tests/fakes.sh
-# Sourced by tests/diff.sh: the tools unit's cases (tools.sh: MCP servers, brew doctor, Xcode, versions, commands, Docker,
+# shellcheck disable=SC2034,SC2154  # SC2034: CASES is read by tests/diff.sh; SC2154: work, build and the helpers come from it
+# Sourced by tests/diff.sh, in name order: the tools unit's cases (tools.sh: MCP servers, brew doctor, Xcode, versions, commands, Docker,
 # GitHub CLI, signing certificates, crashes). The tools are answering fakes in the fake home (tests/fakes.sh); what is not
 # faked is the Mac's own (python3, openssl, /usr/bin, the real /opt/homebrew/bin and /usr/local/bin the commands check scans).
 # A tool that hangs costs its whole limit in every run: only docker info and gh auth status (20 seconds) really hang; for

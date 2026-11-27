@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Only the empty kind and process checks so far: the router keeps runs that need rm, trash, cmd, lsof or the pick on bash.
+/// Only the empty kind so far: the router keeps runs that need rm, trash, cmd or the pick on bash.
 public enum Cleanup {
     static func run(_ run: Run) {
         guard run.wantsCleanup else { return }
@@ -56,16 +56,38 @@ public enum Cleanup {
         !pattern.isEmpty && run.shell.tl(0, ["pgrep", "-f", pattern], stdout: .null, stderr: .null) == 0
     }
 
-    /// No candidate registers open folders until lsof is ported.
-    static func openIn(_ folders: String) -> Bool {
-        guard folders.isEmpty else { preconditionFailure("open_in (lsof) is not ported yet") }
-        return false
+    /// lsof_snap: the n lines (open files) of lsof for this user's processes, after a first line "lsof"; nil when lsof could
+    /// not tell. macOS's own watchers (UserEventAgent, Spotlight, fseventsd) keep folders open whether or not their app runs:
+    /// their files are left out.
+    static func openFiles(_ shell: Shell) -> [String]? {
+        let output = shell.capture(["lsof", "-n", "-P", "-Fcn", "-u", String(getuid())], stdin: .inherit).output
+        guard !output.isEmpty else { return nil }
+        var watcher = false
+        return ["lsof"] + Bash.lines(output).filter { line in
+            if line.hasPrefix("p") { watcher = false }
+            if line.hasPrefix("c") { watcher = watchers.contains(String(line.dropFirst())) }
+            return line.hasPrefix("n") && !watcher
+        }
     }
 
+    static let watchers: Set<String> = ["UserEventAgent", "mds", "mds_stores", "mdworker", "mdworker_shared", "fseventsd", "revisiond", "backupd", "quicklookd"]
+
+    /// open_in: a process has a file open in one of the folders, or lsof cannot tell (a fresh look unless one is given).
+    static func openIn(_ shell: Shell, _ folders: String, snapshot: [String]? = nil) -> Bool {
+        guard !folders.isEmpty else { return false }
+        guard let files = snapshot ?? openFiles(shell) else { return true }
+        return Bash.lines(folders).contains { folder in
+            !folder.isEmpty && files.contains { $0.utf8.firstRange(of: "n\(folder)/".utf8) != nil }
+        }
+    }
+
+    /// What is in use right now is said in the list and left out of the totals; execute asks again before it cleans.
+    /// lsof that cannot tell makes the cleanup skip a folder, but the list does not call it in use.
     static func markBusy(_ run: Run) {
+        let files = run.candidates.list.contains { !$0.open.isEmpty } ? openFiles(run.shell) : nil
         for index in run.candidates.list.indices {
             let candidate = run.candidates.list[index]
-            run.candidates.list[index].busy = running(run, candidate.proc) || openIn(candidate.open)
+            run.candidates.list[index].busy = running(run, candidate.proc) || files.map { openIn(run.shell, candidate.open, snapshot: $0) } ?? false
         }
     }
 
@@ -73,7 +95,7 @@ public enum Cleanup {
         let candidate = run.candidates.list[index]
         let size = Size.hum(candidate.kb ?? 0)
         run.measure.forget()
-        if running(run, candidate.proc) || openIn(candidate.open) {
+        if running(run, candidate.proc) || openIn(run.shell, candidate.open) {
             run.out.info("%s: %s — skipped while the app is open", candidate.label, size)
             run.skipped.append("\(candidate.label) (\(size))")
             return

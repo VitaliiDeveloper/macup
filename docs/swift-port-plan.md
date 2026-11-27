@@ -273,7 +273,7 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 5. **Code rules** (ground rule 8) hold for every file the PR adds or changes.
 6. **The coordinator** reads the result and verifies a claim or two itself. It checks that no carry-over line touching the unit's code is left unticked, then merges.
 
-**Waiting for CI.** Many sessions share one GitHub account and its 5000 API calls an hour; on 2026-11-26 polling used them all up. Never `gh pr checks --watch`, `gh run watch` or `gh` in a loop. Use the app's PR status, or one `gh event listen --resource <pr url> --event com.github.pull_request.check_suite.status.changed.v1` and a single `gh pr view` after each event. On a 403 rate limit, wait for the reset.
+**Waiting for CI.** Many sessions share one GitHub account and its 5000 API calls an hour; on 2026-11-26 polling used them all up. Never `gh pr checks --watch`, `gh run watch` or `gh` in a loop. Use the app's PR status, or one `gh pr view <n> --json statusCheckRollup` every 3 minutes at most. `gh event listen` is not enabled on this account (HTTP 403 at once), so it cannot wait. On a 403 rate limit, wait for the reset.
 
 ## Known traps
 
@@ -311,6 +311,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
 - [ ] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME.
 - [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
+- [ ] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it.
 
 ## Progress
 
@@ -321,7 +322,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2A | checks | `swift/checks` | #11 | merged (cbe2a53) |
 | 2A | updates | `swift/updates` | #12 | merged (1dcd8b2) |
 | 2A | commands | `swift/commands` | #13 | merged (cac5a4d) |
-| 2A | `check.macos_updates` | `swift/macos-updates` | #14 | in review |
+| 2A | `check.macos_updates` | `swift/macos-updates` | #14 | merged (2b04ae9) |
 | 2B | tools | `swift/tools` | #17 | in progress |
 | 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | merged (3e1703c) |
 | 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |

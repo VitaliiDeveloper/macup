@@ -38,7 +38,7 @@ final class CleanersTests: XCTestCase {
         XCTAssertEqual(route("check --level aggressive --only \(registered) --json"), "swift")
         XCTAssertEqual(route("clean --only \(Ported.cleaners.tasks.joined(separator: ","))"), "swift", "the empty kind is cleaned too")
         XCTAssertEqual(route("clean --only clean.npm"), "bash", "a tool's own clean command comes with phase 3")
-        XCTAssertEqual(route("check --only clean.dev_containers"), "bash", "the leftovers unit's")
+        XCTAssertEqual(route("check --only clean.trash,clean.dev_containers"), "swift", "dev containers register through the leftovers unit")
     }
 
     func testReadIsBashRead() throws {

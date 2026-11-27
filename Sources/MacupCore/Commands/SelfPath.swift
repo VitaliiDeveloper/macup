@@ -39,8 +39,8 @@ public enum SelfPath {
         return slash == path.startIndex ? "/" : String(path[..<slash])
     }
 
-    /// A file macup made: a 2.9 copy has a line that starts with MACUP_VERSION=, and so does a 3.0 binary today, which
-    /// carries the bash build. Phase 5 decides how a binary without it is recognised; this is the one place to change.
+    /// A file macup made: a 2.9 copy has a line that starts with MACUP_VERSION=, and so does a 3.0 binary through
+    /// `Env.marker`, which 2.9's own uninstall and install.sh match too.
     static func isMacup(_ path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let marker = Data("MACUP_VERSION=".utf8)

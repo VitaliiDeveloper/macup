@@ -10,10 +10,10 @@ on:
 permissions:
   contents: read
 
-# a new push replaces the run still going for the same branch or PR
+# a new push replaces the run still going for the same branch or PR; on main every commit keeps its run, which a release tag needs
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:

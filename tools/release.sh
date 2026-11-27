@@ -18,7 +18,9 @@ version=$("$built" version | sed -n 's/^macup //p')
 [ -n "$version" ] || die "$built does not say its version"
 [ -z "$want" ] || [ "$want" = "$version" ] || die "the tag says $want, the binary says $version"
 
-# 2.9 copies update themselves from the root macup: it must name this version and match its macup.sha256
+# 2.9 copies update themselves from the root macup: it must name this version and match its macup.sha256. Once it is
+# committed (the bootstrap), what is checked must be what was committed.
+if git ls-files --error-unmatch macup >/dev/null 2>&1; then git diff --quiet HEAD -- macup macup.sha256 || die "the root macup differs from the commit"; fi
 [ "$(sed -n 's/^MACUP_VERSION="\(.*\)"$/\1/p' macup)" = "$version" ] || die "the root macup does not say MACUP_VERSION=\"$version\""
 [ "$(cat macup.sha256)" = "$(sum256 macup)  macup" ] || die "macup.sha256 does not match macup"
 /bin/bash -n macup || die "the root macup does not pass bash -n"
@@ -34,7 +36,7 @@ mkdir -p "$out"
 COPYFILE_DISABLE=1 tar -czf "$out/$name" -C "$work/stage" macup LICENSE
 echo "$(sum256 "$out/$name")  $name" >"$out/$name.sha256"
 
-[ "$(sum256 "$out/$name")" = "$(awk '{print $1}' "$out/$name.sha256")" ] || die "$name does not match its SHA-256"
+(cd "$out" && shasum -a 256 -c "$name.sha256" >/dev/null) || die "$name does not match its SHA-256"
 tar -xzf "$out/$name" -C "$work/unpacked"
 binary="$work/unpacked/macup"
 for arch in arm64 x86_64; do
@@ -42,6 +44,9 @@ for arch in arm64 x86_64; do
   codesign -v "$work/$arch" || die "the $arch slice is not signed"
   # install.sh and uninstall recognise macup by these two lines (Env.marker): a literal the compiler must not drop
   LC_ALL=C grep -a -A1 -x '# macup' "$work/$arch" | grep -qx "MACUP_VERSION=\"$version\"" || die "the $arch slice has no marker"
+  if arch "-$arch" /usr/bin/true 2>/dev/null; then
+    [ "$(arch "-$arch" "$work/$arch" version)" = "macup $version" ] || die "the $arch slice does not run"
+  else echo "release: the $arch slice not run: this Mac cannot (no Rosetta)"; fi
 done
 [ "$("$binary" version)" = "macup $version" ] || die "the packed binary does not run"
 echo "$out/$name"

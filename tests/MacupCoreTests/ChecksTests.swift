@@ -94,21 +94,4 @@ final class ChecksTests: XCTestCase {
         let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | { read -r size path; printf '%s|%s' \"$size\" \"$path\"; }" })
         XCTAssertEqual(samples.map { Checks.sizeAndPath($0) }.map { "\($0.0)|\($0.1)" }, bash)
     }
-
-    func testGlobOrderAsBash() throws {
-        let folder = NSTemporaryDirectory() + "macup-glob-\(UUID().uuidString)"
-        defer { try? FileManager.default.removeItem(atPath: folder) }
-        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-        for name in ["dev", "Library", "_x", "apple", "Zed", "e", ".hidden", "..dots", ".a", "f.sqlite", ".g.sqlite"] {
-            FileManager.default.createFile(atPath: "\(folder)/\(name)", contents: nil)
-        }
-        _ = Checks.collation
-        defer { setlocale(LC_COLLATE, "") }
-        for locale in ["en_US.UTF-8", "C"] {
-            setlocale(LC_COLLATE, locale)
-            let patterns = ["*", ".[!.]*", "*.sqlite", "nothing*"]
-            let bash = try BashOracle.run(patterns.map { "for name in \(BashOracle.quoted(folder))/\($0); do [ -e \"$name\" ] && echo \"$name\"; done" }, env: ["LC_ALL": locale])
-            XCTAssertEqual(patterns.map { Checks.glob(folder, $0).joined(separator: "\n") }, bash, locale)
-        }
-    }
 }

@@ -24,7 +24,7 @@ extension Checks {
         mention(run, run.measure.get(dev + "/CoreSimulator/Devices"), atLeast: 1, "Simulator devices: %s (Xcode → Window → Devices and Simulators)")
         mention(run, run.kb(home + "/.pub-cache"), atLeast: 1, "Flutter pub-cache: %s (full reset: dart pub cache clean)")
         let codex = home + "/.codex"
-        mention(run, list([codex + "/sessions", codex + "/archived_sessions"] + glob(codex, "*.sqlite") + [codex + "/sqlite"]), atLeast: 102_400,
+        mention(run, list([codex + "/sessions", codex + "/archived_sessions"] + Names.glob(codex, "*.sqlite") + [codex + "/sqlite"]), atLeast: 102_400,
                 "Codex chat history: %s (not a cache; delete old chats in Codex itself)")
         mention(run, run.kb(home + "/.claude/projects"), atLeast: 102_400,
                 "Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default)")
@@ -38,7 +38,7 @@ extension Checks {
         mention(run, run.measure.get(home + "/Library/Caches"), atLeast: 1, "App caches (~/Library/Caches): %s — macOS trims these itself when space is low")
         mention(run, run.kb(home + "/Library/Application Support/MobileSync/Backup"), atLeast: 102_400,
                 "iPhone and iPad backups: %s (Finder → your device → Manage Backups)")
-        let machines = glob(home + "/Library/Containers/com.docker.docker/Data/vms", "*").map { $0 + "/data/Docker.raw" }.filter(exists)
+        let machines = Names.glob(home + "/Library/Containers/com.docker.docker/Data/vms", "*").map { $0 + "/data/Docker.raw" }.filter(exists)
         mention(run, list(machines), atLeast: 102_400, "Docker disk image: %s (Docker Desktop → Settings → Resources; it shrinks after: docker system prune)")
         // virtual machines are whole disks: only their app knows which one is still needed
         mention(run, list([".colima", ".lima", ".local/share/containers/podman/machine", ".minikube", "Parallels", "Virtual Machines.localized"].map { home + "/" + $0 }),
@@ -71,11 +71,11 @@ extension Checks {
         if Run.isDirectory("/Applications/DaVinci Resolve") {
             mention(run, run.kb(home + "/Movies/CacheClip"), atLeast: 102_400, "DaVinci Resolve render cache: %s — Resolve: Playback → Delete Render Cache")
         }
-        if !glob("/Applications", "Adobe Lightroom Classic*").isEmpty, Run.isDirectory(home + "/Pictures") {
+        if !Names.glob("/Applications", "Adobe Lightroom Classic*").isEmpty, Run.isDirectory(home + "/Pictures") {
             mention(run, found([home + "/Pictures", "-maxdepth", "4", "-type", "d", "-name", "*Previews.lrdata", "-prune"]), atLeast: 102_400,
                     "Lightroom Classic previews: %s — Lightroom: Library → Previews → Discard 1:1 Previews")
         }
-        mention(run, run.kbl(glob(home + "/Library/Caches", "Adobe Camera Raw*").joined(separator: "\n")), atLeast: 102_400,
+        mention(run, run.kbl(Names.glob(home + "/Library/Caches", "Adobe Camera Raw*").joined(separator: "\n")), atLeast: 102_400,
                 "Camera Raw cache: %s — Photoshop: Settings → Camera Raw → Performance → Purge Cache")
     }
 

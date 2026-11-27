@@ -193,17 +193,6 @@ extension Checks {
     static func matches(_ expression: NSRegularExpression, _ line: String) -> Bool {
         expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
     }
-
-    /// A bash glob of names in one folder, sorted as bash sorts them (strcoll in the locale); a leading dot only matches a dot.
-    static func glob(_ folder: String, _ pattern: String) -> [String] {
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).filter { fnmatch(pattern, $0, FNM_PERIOD) == 0 }
-        _ = collation
-        return names.sorted { strcoll($0, $1) < 0 }.map { "\(folder)/\($0)" }
-    }
-
-    /// bash sorts in the collation of LC_ALL, LC_COLLATE or LANG; only strcoll and fnmatch ranges read it, and the checks
-    /// set it once, on the main thread.
-    static let collation: Void = { setlocale(LC_COLLATE, "") }()
 }
 
 /// The sed that cuts `uptime` down to how long the Mac has been up.

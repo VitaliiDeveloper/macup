@@ -42,6 +42,13 @@ case "$1" in
 esac
 snap=0; while [ "$snap" -lt "${FAKE_SNAPS:-0}" ]; do snap=$((snap + 1)); echo "com.apple.TimeMachine.2026-11-0$snap-101010.local"; done
 FAKE
+      # BSD date gives a date without a time now's time of day: a second that ticks between the backup age's two calls
+      # makes an N-day-old backup N-1 days old in one build only. That date reads as its midnight; every other call is /bin/date
+      date) cat <<'FAKE' ;;
+#!/bin/bash
+[ $# = 4 ] && [ "$1 $2 $4" = "-j -f %Y-%m-%d +%s" ] && exec /bin/date -j -f '%Y-%m-%d %H:%M:%S' "$3 00:00:00" +%s
+exec /bin/date "$@"
+FAKE
       # Homebrew: every call is logged in the home; outdated and list answer from $HOME/.fake/brew-{formulae,casks,greedy,list},
       # `update` prints a line that is not UTF-8 with FAKE_BREW_BYTES and sleeps FAKE_BREW_SLEEP seconds, `upgrade` exits with FAKE_BREW_FAIL
       brew) cat <<'FAKE' ;;

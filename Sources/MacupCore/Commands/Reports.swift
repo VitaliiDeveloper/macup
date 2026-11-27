@@ -5,7 +5,7 @@ import Foundation
 enum Reports {
     /// `macup last`: the newest report without its command output, which can be thousands of lines of brew.
     static func last(_ context: OneOff.Context) -> Data {
-        guard let newest = Checks.glob(context.env.logDir, "macup_*.md").max(by: older) else {
+        guard let newest = Names.glob(context.env.logDir, "macup_*.md").max(by: older) else {
             return Data((context.i18n.translate("No reports yet. Run: macup check") + "\n").utf8)
         }
         let lines = Files.records(FileManager.default.contents(atPath: newest) ?? Data())
@@ -22,7 +22,7 @@ enum Reports {
 
     static func run(_ context: OneOff.Context) -> Int32 {
         let env = context.env, i18n = context.i18n, out = context.out
-        let dir = env.logDir, mds = Checks.glob(dir, "macup_*.md")
+        let dir = env.logDir, mds = Names.glob(dir, "macup_*.md")
         let kb = du(ownFiles(dir), context.shell)
         switch context.arguments.repArg {
         case "": break
@@ -63,14 +63,14 @@ enum Reports {
     }
 
     private static func ownFiles(_ dir: String) -> [String] {
-        (Checks.glob(dir, "macup_*.md") + Checks.glob(dir, "macup_*.log")).filter { Files.isRegular($0, followingLinks: false) }
+        (Names.glob(dir, "macup_*.md") + Names.glob(dir, "macup_*.log")).filter { Files.isRegular($0, followingLinks: false) }
     }
 
     /// `ls -t` order: the newer file first, the same time by name.
     private static func older(_ left: String, than right: String) -> Bool {
         let leftTime = mtime(left), rightTime = mtime(right)
         if leftTime != rightTime { return leftTime < rightTime }
-        return strcoll(right, left) < 0   // Checks.glob has set the collation
+        return Names.ordered(right, left)
     }
 
     private static func mtime(_ path: String) -> Double {

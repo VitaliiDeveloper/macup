@@ -48,13 +48,9 @@ public enum Tidy {
         _ = shell.tl(0, ["find", log, "-maxdepth", "1", "-type", "f", "(", "-name", "macup_*.md", "-o", "-name", "macup_*.log", ")",
                          "-mtime", "+\(settings.keepReportsDays)", "-delete"], stdin: .inherit, stdout: .inherit, stderr: .null)
         // this run's report is not written yet: it makes keep_reports
-        let reports = ((try? FileManager.default.contentsOfDirectory(atPath: log)) ?? [])
-            .filter { $0.hasPrefix("macup_") && $0.hasSuffix(".md") && $0.utf8.count >= 9 }
-            .sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
-            .reversed()
-        for name in reports.dropFirst(max(0, settings.keepReports - 1)) {
-            unlink("\(log)/\(name)")
-            unlink("\(log)/\(name.dropLast(3)).log")
+        for report in Names.lsReversed(Names.glob(log, "macup_*.md")).dropFirst(max(0, settings.keepReports - 1)) {
+            unlink(report)
+            unlink("\(report.dropLast(3)).log")
         }
         trim(env.history, keep: 500)
         trim("\(log)/schedule.log", keep: 200)

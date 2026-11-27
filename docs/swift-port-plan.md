@@ -301,6 +301,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 
 - [ ] `show_history`: awk's `h()` assigns the global `b`, which is also the bold colour (`-v b="$B"`), so "Free space trend:" starts with the last freed value in bytes and is never bold (found by the commands unit, PR #13).
 - [ ] Time Machine's backup age (`src/checks.sh` and `Security.timeMachine`): `date -j -f %Y-%m-%d` gives the backup's date the current time of day, so when a second ticks between `date +%s` and that call the age comes out a day short, and an 8-day-old backup passes the 7-day check. Phase 4 parses the date in Swift. Until then `diff.sh`'s fake `date` reads that date as its midnight, since the two builds hit the race on different runs (found on #16's CI, run 45897078448).
+- [ ] `app_names` / `apple_names` (leftovers): bash merges installed names with `sort -u`, which drops names that strcoll ties at the same length (Cyrillic or CJK id parts), so such an app's leftovers can be reported as orphaned. Found by the leftovers unit (#15).
 
 ## Follow-ups queued
 
@@ -312,6 +313,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [x] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME. Done: #13's pipe and #19's guard; swift/main CI on 2b04ae9 passed with real tty runs.
 - [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
 - [ ] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it.
+- [ ] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other.
 
 ## Progress
 

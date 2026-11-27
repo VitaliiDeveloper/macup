@@ -105,8 +105,10 @@ extension Cleaners {
                 guard case .string(let text) = used else { return lines }
                 lastUsed = String(String.UnicodeScalarView(text.unicodeScalars.prefix(10)))
             }
-            lines.append(["R", id, String(bytes >= 0 ? bytes / 1024 : -((-bytes + 1023) / 1024)), lastUsed, String(onIt.count), booted ? "1" : "0", platform,
-                          runtime["version"]?.pythonString ?? "?"].joined(separator: "\t"))
+            let kilobytes: Int64 = bytes >= 0 ? bytes / 1024 : -((-bytes + 1023) / 1024)
+            let version: String = runtime["version"]?.pythonString ?? "?"
+            let fields: [String] = ["R", id, String(kilobytes), lastUsed, String(onIt.count), booted ? "1" : "0", platform, version]
+            lines.append(fields.joined(separator: "\t"))
         }
         return lines
     }

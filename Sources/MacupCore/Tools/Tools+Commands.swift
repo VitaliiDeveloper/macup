@@ -193,9 +193,10 @@ enum PythonPath {
     }
 
     static func readlink(_ path: String) -> String {
-        var buffer = [UInt8](repeating: 0, count: Int(PATH_MAX) + 1)
+        // a [UInt8] buffer for char * made Swift 6.1 pass the array variable's own address
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
         let count = Darwin.readlink(path, &buffer, buffer.count)
-        return count > 0 ? String(decoding: buffer[..<count], as: UTF8.self) : ""
+        return count > 0 ? String(decoding: buffer[..<count].map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
     }
 
     /// `os.path.realpath`: links resolved as far as the path goes, whatever is not there kept as it is written.

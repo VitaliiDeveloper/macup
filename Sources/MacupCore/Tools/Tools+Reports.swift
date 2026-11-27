@@ -37,9 +37,10 @@ extension Tools {
             // renewed in Xcode: same name, the newer one counts
             if newest[name].map({ end > $0.end }) ?? true { newest[name] = (end, pem) }
         }
-        let soon = newest.keys.sorted { $0.lexicographicallyPrecedes($1) }
-            .filter { openssl(newest[$0]!.pem, ["-checkend", String(30 * 86400)]).status != 0 }
-            .map { String(String.UnicodeScalarView($0)) }.joined(separator: "\n")
+        let soon = newest.map { (name: String(String.UnicodeScalarView($0.key)), pem: $0.value.pem) }
+            .sorted { Updates.codePointOrder($0.name, $1.name) }
+            .filter { openssl($0.pem, ["-checkend", String(30 * 86400)]).status != 0 }
+            .map(\.name).joined(separator: "\n")
         return failed ? "" : soon
     }
 

@@ -63,7 +63,6 @@ extension Tools {
     static func commandScan(_ folders: [String], home givenHome: String, shell: Shell) -> String {
         typealias Scalars = [Unicode.Scalar]
         func text(_ scalars: Scalars) -> String { String(String.UnicodeScalarView(scalars)) }
-        func before(_ left: Scalars, _ right: Scalars) -> Bool { left.lexicographicallyPrecedes(right) }
         let home = PythonPath.normpath(givenHome)
         var scripts = 0, real: [Scalars] = [], given: [String] = []
         var groups: [[Scalars]: Set<Scalars>] = [:], gone: [Scalars: Set<Scalars>] = [:]
@@ -109,10 +108,10 @@ extension Tools {
             }
         }
         var lines = [String(scripts)]
-        for key in groups.keys.sorted(by: { before($0[0], $1[0]) || ($0[0] == $1[0] && before($0[1], $1[1])) }) {
-            let names = groups[key, default: []].sorted(by: before).map(text)
+        for key in groups.keys.sorted(by: { $0[0] == $1[0] ? Updates.codePointOrder(text($0[1]), text($1[1])) : Updates.codePointOrder(text($0[0]), text($1[0])) }) {
+            let names = groups[key, default: []].map(text).sorted(by: Updates.codePointOrder)
             let shown = names.prefix(10).joined(separator: ", ") + (names.count > 10 ? " +\(names.count - 10)" : "")
-            let from = gone[key[1], default: []].sorted(by: before).map(text).joined(separator: ", ")
+            let from = gone[key[1], default: []].map(text).sorted(by: Updates.codePointOrder).joined(separator: ", ")
             lines.append([text(key[0]), text(key[1]), shown, from].joined(separator: "\t"))
         }
         return lines.joined(separator: "\n")

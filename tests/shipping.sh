@@ -1,7 +1,7 @@
 #!/bin/bash
-# Shipping: tools/bump-formula.sh, install.sh and the 2.9 bootstrap against a fake GitHub release. Nothing reaches the network: a fake curl serves
-# $FAKE_REMOTE/raw/<ref>/<file> for raw.githubusercontent.com and $FAKE_REMOTE/releases/<tag>/<file> for release assets,
-# and writes every URL it was asked for to $FAKE_REMOTE/curl.log. tests/run.sh calls it; it also runs on its own.
+# Shipping: tools/bump-formula.sh, install.sh and the 2.9 bootstrap against a fake GitHub release. Nothing reaches the
+# network: a fake curl serves $FAKE_REMOTE/raw/<ref>/<file> for raw.githubusercontent.com and
+# $FAKE_REMOTE/releases/<tag>/<file> for release assets, and writes every URL it was asked for to $FAKE_REMOTE/curl.log. tests/run.sh calls it; it also runs on its own.
 cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-shipping.XXXXXX"); trap 'rm -rf "$work"' EXIT
 failed=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; failed=1; }
@@ -137,7 +137,7 @@ out=$(run /bin/bash "$bin/macup" self-update --no-color); rc=$?
 
 # the schedule's own run: the check runs from a download, the file and the loaded job stay as they are
 out=$(run env XPC_SERVICE_NAME=com.vitaliideveloper.macup /bin/bash "$bin/macup" check --quiet --notify); rc=$?
-[ $rc = 0 ] && grep -q 'This scheduled check runs macup 9.9.9 from a download' <<<"$out" && grep -qE "^$home/tmp/+macup-update\.[A-Za-z0-9]+/macup check --quiet --notify$" "$home/ran.log" \
+[ $rc = 0 ] && grep -q 'This scheduled check runs macup 9.9.9 from a temporary copy' <<<"$out" && grep -qE "^$home/tmp/+macup-update\.[A-Za-z0-9]+/macup check --quiet --notify$" "$home/ran.log" \
   && untouched && pass "bootstrap from launchd: the check runs from a download, nothing replaced or reloaded" || { fail "bootstrap from launchd (rc=$rc): $out"; cat "$home/ran.log"; }
 
 # a run from a terminal: replaced by rename, the schedule points at the binary and is loaded again, then the command runs
@@ -164,6 +164,11 @@ release_asset 9.9.9 "$work/asset/macup"
 fresh "$work/bootstrap"; chmod 555 "$bin"; out=$(run /bin/bash "$bin/macup" version); rc=$?; chmod 755 "$bin"
 [ $rc = 1 ] && untouched && grep -q "Couldn't write $bin/macup" <<<"$out" && [ ! -s "$FAKE_REMOTE/curl.log" ] && pass "bootstrap: a folder it cannot write is said" || fail "bootstrap: read-only folder ($rc): $out"
 
+# `bash macup` from another folder: bash found it in PATH, and that file is the one replaced
+fresh "$work/bootstrap"; out=$(cd "$home" && run env PATH="$bin:$PATH" /bin/bash macup version); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/asset/macup" && [ ! -e "$home/macup" ] && grep -qx 'macup 9.9.9' <<<"$out" \
+  && pass "bootstrap run as bash macup through PATH: the installed file is replaced" || fail "bootstrap through PATH ($rc): $out"
+
 # Homebrew's file is Homebrew's; a Mac older than macOS 13 keeps the last 2.9
 cellar="$home/brew/Cellar/macup/9.9.9/bin"; mkdir -p "$cellar" "$home/brew/bin"; cp "$work/bootstrap" "$cellar/macup"; ln -sf ../Cellar/macup/9.9.9/bin/macup "$home/brew/bin/macup"
 : >"$FAKE_REMOTE/curl.log"; printf 'language = uk\n' >"$home/.config/macup/config"
@@ -173,6 +178,9 @@ out=$(run /bin/bash "$home/brew/bin/macup" version); rc=$?; printf 'language = e
 fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" version); rc=$?
 [ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && grep -qx 'macup 2.9.2' <<<"$out" && grep -q 'macup 9.9.9 needs macOS 13 or later; this Mac keeps macup 2.9.2' <<<"$out" \
   && [ "$(urls)" = "v2.9.2/macup.sha256 v2.9.2/macup" ] && grep -qF "$schedule_29" "$plist" && pass "bootstrap on macOS 12: the last 2.9 instead" || { fail "bootstrap on macOS 12 ($rc): $out"; urls; }
+fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" self-update --no-color); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && ! grep -q 'macup updated' <<<"$out" && [ "$(urls)" = "v2.9.2/macup.sha256 v2.9.2/macup" ] \
+  && pass "bootstrap on macOS 12 asked to self-update: 2.9 stays, no update back to the bootstrap" || { fail "bootstrap on macOS 12, self-update ($rc): $out"; urls; }
 
 # the real binary, packed as the release workflow packs it
 real=${MACUP_BIN:-$PWD/.build/debug/macup}

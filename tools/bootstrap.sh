@@ -17,6 +17,7 @@ conf_language(){
     | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' | tail -1
 }
 LANGUAGE="${MACUP_LANG:-$(conf_language)}"
+[ "$LANGUAGE" = ua ] && LANGUAGE=uk
 
 # shellcheck disable=SC2059  # the format is one of the texts below
 say(){ # message id, its values → stderr, so a command's own output stays clean
@@ -46,9 +47,9 @@ say(){ # message id, its values → stderr, so a command's own output stays clea
     uk:write)     text='Не вдалося записати %s' ;;
     ru:write)     text='Не удалось записать %s' ;;
     *:write)      text="Couldn't write %s" ;;
-    uk:scheduled) text='Ця запланована перевірка запускає macup %s із завантаження; запусти macup один раз у Терміналі, щоб завершити оновлення.' ;;
-    ru:scheduled) text='Эта плановая проверка запускает macup %s из загрузки; запустите macup один раз в Терминале, чтобы завершить обновление.' ;;
-    *:scheduled)  text='This scheduled check runs macup %s from a download; run macup once in Terminal to finish the update.' ;;
+    uk:scheduled) text='Ця запланована перевірка запускає macup %s з тимчасової копії; запусти macup один раз у Терміналі, щоб завершити оновлення.' ;;
+    ru:scheduled) text='Эта плановая проверка запускает macup %s из временной копии; запустите macup один раз в Терминале, чтобы завершить обновление.' ;;
+    *:scheduled)  text='This scheduled check runs macup %s from a temporary copy; run macup once in Terminal to finish the update.' ;;
     uk:schedule)  text='launchd не прийняв оновлений розклад; він запрацює після наступного входу в систему.' ;;
     ru:schedule)  text='launchd не принял обновлённое расписание; оно заработает после следующего входа в систему.' ;;
     *:schedule)   text='launchd did not take the updated schedule; it applies after the next login.' ;;
@@ -60,7 +61,7 @@ say(){ # message id, its values → stderr, so a command's own output stays clea
 }
 
 fetch(){ curl -fsSL --max-time 600 "$1" -o "$2" 2>/dev/null; }
-sum_ok(){ [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$(awk '{print $1; exit}' "$2")" ]; }
+sum_ok(){ local want; want=$(awk '{print $1; exit}' "$2"); [ -n "$want" ] && [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$want" ]; }
 is_bootstrap(){ grep -q '^LEGACY_VERSION=' "$1" 2>/dev/null; }   # a line only this file has: never run or install it twice
 
 binary(){ # → $WORK/macup: the release binary, checked; exits with the reason when there is none
@@ -80,26 +81,32 @@ legacy(){ # → $WORK/macup: the last 2.9 script, checked as 2.9 checks its own 
 }
 
 # 2.9 wrote ProgramArguments as /bin/bash <macup> check --quiet --notify; with a binary there launchd fails with 126 forever.
-# Never from the scheduled run itself: launchctl bootout would stop this very job before bootstrap could load it again.
+# Before the swap (this script runs through its #! line as well), and never from the scheduled run itself: launchctl
+# bootout would stop this very job before bootstrap could load it again. Right after a bootout, bootstrap can fail once.
 reschedule(){
+  local domain; domain="gui/$(id -u)"
   grep -q '<array><string>/bin/bash</string>' "$PLIST" 2>/dev/null || return 0
-  sed 's|<array><string>/bin/bash</string>|<array>|' "$PLIST" >"$PLIST.new" && mv -f "$PLIST.new" "$PLIST" || { rm -f "$PLIST.new"; say write "$PLIST"; return 0; }
-  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null
-  launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || launchctl load -w "$PLIST" 2>/dev/null || say schedule
+  sed 's|<array><string>/bin/bash</string>|<array>|' "$PLIST" >"$PLIST.new" && mv -f "$PLIST.new" "$PLIST" || { rm -f "$PLIST.new"; say write "$PLIST"; return 1; }
+  launchctl bootout "$domain/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null
+  launchctl bootstrap "$domain" "$PLIST" 2>/dev/null || { sleep 1; launchctl bootstrap "$domain" "$PLIST" 2>/dev/null; } \
+    || launchctl load -w "$PLIST" 2>/dev/null || say schedule
 }
 
 main(){
   local self=$0 link major
-  case "$self" in /*) ;; *) self="$PWD/$self" ;; esac
+  # bash runs `bash macup` from the current folder, else from PATH
+  case "$self" in /*) ;; */*) self="$PWD/$self" ;; *) if [ -f "$self" ]; then self="$PWD/$self"; else self=$(command -v "$self"); fi ;; esac
   while [ -L "$self" ]; do link=$(readlink "$self"); case "$link" in /*) self=$link ;; *) self="$(dirname "$self")/$link" ;; esac; done
   # Homebrew owns that file, and the next brew upgrade would put its own version back
   case "$self" in */Cellar/macup/*) say brew; exit 1 ;; esac
+  [ -f "$self" ] || { say write "$0"; exit 1; }
+  # a version it cannot read is taken as new enough: a binary that cannot start fails its check, and nothing changes
   major=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)
-  case "$major" in ''|*[!0-9]*) major=0 ;; esac
+  case "$major" in ''|*[!0-9]*) major=99 ;; esac
 
   trap 'rm -rf "$WORK"' EXIT; trap 'exit 1' INT TERM HUP
   if [ "$major" -ge 13 ] && { [ "$PPID" = 1 ] || [ "${XPC_SERVICE_NAME:-}" = "$LABEL" ]; }; then
-    # started by launchd: this check runs from a download and changes nothing, so the schedule keeps working
+    # started by launchd: this check runs from a temporary copy and changes nothing, so the schedule keeps working
     WORK=$(mktemp -d "${TMPDIR:-/tmp}/macup-update.XXXXXX") || exit 1
     binary; say scheduled "$MACUP_VERSION"
     "$WORK/macup" "$@"; exit
@@ -109,13 +116,14 @@ main(){
   if [ "$major" -lt 13 ]; then
     legacy; mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
     say legacy "$MACUP_VERSION" "$LEGACY_VERSION"; rm -rf "$WORK"
-    is_bootstrap "$self" && { say broken; exit 1; }
+    # 2.9's self-update would install this bootstrap again, which would put 2.9 back again
+    case "${1:-}" in self-update|selfupdate|upgrade) exit 0 ;; esac
     exec /bin/bash "$self" "$@"
   fi
   say finish "$MACUP_VERSION"; binary
+  reschedule || exit 1
   mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
-  reschedule; say installed "$MACUP_VERSION" "$self"; rm -rf "$WORK"
-  is_bootstrap "$self" && { say broken; exit 1; }
+  say installed "$MACUP_VERSION" "$self"; rm -rf "$WORK"
   exec "$self" "$@"
 }
 main "$@"; exit

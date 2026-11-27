@@ -68,9 +68,9 @@ text(){ # message id
   uk:sum)     echo "Завантажений файл не збігається з опублікованою контрольною сумою, нічого не встановлено." ;;
   ru:sum)     echo "Скачанный файл не совпадает с опубликованной контрольной суммой, ничего не установлено." ;;
   *:sum)      echo "The download does not match its published checksum; nothing was installed." ;;
-  uk:broken)  echo "Скрипт пошкоджений, нічого не встановлено." ;;
-  ru:broken)  echo "Скрипт повреждён, ничего не установлено." ;;
-  *:broken)   echo "The script is broken; nothing was installed." ;;
+  uk:broken)  echo "Файл пошкоджений, нічого не встановлено." ;;
+  ru:broken)  echo "Файл повреждён, ничего не установлено." ;;
+  *:broken)   echo "The file is broken; nothing was installed." ;;
   uk:nobuild) echo "У цій копії ще немає зібраного macup: спершу запусти ./build.sh" ;;
   ru:nobuild) echo "В этой копии ещё нет собранного macup: сначала запустите ./build.sh" ;;
   *:nobuild)  echo "This checkout has no built macup yet: run ./build.sh first" ;;
@@ -149,7 +149,8 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "$HERE/install.sh" ] && [ -f "$HERE/Package.swift" ]; then
   BUILT="$HERE/.build/release/macup"; [ "$HERE/.build/debug/macup" -nt "$BUILT" ] && BUILT="$HERE/.build/debug/macup"   # the last one built
   [ -f "$BUILT" ] || die "$(text nobuild)"
-  say "$(text local): $(tld "$BUILT")"; cp "$BUILT" "$TMP" || die "$(text write) $TMP"
+  say "$(text local): $(tld "$BUILT")"; cp "$BUILT" "$TMP" && chmod 755 "$TMP" || die "$(text write) $TMP"
+  "$TMP" version </dev/null >/dev/null 2>&1 || die "$(text broken)"   # before it replaces a working install
 else
   # main names the latest version; the bootstrap comes from that version's tag (main before it is tagged) and must match its
   # SHA-256. Its first run, below, downloads the release binary (the last 2.9 script on a Mac older than macOS 13) over itself.

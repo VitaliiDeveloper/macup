@@ -329,4 +329,4 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2B | tools | `swift/tools` | #17 | in progress |
 | 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | merged (3e1703c) |
 | 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |
-| 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | in progress |
+| 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | merged (85dc350) |

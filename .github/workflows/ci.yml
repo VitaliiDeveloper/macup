@@ -46,14 +46,8 @@ jobs:
           ./build.sh
       - name: XCTest
         run: swift test
-      - name: Universal release build
-        run: |
-          swift build -c release --arch arm64 --arch x86_64
-          b="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/macup"
-          a=$(lipo -archs "$b"); echo "$a"
-          case " $a " in *" x86_64 "*) ;; *) exit 1 ;; esac
-          case " $a " in *" arm64 "*) ;; *) exit 1 ;; esac
-          "$b" version
+      - name: The release archive, as a tag would build it (universal, stripped, signed, packed, checked; not uploaded)
+        run: tools/release.sh "$RUNNER_TEMP/dist"
 
   suite-bash:
     strategy:

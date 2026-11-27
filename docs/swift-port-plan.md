@@ -223,7 +223,7 @@ Within a wave, a unit that needs a foundation change stops and asks the coordina
 
 ### Phase 5: shipping (one session)
 
-**Releases.** On a tag that has already passed CI on `main`, a workflow:
+**Releases.** On a tag that has already passed CI on `main`, a workflow (`.github/workflows/release.yml`; everything but the upload is `tools/release.sh`, which CI runs on every pull request):
 
 - builds the universal binary and strips it;
 - runs `codesign -v` on both slices (arm64 refuses unsigned code; ad hoc is the minimum);
@@ -251,7 +251,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 **Recognising macup.**
 
 - 2.9 copies keep being found by `^MACUP_VERSION=` and `^# macup`.
-- A 3.0 binary is found by a fixed marker string that the binary must keep (checked by a test, so the compiler cannot drop it) or by running it with `version`; this phase decides which.
+- A 3.0 binary is found by a fixed marker string, not by running it with `version` (decided in phase 5). The marker is `Env.marker`: a line `# macup` and a line `MACUP_VERSION="<version>"`, one literal that `Env.version` is read from. So the 2.9 rules (`grep -q '^MACUP_VERSION='` in 2.9's `uninstall`, that and `'^# macup'` in its `install.sh`) and `SelfPath.isMacup` find a 3.0 binary unchanged, and running an unknown file named macup is never needed. `tools/release.sh` checks that each stripped slice holds both lines together, which the embedded bash build does not, so the check cannot pass on the bash text alone.
 - `install.sh` and `uninstall` use the same rule.
 
 **Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL and checks that the asset exists. `brew audit --strict --online` is run in the tap before relying on it.

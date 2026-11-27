@@ -5,7 +5,7 @@
 #   tests/diff.sh tasks help   the cases whose name starts with one of these words
 # Every case runs in en, uk and ru (MACUP_LANG), without a terminal and on one (through script), unless its last field
 # says "pipe". Compared: stdout and stderr together as macup writes them (--json included), the exit status, the newest
-# report, the files in the fake home. The system tools a run asks (df, diskutil, tmutil, brew, sudo, pgrep, osascript)
+# report, the files in the fake home. The system tools a run asks (df, diskutil, tmutil, date, brew, sudo, pgrep, osascript)
 # are fakes (tests/fakes.sh), first in PATH and kept there (MACUP_PATH=keep).
 cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'rm -rf "$work"' EXIT
@@ -14,7 +14,7 @@ export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}
 failed=0; runs=0
 # shellcheck source=tests/fakes.sh
 . tests/fakes.sh
-fakes "$work/bin" pgrep df diskutil tmutil brew sudo osascript; export PATH="$work/bin:$PATH"
+fakes "$work/bin" pgrep df diskutil tmutil date brew sudo osascript; export PATH="$work/bin:$PATH"
 
 # The cases are in tests/diff_cases/NN_<unit>.sh, one file per unit, read in name order. Each adds lines to CASES:
 # name | fixture | environment | arguments [| pipe | tty]   (the fixture is a fix_* function there; the environment is VAR=value words)

@@ -300,6 +300,7 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 Not worth a release from `main`: the Swift port copies them so `diff.sh` stays exact, and phase 4 fixes them in Swift, each with a test and a line in the 3.0.0 CHANGELOG.
 
 - [ ] `show_history`: awk's `h()` assigns the global `b`, which is also the bold colour (`-v b="$B"`), so "Free space trend:" starts with the last freed value in bytes and is never bold (found by the commands unit, PR #13).
+- [ ] Time Machine's backup age (`src/checks.sh` and `Security.timeMachine`): `date -j -f %Y-%m-%d` gives the backup's date the current time of day, so when a second ticks between `date +%s` and that call the age comes out a day short, and an 8-day-old backup passes the 7-day check. Phase 4 parses the date in Swift. Until then `diff.sh`'s fake `date` reads that date as its midnight, since the two builds hit the race on different runs (found on #16's CI, run 45897078448).
 
 ## Follow-ups queued
 

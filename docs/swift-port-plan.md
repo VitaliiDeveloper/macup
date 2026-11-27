@@ -308,8 +308,8 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [ ] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs.
 - [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
-- [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
-- [ ] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME.
+- [x] `check.macos_updates`: owned by the updates unit, a small PR after #12 (#14).
+- [x] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME. Done: #13's pipe and #19's guard; swift/main CI on 2b04ae9 passed with real tty runs.
 - [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
 - [ ] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it.
 
@@ -323,6 +323,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2A | updates | `swift/updates` | #12 | merged (1dcd8b2) |
 | 2A | commands | `swift/commands` | #13 | merged (cac5a4d) |
 | 2A | `check.macos_updates` | `swift/macos-updates` | #14 | merged (2b04ae9) |
+| 2A | names in the locale's order, `diff.sh` split | `swift/sorted-glob` | #19 | merged (78835fe) |
 | 2B | tools | `swift/tools` | #17 | in progress |
 | 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | merged (3e1703c) |
 | 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |

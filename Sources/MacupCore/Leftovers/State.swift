@@ -147,7 +147,7 @@ extension Leftovers {
     /// A glob of names in one folder, sorted as bash sorts them; the name's start is taken literally.
     static func glob(_ folder: String, prefix: String = "", _ pattern: String) -> [String] {
         let literal = prefix.unicodeScalars.map { "*?[\\".unicodeScalars.contains($0) ? "\\\($0)" : String($0) }.joined()
-        return Checks.glob(folder, literal + pattern)
+        return Names.glob(folder, literal + pattern)
     }
 
     static func basename(_ path: String) -> String {
@@ -158,15 +158,17 @@ extension Leftovers {
         id.split(separator: ".", omittingEmptySubsequences: false).last.map(String.init) ?? id
     }
 
-    /// `sort -u` in the locale (`sort -u -t'|' -k1,1` with `key`): the first of equal ones stays.
-    static func sortedUnique<Element>(_ items: [Element], key: (Element) -> String) -> [Element] {
-        _ = Checks.collation
-        let sorted = items.enumerated().sorted { left, right in
-            let order = strcoll(key(left.element), key(right.element))
-            return order != 0 ? order < 0 : left.offset < right.offset
-        }.map(\.element)
-        var unique: [Element] = []
-        for item in sorted where unique.last.map({ strcoll(key($0), key(item)) != 0 }) ?? true { unique.append(item) }
+    /// `sort -u`: names that sort as equal are one, and the first of them stays; strcoll ties more than bytes do (Cyrillic, CJK).
+    static func sortedUnique(_ names: [String]) -> [String] {
+        var unique: [String] = []
+        for name in Names.sorted(names) where unique.last.map({ Names.ordered($0, name) || $0.unicodeScalars.count != name.unicodeScalars.count }) ?? true {
+            unique.append(name)
+        }
         return unique
+    }
+
+    /// `sort -u -t'|' -k1,1`: the first item of each key.
+    static func sortedUnique<Element>(_ items: [Element], key: (Element) -> String) -> [Element] {
+        sortedUnique(items.map(key)).map { first in items.first { same(key($0), first) }! }
     }
 }

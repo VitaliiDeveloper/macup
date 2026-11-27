@@ -43,7 +43,7 @@ final class LeftoversTests: XCTestCase {
     func testNameOKIsBash() throws {
         let names = ["mac helper", "app", "helper app", "comet", "", "data cache", "cache"]
         let bash = try BashOracle.run(names.map { "name_ok \(BashOracle.quoted($0)) && echo yes || echo no" }, prelude: prelude + "LO_NAMES=comet\nLO_APPLE=\n")
-        let lookup = Leftovers.Names(apps: [Array("comet".utf8)], apple: [])
+        let lookup = Leftovers.Taken(apps: [Array("comet".utf8)], apple: [])
         for (name, answer) in zip(names, bash) { XCTAssertEqual(Leftovers.nameOK(lookup, name) ? "yes" : "no", answer, name) }
     }
 
@@ -123,12 +123,18 @@ final class LeftoversTests: XCTestCase {
         for (container, answer) in zip(containers, bash.dropFirst(ids.count)) { XCTAssertEqual(Leftovers.newest(run, container), answer, container) }
     }
 
-    func testVendorListSortsAsSort() throws {
-        let lines = ["b|2", "a|1", "b|1", "B|3", "e|5"]   // ASCII only until the shared collation sets LC_CTYPE too
-        let locale = ProcessInfo.processInfo.environment.filter { ["LANG", "LC_ALL", "LC_COLLATE"].contains($0.key) }   // the collation Swift sorts in
-        let bash = try BashOracle.run(["printf '%s\\n' \(lines.map(BashOracle.quoted).joined(separator: " ")) | sort -u -t'|' -k1,1"], env: locale)
+    /// strcoll ties the Cyrillic and CJK names with each other: sort -u keeps the first of each tie of the same length.
+    func testSortUniqueIsSort() throws {
+        let lines = ["b|2", "a|1", "b|1", "B|3", "é|4", "e\u{301}|6", "e|5", "б|7", "а|8", "аа|9", "日本|10", "中文|11", "b|12"]
         let pairs = lines.map { line -> (String, String) in let parts = line.split(separator: "|"); return (String(parts[0]), String(parts[1])) }
-        XCTAssertEqual(Leftovers.sortedUnique(pairs, key: \.0).map { "\($0.0)|\($0.1)" }.joined(separator: "\n"), bash[0])
+        let quoted = lines.map(BashOracle.quoted).joined(separator: " ")
+        defer { Names.toolLocale = nil }
+        for vars in [["LANG": "en_US.UTF-8"], ["LANG": "uk_UA.UTF-8"], ["LC_ALL": "C"]] {
+            Names.setLocale(try Env(["HOME": home, "LC_CTYPE": "en_US.UTF-8"].merging(vars) { $1 }))
+            let bash = try BashOracle.run(["printf '%s\\n' \(quoted) | sort -u -t'|' -k1,1", "printf '%s\\n' \(quoted) | sort -u"], env: vars)
+            XCTAssertEqual(Array(Leftovers.sortedUnique(pairs, key: \.0).map { "\($0.0)|\($0.1)" }.joined(separator: "\n").utf8), Array(bash[0].utf8), "\(vars)")
+            XCTAssertEqual(Array(Leftovers.sortedUnique(lines).joined(separator: "\n").utf8), Array(bash[1].utf8), "\(vars)")
+        }
     }
 
     func testLockedEmptyFileIsSkipped() throws {

@@ -3,20 +3,20 @@ import Foundation
 
 /// Data of a deleted app: only for vendors whose agent was found orphaned, so SDK ids and test bundles are never guessed at.
 extension Leftovers {
-    static let libraryWords: Set = ["accounts", "assistants", "audio", "autosave", "biome", "caches", "calendars", "colorsync", "colors", "compositions",
-                                    "containers", "contacts", "cookies", "developer", "favorites", "fileprovider", "fonts", "frontboard", "gamekit",
-                                    "homekit", "intents", "keyboard", "keychains", "logs", "mail", "maps", "messages", "metadata", "news", "passes",
-                                    "photos", "preferences", "printers", "reminders", "safari", "scripts", "services", "sharing", "shortcuts", "sounds",
-                                    "spelling", "spotlight", "suggestions", "translation", "trial", "weather", "webkit"]
+    static let libraryWords = ["accounts", "assistants", "audio", "autosave", "biome", "caches", "calendars", "colorsync", "colors", "compositions",
+                               "containers", "contacts", "cookies", "developer", "favorites", "fileprovider", "fonts", "frontboard", "gamekit",
+                               "homekit", "intents", "keyboard", "keychains", "logs", "mail", "maps", "messages", "metadata", "news", "passes",
+                               "photos", "preferences", "printers", "reminders", "safari", "scripts", "services", "sharing", "shortcuts", "sounds",
+                               "spelling", "spotlight", "suggestions", "translation", "trial", "weather", "webkit"]
     static let genericWords = " app mac helper helpers agent code updater update service services daemon data cache caches support shared common "
 
-    struct Names {
+    struct Taken {
         let apps: Set<[UInt8]>
         let apple: Set<[UInt8]>
     }
 
     static func registerData(_ run: Run, _ state: State) {
-        let names = Names(apps: Set(appNames(state).map { Array($0.utf8) }), apple: Set(appleNames(run).map { Array($0.utf8) }))
+        let names = Taken(apps: Set(sortedUnique(appNames(state)).map { Array($0.utf8) }), apple: Set(sortedUnique(appleNames(run)).map { Array($0.utf8) }))
         let vendors = sortedUnique(state.orphans.filter { $0.reason != .broken && !$0.vendor.isEmpty }.map { ($0.vendor, $0.name) }, key: \.0)
         let i18n = run.out.i18n
         for (vendor, name) in vendors where !vendorInstalled(state, vendor) {
@@ -43,7 +43,7 @@ extension Leftovers {
         }
     }
 
-    static func dataPaths(_ run: Run, _ state: State, _ names: Names, _ vendor: String) -> [String] {
+    static func dataPaths(_ run: Run, _ state: State, _ names: Taken, _ vendor: String) -> [String] {
         let library = "\(run.env.home)/Library", support = "\(library)/Application Support"
         var paths: [String] = [], ids: [String] = []
         for folder in ["Preferences", "Caches", "HTTPStorages", "Saved Application State", "WebKit", "Logs"] {
@@ -56,7 +56,7 @@ extension Leftovers {
                 ids.append(id)
             }
         }
-        for id in sortedUnique(ids, key: { $0 }) where id.split(separator: ".", omittingEmptySubsequences: false).count >= 3 && nameOK(names, lastComponent(id)) {
+        for id in sortedUnique(ids) where id.split(separator: ".", omittingEmptySubsequences: false).count >= 3 && nameOK(names, lastComponent(id)) {
             paths += byName(run, state, names, support, lastComponent(id))
         }
         let short = lastComponent(vendor)
@@ -74,36 +74,35 @@ extension Leftovers {
         return paths
     }
 
-    static func appNames(_ state: State) -> Set<String> {
-        Set(state.apps.flatMap { app -> [String] in
+    static func appNames(_ state: State) -> [String] {
+        state.apps.flatMap { app -> [String] in
             let file = basename(app.path)
             return [lastComponent(app.id), lc(file.hasSuffix(".app") ? String(file.dropLast(4)) : file)]
-        }.filter { !$0.isEmpty })
+        }.filter { !$0.isEmpty }
     }
 
     /// `apple_names`: Apple's own app and folder names, so ~/Library/Mail or Application Support/AddressBook are never taken.
-    static func appleNames(_ run: Run) -> Set<String> {
-        var names = libraryWords
+    static func appleNames(_ run: Run) -> [String] {
+        var names: [String] = []
         for folder in ["/System/Applications", "/System/Applications/Utilities", "/System/Library/CoreServices"] {
-            for app in glob(folder, "*.app") where exists(app) { names.insert(lc(String(basename(app).dropLast(4)))) }
+            for app in glob(folder, "*.app") where exists(app) { names.append(lc(String(basename(app).dropLast(4)))) }
         }
         for file in glob("\(run.env.home)/Library/Preferences", "com.apple.*") where exists(file) {
-            names.insert(String(lc(String(basename(file).dropFirst(10))).prefix { $0 != "." }))
+            names.append(String(lc(String(basename(file).dropFirst(10))).prefix { $0 != "." }))
         }
-        names.remove("")
-        return names
+        return (names + libraryWords).filter { !$0.isEmpty }
     }
 
-    static func nameOK(_ names: Names, _ name: String) -> Bool {
+    static func nameOK(_ names: Taken, _ name: String) -> Bool {
         !name.isEmpty && !holds(genericWords, " \(name) ") && !names.apps.contains(Array(name.utf8)) && !names.apple.contains(Array(name.utf8))
     }
 
-    static func byName(_ run: Run, _ state: State, _ names: Names, _ folder: String, _ name: String) -> [String] {
+    static func byName(_ run: Run, _ state: State, _ names: Taken, _ folder: String, _ name: String) -> [String] {
         glob(folder, "*").filter { exists($0) && !Run.isSymlink($0) && same(lc(basename($0)), name) && !held(run, state, names, $0) }
     }
 
     /// A folder that cannot all be read counts as held.
-    static func held(_ run: Run, _ state: State, _ names: Names, _ folder: String) -> Bool {
+    static func held(_ run: Run, _ state: State, _ names: Taken, _ folder: String) -> Bool {
         let listing = find(run, [folder, "-maxdepth", "3"])
         guard listing.status == 0 else { return true }
         let ids = state.apps.map(\.id)

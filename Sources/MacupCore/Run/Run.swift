@@ -32,6 +32,7 @@ public final class Run {
     public let candidates = Candidates()
     public let measure: Measure
     public let sudo: SudoKeep
+    var leftovers: Leftovers.State?
     var reportDone = false
     var quietDescriptor: Int32?
 

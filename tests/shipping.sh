@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shipping: tools/bump-formula.sh against a fake GitHub release. Nothing reaches the network: a fake curl serves
+# Shipping: tools/bump-formula.sh, install.sh and the 2.9 bootstrap against a fake GitHub release. Nothing reaches the network: a fake curl serves
 # $FAKE_REMOTE/raw/<ref>/<file> for raw.githubusercontent.com and $FAKE_REMOTE/releases/<tag>/<file> for release assets,
 # and writes every URL it was asked for to $FAKE_REMOTE/curl.log. tests/run.sh calls it; it also runs on its own.
 cd "$(dirname "$0")/.." || exit 1
@@ -34,7 +34,7 @@ export PATH="$work/bin:$PATH" FAKE_REMOTE="$work/remote"
 # release_asset VERSION FILE…: a release of these files as the release workflow packs them, with its published SHA-256
 release_asset(){
   local version=$1 dir="$FAKE_REMOTE/releases/v$1" name="macup-$1-macos-universal.tar.gz"; shift
-  mkdir -p "$dir" "$work/pack.$version"; cp "$@" "$work/pack.$version/"
+  rm -rf "$work/pack.$version"; mkdir -p "$dir" "$work/pack.$version"; cp "$@" "$work/pack.$version/"
   COPYFILE_DISABLE=1 tar -czf "$dir/$name" -C "$work/pack.$version" .
   echo "$(sum256 "$dir/$name")  $name" >"$dir/$name.sha256"
 }
@@ -79,5 +79,129 @@ git -C "$tap" checkout -q -- Formula/macup.rb
 out=$(bump --commit 9.9.9 "$tap"); rc=$?
 [ $rc = 0 ] && [ "$(git -C "$tap" log -1 --format=%s)" = "macup 9.9.9" ] && [ -z "$(git -C "$tap" status --porcelain)" ] && ! grep -qE '^git (-C [^ ]+ )?push' "$FAKE_REMOTE/git.log" \
   && pass "bump-formula --commit: committed, never pushed" || fail "bump-formula --commit (rc=$rc): $out"
+
+# --- the bootstrap (tools/bootstrap.sh, the root macup once phase 5 ends) and the installer against a fake release
+cat >"$work/bin/sw_vers" <<'FAKE'
+#!/bin/bash
+echo "${FAKE_MACOS:-15.1}"
+FAKE
+cat >"$work/bin/launchctl" <<'FAKE'
+#!/bin/bash
+echo "$*" >>"$HOME/launchctl.log"
+FAKE
+chmod +x "$work/bin/sw_vers" "$work/bin/launchctl"
+fake_binary(){ # VERSION PATH: stands in for the release binary; says its version, writes down every other run
+  printf '#!/bin/bash\n[ "$1" = version ] && { echo "macup %s"; exit 0; }\necho "$0 $*" >>"$HOME/ran.log"\n' "$1" >"$2"; chmod 755 "$2"
+}
+publish(){ # FILE REF: FILE as raw/<REF>/macup with its macup.sha256, as 2.9 copies and install.sh read them
+  mkdir -p "$FAKE_REMOTE/raw/$2"; cp "$1" "$FAKE_REMOTE/raw/$2/macup"; echo "$(sum256 "$1")  macup" >"$FAKE_REMOTE/raw/$2/macup.sha256"
+}
+rm -rf "$FAKE_REMOTE"; mkdir -p "$FAKE_REMOTE" "$work/asset"
+sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' tools/bootstrap.sh >"$work/bootstrap"; publish "$work/bootstrap" main
+fake_binary 9.9.9 "$work/asset/macup"
+# 2.9.2 as released when this checkout has its tag; else the bash build, whose self-update is 2.9.2's (MACUP_SELF aside)
+if git cat-file -e v2.9.2:macup 2>/dev/null; then git show v2.9.2:macup >"$work/macup-2.9.2"; echo "2.9.2: the v2.9.2 tag"
+else sed 's/^MACUP_VERSION=.*/MACUP_VERSION="2.9.2"/' macup >"$work/macup-2.9.2"; echo "2.9.2: the bash build"; fi
+publish "$work/macup-2.9.2" v2.9.2
+
+home="$work/old"; bin="$home/.local/bin"; plist="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"
+mkdir -p "$bin" "$home/.config/macup" "${plist%/*}" "$home/tmp"; printf 'language = en\n' >"$home/.config/macup/config"
+schedule_29="<array><string>/bin/bash</string><string>$bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string></array>"
+fresh(){ # FILE: this home as 2.9.2 left it with a weekly schedule, FILE installed
+  cp "$1" "$bin/macup"; chmod 755 "$bin/macup"; rm -f "$home/ran.log" "$home/launchctl.log"; : >"$FAKE_REMOTE/curl.log"
+  printf '<plist version="1.0">\n<dict>\n  <key>ProgramArguments</key>\n  %s\n</dict>\n</plist>\n' "$schedule_29" >"$plist"
+}
+run(){ env HOME="$home" TMPDIR="$home/tmp/" FAKE_MACOS="${macos:-15.1}" "$@" </dev/null 2>&1; }
+untouched(){ cmp -s "$bin/macup" "$work/bootstrap" && grep -qF "$schedule_29" "$plist" && [ ! -e "$home/launchctl.log" ] \
+  && [ -z "$(ls -A "$home/tmp")" ] && [ "$(ls -A "$bin")" = macup ]; }
+urls(){ sed 's|^https://raw.githubusercontent.com/VitaliiDeveloper/macup/||; s|^https://github.com/VitaliiDeveloper/macup/releases/download/||' "$FAKE_REMOTE/curl.log" | paste -sd' ' -; }
+
+/bin/bash -n tools/bootstrap.sh && grep -qE '^MACUP_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' tools/bootstrap.sh && grep -q '^# macup' tools/bootstrap.sh \
+  && grep -qE '^LEGACY_VERSION="2\.9\.[0-9]+"' tools/bootstrap.sh && pass "bootstrap: bash -n, the version line 2.9 reads, found by 2.9's rule" || fail "bootstrap: its lines"
+
+# before the tag: 2.9.2 falls back to main, and the bootstrap waits for the release asset
+fresh "$work/macup-2.9.2"
+out=$(run /bin/bash "$bin/macup" self-update --no-color); rc=$?
+[ $rc = 0 ] && grep -q 'macup updated: 2.9.2 → 9.9.9' <<<"$out" && cmp -s "$bin/macup" "$work/bootstrap" && [ "$(urls)" = "main/macup v9.9.9/macup.sha256 main/macup.sha256" ] \
+  && pass "2.9.2 self-update before the tag: the bootstrap from main" || { fail "2.9.2 self-update from main (rc=$rc): $out"; urls; }
+out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
+[ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz' <<<"$out" \
+  && untouched && /bin/bash -n "$bin/macup" && [ ! -e "$home/ran.log" ] && pass "bootstrap: no release asset yet, it stays and says so" || { fail "bootstrap before the asset (rc=$rc): $out"; ls -A "$bin"; }
+
+# the release: 2.9.2 takes the bootstrap from the tag
+publish "$work/bootstrap" v9.9.9; release_asset 9.9.9 "$work/asset/macup"
+fresh "$work/macup-2.9.2"
+out=$(run /bin/bash "$bin/macup" self-update --no-color); rc=$?
+[ $rc = 0 ] && grep -q 'macup updated: 2.9.2 → 9.9.9' <<<"$out" && cmp -s "$bin/macup" "$work/bootstrap" && [ "$(urls)" = "main/macup v9.9.9/macup.sha256 v9.9.9/macup" ] \
+  && pass "2.9.2 self-update: the bootstrap from the tag, checked by its SHA-256" || { fail "2.9.2 self-update from the tag (rc=$rc): $out"; urls; }
+
+# the schedule's own run: the check runs from a download, the file and the loaded job stay as they are
+out=$(run env XPC_SERVICE_NAME=com.vitaliideveloper.macup /bin/bash "$bin/macup" check --quiet --notify); rc=$?
+[ $rc = 0 ] && grep -q 'This scheduled check runs macup 9.9.9 from a download' <<<"$out" && grep -qE "^$home/tmp/+macup-update\.[A-Za-z0-9]+/macup check --quiet --notify$" "$home/ran.log" \
+  && untouched && pass "bootstrap from launchd: the check runs from a download, nothing replaced or reloaded" || { fail "bootstrap from launchd (rc=$rc): $out"; cat "$home/ran.log"; }
+
+# a run from a terminal: replaced by rename, the schedule points at the binary and is loaded again, then the command runs
+rm -f "$home/ran.log"
+out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/asset/macup" && [ "$(cat "$home/ran.log")" = "$bin/macup check --no-color" ] && grep -q "macup 9.9.9 is installed: $bin/macup" <<<"$out" \
+  && grep -qF "<array><string>$bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string></array>" "$plist" \
+  && [ "$(cat "$home/launchctl.log")" = "bootout gui/$(id -u)/com.vitaliideveloper.macup"$'\n'"bootstrap gui/$(id -u) $plist" ] && [ "$(ls -A "$bin")" = macup ] \
+  && pass "bootstrap: replaced by the release binary, the 2.9 schedule rewritten and reloaded, the command run" || { fail "bootstrap swap (rc=$rc): $out"; cat "$plist" "$home/launchctl.log"; ls -A "$bin"; }
+
+# nothing changes when the download is wrong
+corrupt(){ # what to check, then the asset's files
+  local what=$1; shift; fresh "$work/bootstrap"; release_asset 9.9.9 "$@"; out=$(run /bin/bash "$bin/macup" version); rc=$?
+  [ $rc = 1 ] && untouched && grep -q "$what" <<<"$out" && [ "$(grep -c 'macos-universal.tar.gz$' "$FAKE_REMOTE/curl.log")" = 1 ]
+}
+mkdir -p "$work/wrong"; fake_binary 9.9.8 "$work/wrong/macup"
+corrupt 'looks broken; nothing changed' "$work/wrong/macup" && pass "bootstrap: a binary that is not this version is refused" || fail "bootstrap: wrong version ($rc): $out"
+mkdir -p "$work/loop"; cp "$work/bootstrap" "$work/loop/macup"
+corrupt 'looks broken; nothing changed' "$work/loop/macup" && pass "bootstrap: an asset that is a bootstrap is never run" || fail "bootstrap: bootstrap as the asset ($rc): $out"
+release_asset 9.9.9 "$work/asset/macup"; echo "$(printf '%064d' 2)  x" >"$FAKE_REMOTE/releases/v9.9.9/macup-9.9.9-macos-universal.tar.gz.sha256"
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" version); rc=$?
+[ $rc = 1 ] && untouched && grep -q 'does not match its published checksum' <<<"$out" && pass "bootstrap: a checksum mismatch changes nothing" || fail "bootstrap: checksum ($rc): $out"
+release_asset 9.9.9 "$work/asset/macup"
+fresh "$work/bootstrap"; chmod 555 "$bin"; out=$(run /bin/bash "$bin/macup" version); rc=$?; chmod 755 "$bin"
+[ $rc = 1 ] && untouched && grep -q "Couldn't write $bin/macup" <<<"$out" && [ ! -s "$FAKE_REMOTE/curl.log" ] && pass "bootstrap: a folder it cannot write is said" || fail "bootstrap: read-only folder ($rc): $out"
+
+# Homebrew's file is Homebrew's; a Mac older than macOS 13 keeps the last 2.9
+cellar="$home/brew/Cellar/macup/9.9.9/bin"; mkdir -p "$cellar" "$home/brew/bin"; cp "$work/bootstrap" "$cellar/macup"; ln -sf ../Cellar/macup/9.9.9/bin/macup "$home/brew/bin/macup"
+: >"$FAKE_REMOTE/curl.log"; printf 'language = uk\n' >"$home/.config/macup/config"
+out=$(run /bin/bash "$home/brew/bin/macup" version); rc=$?; printf 'language = en\n' >"$home/.config/macup/config"
+[ $rc = 1 ] && [ "$out" = "macup встановлено через Homebrew. Онови його так: brew upgrade macup" ] && cmp -s "$cellar/macup" "$work/bootstrap" && [ ! -s "$FAKE_REMOTE/curl.log" ] \
+  && pass "bootstrap in a Homebrew Cellar: brew upgrade macup, in the configured language" || fail "bootstrap under Homebrew ($rc): $out"
+fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" version); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && grep -qx 'macup 2.9.2' <<<"$out" && grep -q 'macup 9.9.9 needs macOS 13 or later; this Mac keeps macup 2.9.2' <<<"$out" \
+  && [ "$(urls)" = "v2.9.2/macup.sha256 v2.9.2/macup" ] && grep -qF "$schedule_29" "$plist" && pass "bootstrap on macOS 12: the last 2.9 instead" || { fail "bootstrap on macOS 12 ($rc): $out"; urls; }
+
+# the real binary, packed as the release workflow packs it
+real=${MACUP_BIN:-$PWD/.build/debug/macup}
+if [ -f "$real" ]; then
+  version=$("$real" version | sed -n 's/^macup //p'); mkdir -p "$work/real"; cp "$real" "$work/real/macup"; release_asset "$version" "$work/real/macup"
+  sed "s/^MACUP_VERSION=.*/MACUP_VERSION=\"$version\"/" tools/bootstrap.sh >"$work/bootstrap-real"
+  fresh "$work/bootstrap-real"; out=$(run /bin/bash "$bin/macup" version); rc=$?
+  [ $rc = 0 ] && cmp -s "$bin/macup" "$real" && grep -qx "macup $version" <<<"$out" && pass "bootstrap: replaced by the real binary, which runs" || fail "bootstrap with the real binary ($rc): $out"
+else echo "SKIP bootstrap with the real binary: none at $real"; fi
+
+# install.sh as `curl | bash` gets: the bootstrap from the tag, which finishes the install; an older copy goes
+ihome="$work/inst"; mkdir -p "$ihome/.npm-global/bin"; printf '\317\372\355\376\n# macup\nMACUP_VERSION="9.9.8"\n' >"$ihome/.npm-global/bin/macup"
+install_remote(){ env HOME="$ihome" TMPDIR="$ihome/" MACUP_PREFIX="$ihome/.local/bin" FAKE_MACOS=15.1 /bin/bash -s -- --yes --lang en <install.sh 2>&1; }
+release_asset 9.9.9 "$work/asset/macup"; rm -rf "$FAKE_REMOTE/releases/v9.9.9"
+out=$(install_remote); rc=$?
+[ $rc = 1 ] && grep -q 'is not published yet' <<<"$out" && grep -q 'run the installer again in a few minutes' <<<"$out" && pass "install.sh before the release asset: says so" || fail "install.sh before the asset ($rc): $out"
+release_asset 9.9.9 "$work/asset/macup"
+out=$(install_remote); rc=$?
+[ $rc = 0 ] && cmp -s "$ihome/.local/bin/macup" "$work/asset/macup" && grep -q 'Installed: macup 9.9.9 → .*/.local/bin/macup$' <<<"$out" && [ ! -e "$ihome/.npm-global/bin/macup" ] \
+  && [ "$(ls -A "$ihome/.local/bin")" = macup ] && pass "install.sh | bash: the release binary through the bootstrap, a 3.0 copy elsewhere removed" || { fail "install.sh remote ($rc): $out"; ls -A "$ihome/.local/bin"; }
+
+# from a checkout: the binary built last, over one that has already run
+newest=$PWD/.build/release/macup; [ "$PWD/.build/debug/macup" -nt "$newest" ] && newest=$PWD/.build/debug/macup
+older=$PWD/.build/debug/macup; [ "$newest" = "$older" ] && older=$PWD/.build/release/macup
+if [ -f "$newest" ] && [ -f "$older" ] && ! cmp -s "$newest" "$older"; then
+  lhome="$work/local"; mkdir -p "$lhome/.local/bin"; cp "$older" "$lhome/.local/bin/macup"; env HOME="$lhome" "$lhome/.local/bin/macup" version >/dev/null
+  env HOME="$lhome" MACUP_PREFIX="$lhome/.local/bin" /bin/bash ./install.sh --yes --lang en </dev/null >"$work/local.out" 2>&1; rc=$?
+  [ $rc = 0 ] && cmp -s "$lhome/.local/bin/macup" "$newest" && env HOME="$lhome" "$lhome/.local/bin/macup" version >/dev/null && [ "$(ls -A "$lhome/.local/bin")" = macup ] \
+    && pass "install.sh from a checkout: the binary built last, over one that ran" || { fail "install.sh local ($rc)"; cat "$work/local.out"; }
+else echo "SKIP install.sh from a checkout: needs two different builds in .build/release and .build/debug"; fi
 
 echo; [ $failed = 0 ] && echo "shipping: ALL PASS" || { echo "shipping: SOME FAILED"; exit 1; }

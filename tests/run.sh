@@ -43,7 +43,7 @@ done
 # --- leftovers of deleted apps
 tests/leftovers.sh || failed=1
 
-# --- shipping: the release tools against a fake GitHub release
+# --- shipping: the release tools, the installer and the 2.9 bootstrap against a fake GitHub release
 tests/shipping.sh || failed=1
 
 echo; [ $failed = 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

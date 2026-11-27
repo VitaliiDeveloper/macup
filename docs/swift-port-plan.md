@@ -304,13 +304,13 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 
 ## Follow-ups queued
 
-- [ ] After wave A: move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Also set LC_CTYPE with LC_COLLATE (from `Env.lcCtype`'s decision): with LC_CTYPE "C" strcoll orders `a é b B e` where bash's glob and `sort` give `a b B e é` (found by the leftovers unit). Owner: the commands unit's session; it blocks the leftovers unit's non-ASCII sort test.
+- [x] After wave A (#19): move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Also set LC_CTYPE with LC_COLLATE (from `Env.lcCtype`'s decision): with LC_CTYPE "C" strcoll orders `a é b B e` where bash's glob and `sort` give `a b B e é` (found by the leftovers unit). Owner: the commands unit's session; it blocks the leftovers unit's non-ASCII sort test.
 - [ ] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs.
 - [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
 - [ ] `check.macos_updates`: owned by the updates unit, a small PR after #12.
 - [ ] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME.
-- [ ] `diff.sh` flake: the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
+- [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
 
 ## Progress
 

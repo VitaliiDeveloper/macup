@@ -90,6 +90,15 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
   - a `grep -q` under pipefail that SIGPIPE could turn into "no" gives the intended answer;
   - xargs batch sizes for the old Downloads follow BSD xargs approximately, which decides only how du counts a hard link shared across batches.
 - Found in wave A, updates unit (PR #12): a step-timeout warning in a step run from the home folder (agent skills, each Claude Code plugin update) counts once in the summary, `--json` and history, and the section header prints once; bash runs those steps in a subshell, loses the warning from the counts and can print the header twice.
+- Found in wave A, `check.macos_updates` (PR #14): `softwareupdate -l` output that is not UTF-8 is read on where bash's sed stops at that line, and output past about 64 KiB with no labels cannot turn into a SIGPIPE status.
+- Found in wave B, cleaners unit (PR #18):
+  - `clean.profiles` also runs without python3 (the python3 gate above);
+  - the Claude Code edit-backup and Grok checks (`printf … | grep -qxF` under pipefail) give the intended answer past about 1,770 sessions, where SIGPIPE makes bash offer live sessions' backups for the Trash. Worth a fix on `main` too: `grep -xF … >/dev/null`, as cleaners.sh:464 does.
+- Found in wave B, tools unit (PR #17):
+  - the python3 gate above also covers simulator runtimes, the commands check, signing certificates and crash reports;
+  - tool output that is not UTF-8 shows U+FFFD where bash prints the raw bytes; counts and the report's command output are the same;
+  - `| head -1` on `flutter`, `codex` and `xcodebuild`: Swift reads the tool to its end instead of stopping it with SIGPIPE, same text;
+  - the Python version comes from `python3 -c "import platform; …"`, so it differs only on a python3 older than 3.6.
 
 ## Layout
 
@@ -326,7 +335,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2A | commands | `swift/commands` | #13 | merged (cac5a4d) |
 | 2A | `check.macos_updates` | `swift/macos-updates` | #14 | merged (2b04ae9) |
 | 2A | names in the locale's order, `diff.sh` split | `swift/sorted-glob` | #19 | merged (78835fe) |
-| 2B | tools | `swift/tools` | #17 | in progress |
+| 2B | tools | `swift/tools` | #17 | merged (a7a08b1) |
 | 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | merged (3e1703c) |
 | 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |
 | 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | merged (85dc350) |

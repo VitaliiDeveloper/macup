@@ -5,7 +5,7 @@ extension Leftovers {
     /// The cleaners call it where cleaners.sh registers dev containers, before the Gradle caches.
     static func registerDevContainers(_ run: Run) {
         guard run.taskAllowed("clean.dev_containers"), state(run).interactive, !devPrefixes(run).isEmpty else { return }
-        preconditionFailure("the dev container scan needs lsof, which comes with the pick")
+        preconditionFailure("the dev container scan comes with the pick")
     }
 
     /// `app_for`: Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id

@@ -62,7 +62,7 @@ Run `macup tasks` for the full list with task ids.
 
 ## Requirements
 
-- macOS 13 Ventura or later, on Apple silicon or Intel: macup is one universal binary. The tests run on macOS 15 and 26 on Apple silicon; macOS 13 and 14 and Intel Macs are built for but not tested. On macOS 12 or older the installer and `self-update` keep macup 2.9.2, the last version that runs there.
+- macOS 13 Ventura or later, on Apple silicon or Intel: macup is one universal binary. The tests run on macOS 15 and 26 on Apple silicon; macOS 13 and 14 and Intel Macs are built for but not tested. On macOS 12 or older the installer and `self-update` install or keep macup 2.9.2, the last version that runs there; the Homebrew formula requires macOS 13. The installer refuses other systems.
 - `curl`, which ships with macOS, for the installer and `self-update`.
 - Optional: `git`, also from the Command Line Tools. Stale build folders are offered only when git can tell that it tracks no file in them.
 - Optional: the tools macup updates (Homebrew, `mas`, Claude Code, npm, …). Missing ones are skipped.
@@ -98,7 +98,7 @@ brew install vitaliideveloper/macup/macup
 
 It installs the same release binary. There are no installer questions here. The language follows macOS. Use `macup lang` to change it and `macup config` to set your project folders.
 
-There is no download to open from a browser: the binary is ad hoc signed, not notarized, and macOS quarantines what a browser downloads. The installer and Homebrew don't set that flag.
+Don't download the release archive in a browser: the binary is ad hoc signed, not notarized, so Gatekeeper blocks a copy the browser has quarantined. The installer and Homebrew don't quarantine it.
 
 **From source:**
 
@@ -110,7 +110,7 @@ git clone https://github.com/VitaliiDeveloper/macup.git
 cd macup && ./build.sh && ./install.sh
 ```
 
-This needs Xcode or the Command Line Tools (Swift 5.9 or later). `./install.sh` in a checkout installs the binary you just built.
+This needs Xcode 16 or later, or its Command Line Tools. `./install.sh` in a checkout installs the binary you just built.
 
 **Update or remove:**
 
@@ -122,14 +122,14 @@ macup self-update
 macup uninstall
 ```
 
-`self-update` installs the latest release from GitHub when it is newer: the binary attached to that release, checked against its published SHA-256 and required to report that version. It then takes the old file's place by a rename, so a macup that is running keeps its file. For a Homebrew install it tells you to run `brew upgrade macup`.
+`self-update` installs the latest release from GitHub when it is newer: the binary attached to that release, checked against its published SHA-256 and required to report that version. It then takes the old file's place by a rename, so a macup that is running at that moment is not disturbed. For a Homebrew install it tells you to run `brew upgrade macup`.
 `uninstall` lists everything it will remove and asks once (`--yes` skips the question): the binary, settings, history, reports, the schedule and the installer's `PATH` line. It keeps the `PATH` line if other programs live in that folder. For a Homebrew install it runs `brew uninstall macup`.
 
 **From 2.9 to 3.0:** run `macup self-update` as usual (`brew upgrade macup` for Homebrew). Version 2.9 was a bash script; 3.0 is a binary, so 2.9's self-update installs a small bootstrap first. Its next run does the rest:
 
 - downloads the 3.0 binary, checks its SHA-256 and that it runs, replaces itself with it and runs the command you typed;
 - points a schedule from `macup schedule` at the binary. A scheduled check that comes first still runs, from a temporary copy, and its log says to run macup once in Terminal to finish;
-- in the minutes between a release and its upload, says the release is not published yet and changes nothing;
+- in the minutes between a release and its upload, or when the download fails, says so, runs nothing and changes nothing: run macup again a few minutes later;
 - on macOS 12 or older, installs 2.9.2 instead.
 
 With Homebrew, the first time you run macup 3.0 in Terminal, it moves the schedule onto the binary.
@@ -183,7 +183,7 @@ Plain `macup` opens a menu:
 | `--notify` | Show a macOS notification when something needs attention (the schedule uses it) |
 | `--yes` | `uninstall` without the question |
 
-Exit status: `0` the run finished · `3` an update or cleanup step failed · `2` bad arguments · `1` unknown command, or macup is already running · `130` interrupted. Warnings from the health checks do not change it; read them from `--json` (`needs_attention`).
+Exit status: `0` the run finished · `3` an update or cleanup step failed · `2` bad arguments · `1` unknown command, macup is already running, or no temporary file can be made · `130` interrupted. Warnings from the health checks do not change it; read them from `--json` (`needs_attention`).
 
 ### Examples
 

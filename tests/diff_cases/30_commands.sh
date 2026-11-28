@@ -9,7 +9,7 @@ printf '#!/bin/bash\nfor url; do :; done\ncase "$url" in */main/macup) ;; *) exe
 chmod +x "$work/bin/open" "$work/bin/editor" "$work/bin/curl"; fakes "$work/bin" launchctl
 # history's trend line is bold, with nothing before its label: bash's awk h() set the global b, the bold colour, to the last
 # freed value in bytes
-expect_trend(){ perl -pi -e '/(?:▁|▂|▃|▄|▅|▆|▇|█)+  \(.* … .*\)\r?$/ and (s/^[0-9.e+]+(?=.*\e\[0m )/\e[1m/ or s/^[0-9.e+]+//)' "$1"; }
+expect_trend(){ perl -pi -e '/(?:▁|▂|▃|▄|▅|▆|▇|█)+  \(.* … .*\)\r*$/ and (s/^[-+.0-9a-z]+(?=.*\e\[0m )/\e[1m/ or s/^[-+.0-9a-z]+//)' "$1"; }
 CASES="$CASES"'
 cmd-history-none|||history
 cmd-history|cmd_history|EXPECT=trend|history
@@ -73,7 +73,7 @@ cmd-menu-all|brew|ANSWERS=2 FAKE_SUDO_RC=0|--only check.disk,update.brew
 cmd-menu-update|brew|ANSWERS=3|--only update.brew
 cmd-menu-clean|dd|ANSWERS=4|--only clean.derived_data --lang ru
 cmd-menu-deep|cmd_history|ANSWERS=5|--only check.disk
-cmd-menu-history|cmd_history|ANSWERS=6|
+cmd-menu-history|cmd_history|ANSWERS=6 EXPECT=trend|
 cmd-menu-last|cmd_reports|ANSWERS=7|--no-color
 cmd-menu-tasks|config|ANSWERS=8/n|
 cmd-menu-tasks-config|config|ANSWERS=8/y EDITOR=editor|

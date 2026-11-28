@@ -105,32 +105,4 @@ final class ChecksTests: XCTestCase {
             XCTAssertEqual(Checks.backupAge(day, now: now), then == "none" ? 0 : Int((now - time_t(then)!) / 86400), day)
         }
     }
-
-    /// No `date` is asked, so its answer cannot move the age; bash's came a second late now and then, and the age a day short.
-    func testBackupAgeAsksNoDate() throws {
-        let home = NSTemporaryDirectory() + "macup-tm-\(UUID().uuidString)"
-        defer { try? FileManager.default.removeItem(atPath: home) }
-        try FileManager.default.createDirectory(atPath: home + "/bin", withIntermediateDirectories: true)
-        let day = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -10, to: Date()))
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        let latest = formatter.string(from: day)
-        let tools = ["tmutil": "[ \"$1\" = latestbackup ] && echo /Volumes/Disk/\(latest)-101010.backup || echo 'Name : Disk'",
-                     "date": "echo $(( $(/bin/date +%s) + 86400 ))"]
-        for (tool, body) in tools {
-            FileManager.default.createFile(atPath: "\(home)/bin/\(tool)", contents: Data("#!/bin/bash\n\(body)\n".utf8), attributes: [.posixPermissions: 0o755])
-        }
-        let env = try Env(["HOME": home, "PATH": "\(home)/bin:/usr/bin:/bin", "MACUP_PATH": "keep"])
-        let arguments = try Arguments.parse(["check"])
-        let settings = Settings(config: Config(env: env), env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
-        let output = open(home + "/out", O_WRONLY | O_CREAT, 0o644)
-        let out = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: output)
-        Checks.timeMachine(Run(env: env, arguments: arguments, settings: settings, shell: Shell(env: env), out: out, report: Report(path: home + "/report.md", body: home + "/body"),
-                               lock: RunLock(dir: home + "/lock", held: false), started: Date(), previous: ""))
-        close(output)
-        let age = Checks.backupAge(latest, now: time(nil))
-        XCTAssertGreaterThanOrEqual(age, 9)
-        XCTAssertTrue(try String(contentsOfFile: home + "/out", encoding: .utf8).contains("last backup \(latest) (\(age) days ago)"))
-    }
 }

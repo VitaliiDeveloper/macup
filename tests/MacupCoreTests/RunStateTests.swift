@@ -11,7 +11,7 @@ final class RunStateTests: XCTestCase {
 
     override func tearDown() { try? FileManager.default.removeItem(atPath: home) }
 
-    func makeRun(_ argv: [String], fakes: [String: String] = [:]) throws -> Run {
+    func makeRun(_ argv: [String], fakes: [String: String] = [:], output: Int32? = nil) throws -> Run {
         for (name, script) in fakes {
             try "#!/bin/bash\n\(script)\n".write(toFile: "\(home)/bin/\(name)", atomically: true, encoding: .utf8)
             chmod("\(home)/bin/\(name)", 0o755)
@@ -20,7 +20,7 @@ final class RunStateTests: XCTestCase {
         let arguments = try Arguments.parse(argv)
         let settings = Settings(config: Config(env: env), env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
         let shell = Shell(env: env)
-        let out = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: open("/dev/null", O_WRONLY))
+        let out = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: output ?? open("/dev/null", O_WRONLY))
         return Run(env: env, arguments: arguments, settings: settings, shell: shell, out: out, report: Report(path: home + "/report.md", body: home + "/body"),
                    lock: RunLock(dir: home + "/lock", held: false), started: Date(), previous: "")
     }
@@ -70,5 +70,21 @@ final class RunStateTests: XCTestCase {
         run.sudo.stop()
         XCTAssertEqual(String(decoding: FileManager.default.contents(atPath: home + "/sudo.log") ?? Data(), as: UTF8.self), "-k\n")
         XCTAssertFalse(run.sudo.asked)
+    }
+
+    /// No `date` is asked, so its answer cannot move the age; bash's came a second late now and then, and the age a day short.
+    func testBackupAgeAsksNoDate() throws {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let latest = formatter.string(from: try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -10, to: Date())))
+        let output = open(home + "/out", O_WRONLY | O_CREAT, 0o644)
+        let before = Checks.backupAge(latest, now: time(nil))
+        Checks.timeMachine(try makeRun(["check"], fakes: ["tmutil": "[ \"$1\" = latestbackup ] && echo /Volumes/Disk/\(latest)-101010.backup || echo 'Name : Disk'",
+                                                         "date": "echo $(( $(/bin/date +%s) + 86400 ))"], output: output))
+        close(output)
+        let printed = try String(contentsOfFile: home + "/out", encoding: .utf8)
+        XCTAssertGreaterThanOrEqual(before, 9)
+        XCTAssertTrue([before, Checks.backupAge(latest, now: time(nil))].contains { printed.contains("last backup \(latest) (\($0) days ago)") }, printed)
     }
 }

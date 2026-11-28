@@ -11,20 +11,21 @@ enum Terminal {
 
     /// The line typed, as `read -r` and `echo` hand it on: blanks at both ends gone. "" without a terminal.
     /// A run ignores SIGINT for its dispatch source, so the wait looks at the interrupt itself: Ctrl-C at a question ends the
-    /// run, as bash's trap does once the question's subshell is gone.
+    /// run, as bash's trap does once the question's subshell is gone. The terminal is read without blocking (poll() cannot
+    /// wait on /dev/tty on macOS: it answers POLLNVAL at once).
     static func ask(_ prompt: String) -> String {
         say(prompt)
-        let reader = Darwin.open("/dev/tty", O_RDONLY)
+        let reader = Darwin.open("/dev/tty", O_RDONLY | O_NONBLOCK)
         guard reader >= 0 else { return "" }
         defer { close(reader) }
         var bytes: [UInt8] = [], byte: UInt8 = 0
-        var waiting = pollfd(fd: reader, events: Int16(POLLIN), revents: 0)
         while true {
             Interrupt.check()
-            let ready = poll(&waiting, 1, 200)
-            if ready == 0 || (ready < 0 && errno == EINTR) { continue }
             let count = read(reader, &byte, 1)
-            if count < 0, errno == EINTR { continue }
+            if count < 0, errno == EAGAIN || errno == EINTR {
+                usleep(50_000)
+                continue
+            }
             if count != 1 || byte == 0x0A { break }
             if byte != 0 { bytes.append(byte) }
         }

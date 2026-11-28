@@ -38,7 +38,7 @@ enum Pick {
             out.beginSection("Cleanup")
             for index in chosen { Cleanup.execute(run, index) }
         }
-        if !system.isEmpty { _ = run.shell.tl(0, ["sudo", "-k"]) }
+        if !system.isEmpty { run.shell.forgetSudo(errors: .inherit) }
     }
 
     /// `pick`: the indexes an answer names, ascending, once each. A level word takes every candidate a clean at that level

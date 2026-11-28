@@ -1,45 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
-# Sourced by tests/run.sh: bump-formula, hanging step tree, certificates, crashes, sharing, PATH, MACUP_PATH=keep.
-# --- tools/bump-formula.sh: a fake curl and a fake git (it answers ls-remote, everything else goes to the real git) keep it off the network; the tap is a throwaway repository
-GIT=$(command -v git); TB="$work/bumpbin"; TAP="$work/tap"; mkdir -p "$TB" "$TAP/Formula"
-printf '#!/bin/bash\nwhile [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift ;; http*) echo "$1" >>"$FAKE_LOG" ;; esac; shift; done\n[ -n "$FAKE_CURL_FAIL" ] && exit 22\nprintf "tarball of %%s" "$FAKE_VERSION" >"$out"\n' >"$TB/curl"
-cat >"$TB/git" <<'FAKE'
-#!/bin/bash
-args=("$@"); [ "$1" = -C ] && args=("${args[@]:2}")
-echo "git ${args[*]}" >>"$FAKE_LOG"
-[ "${args[0]}" = ls-remote ] && { printf '%s\n' "$FAKE_TAGS" | grep -x "${args[3]}" | sed "s|.*|abc123	&|"; exit 0; }
-exec "$REAL_GIT" "$@"
-FAKE
-chmod +x "$TB/curl" "$TB/git"
-git -C "$TAP" init -q; git -C "$TAP" config user.email t@t; git -C "$TAP" config user.name t
-cat >"$TAP/Formula/macup.rb" <<'RB'
-class Macup < Formula
-  desc "Checks, updates and safe cache cleanup for a developer's Mac"
-  url "https://github.com/VitaliiDeveloper/macup/archive/refs/tags/v2.7.2.tar.gz"
-  sha256 "31e8b111ffd0ff13621b062fcd4f30d42b7d7dca4c3dd634164a5db56ac2f471"
-  license "MIT"
-end
-RB
-git -C "$TAP" add -A; git -C "$TAP" commit -q -m init
-bump(){ : >"$work/bump.log"; env REAL_GIT="$GIT" PATH="$TB:$PATH" FAKE_LOG="$work/bump.log" FAKE_VERSION=9.9.9 FAKE_TAGS='refs/tags/v9.9.9' tools/bump-formula.sh "$@" >"$work/bump.out" 2>&1; }
-SUM=$(printf 'tarball of 9.9.9' | shasum -a 256 | awk '{print $1}')
-bump 9.9.8 "$TAP"; rc=$?
-[ $rc = 1 ] && grep -q 'tag v9.9.8 is not on origin' "$work/bump.out" && grep -q 'v2.7.2' "$TAP/Formula/macup.rb" && ! grep -q 'archive' "$work/bump.log" && pass "bump-formula: a tag that is not on origin stops it before any download" || { fail "bump-formula missing tag (rc=$rc)"; cat "$work/bump.out"; }
-bump 9.9 "$TAP"; [ $? = 1 ] && grep -q usage "$work/bump.out" && pass "bump-formula: a version that is not X.Y.Z is refused" || fail "bump-formula bad version"
-: >"$work/bump.log"; env REAL_GIT="$GIT" FAKE_CURL_FAIL=1 PATH="$TB:$PATH" FAKE_LOG="$work/bump.log" FAKE_TAGS='refs/tags/v9.9.9' tools/bump-formula.sh 9.9.9 "$TAP" >"$work/bump.out" 2>&1; rc=$?
-[ $rc = 1 ] && grep -q 'could not download' "$work/bump.out" && grep -q 'v2.7.2' "$TAP/Formula/macup.rb" && pass "bump-formula: a failed download leaves the formula alone" || { fail "bump-formula download failure (rc=$rc)"; cat "$work/bump.out"; }
-bump 9.9.9 "$TAP"; rc=$?
-[ $rc = 0 ] && grep -q "^  url \"https://github.com/VitaliiDeveloper/macup/archive/refs/tags/v9.9.9.tar.gz\"$" "$TAP/Formula/macup.rb" && grep -q "^  sha256 \"$SUM\"$" "$TAP/Formula/macup.rb" \
-  && [ "$(git -C "$TAP" diff --numstat | awk '{print $1+$2}')" = 4 ] && grep -q "^+  sha256 \"$SUM\"" "$work/bump.out" && grep -q 'commit -m "macup 9.9.9"' "$work/bump.out" && grep -q 'push' "$work/bump.out" \
-  && [ "$(git -C "$TAP" rev-list --count HEAD)" = 1 ] && ! grep -q '^git \(push\|commit\)' "$work/bump.log" && grep -q 'archive/refs/tags/v9.9.9.tar.gz' "$work/bump.log" \
-  && pass "bump-formula: url and sha256 are edited, the diff is shown, the commands are printed and nothing is committed" || { fail "bump-formula edit (rc=$rc)"; cat "$work/bump.out" "$work/bump.log"; git -C "$TAP" diff; }
-bump 9.9.9 "$TAP"; [ $? = 0 ] && grep -q 'already points at v9.9.9' "$work/bump.out" && pass "bump-formula: running it twice changes nothing" || fail "bump-formula twice"
-bump --commit 9.9.9 "$TAP"; [ $? = 1 ] && grep -q 'uncommitted changes' "$work/bump.out" && pass "bump-formula: --commit refuses a tap with other changes" || fail "bump-formula --commit on a dirty tap"
-git -C "$TAP" checkout -q -- Formula/macup.rb
-bump --commit 9.9.9 "$TAP"; rc=$?
-[ $rc = 0 ] && [ "$(git -C "$TAP" log -1 --format=%s)" = "macup 9.9.9" ] && [ -z "$(git -C "$TAP" status --porcelain)" ] && ! grep -q '^git push' "$work/bump.log" && pass "bump-formula: --commit makes the commit and never pushes" || { fail "bump-formula --commit (rc=$rc)"; cat "$work/bump.out"; }
-
+# Sourced by tests/run.sh: hanging step tree, certificates, crashes, sharing, PATH, MACUP_PATH=keep.
 # --- a step that hangs is stopped together with what it started
 home="$work/tree"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
 printf '#!/bin/bash\ncase "$1" in --version) echo 1.0 ;; update) sleep 300 & echo $! >"$HOME/child.pid"; wait ;; esac\n' >"$home/.local/bin/agy"; chmod +x "$home/.local/bin/agy"

@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
-# a new push replaces the run still going for the same branch or PR
+# a new push replaces the run still going for the same branch or PR; on main every commit has a group of its own, so each
+# keeps its run (GitHub cancels a pending run in a group, whatever cancel-in-progress says), which a release tag needs
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -46,14 +47,8 @@ jobs:
           ./build.sh
       - name: XCTest
         run: swift test
-      - name: Universal release build
-        run: |
-          swift build -c release --arch arm64 --arch x86_64
-          b="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/macup"
-          a=$(lipo -archs "$b"); echo "$a"
-          case " $a " in *" x86_64 "*) ;; *) exit 1 ;; esac
-          case " $a " in *" arm64 "*) ;; *) exit 1 ;; esac
-          "$b" version
+      - name: The release archive, as a tag would build it (universal, stripped, signed, packed, checked; not uploaded)
+        run: tools/release.sh "$RUNNER_TEMP/dist"
 
   suite-bash:
     strategy:

@@ -2,7 +2,10 @@
 /// Reading it changes nothing; `apply()` makes the changes core.sh makes to the process (PATH, LC_CTYPE).
 /// A run handed to the bash build must not be applied first: bash prepends to PATH itself and keeps the PATH it got as USER_PATH.
 public struct Env {
-    public static let version = "2.9.2"
+    /// How install.sh and uninstall, 2.9 copies included, tell a macup from another file: a line "# macup" and a line that
+    /// starts with MACUP_VERSION=, as in every bash copy. One literal, so the binary keeps it as is; tools/release.sh checks.
+    public static let marker = "\n# macup\nMACUP_VERSION=\"2.9.2\"\n"
+    public static let version = String(marker.split(separator: "\"")[1])
     public static let schedLabel = "com.vitaliideveloper.macup"
 
     public let vars: [String: String]

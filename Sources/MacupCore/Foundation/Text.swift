@@ -1,3 +1,5 @@
+import Foundation
+
 /// Column widths of core.sh: `ulen` counts the bytes that start a UTF-8 character, so a width is in Unicode scalars,
 /// not grapheme clusters ("é" written as e + combining accent is 2).
 public enum Text {
@@ -8,5 +10,12 @@ public enum Text {
     /// `pad`: the text and at least one space, up to `width`.
     public static func pad(_ text: String, _ width: Int) -> String {
         text + String(repeating: " ", count: max(1, width - ulen(text)))
+    }
+}
+
+extension NSRegularExpression {
+    /// Whether the expression matches somewhere in the text (`grep -qE`).
+    func hasMatch(in text: String) -> Bool {
+        firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil
     }
 }

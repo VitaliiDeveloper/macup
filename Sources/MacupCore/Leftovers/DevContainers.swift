@@ -66,7 +66,7 @@ extension Leftovers {
     static func devPrefixes(_ run: Run) -> [String] {
         Bash.echoed(run.settings.devPrefixes).split(whereSeparator: { $0 == "," || $0 == " " || $0 == "\n" }).map(String.init).filter { prefix in
             let lower = prefix.lowercased()
-            return Checks.matches(prefixPattern, prefix) && lower != "com.apple" && !lower.hasPrefix("com.apple.")
+            return prefixPattern.hasMatch(in: prefix) && lower != "com.apple" && !Bash.starts(lower, "com.apple.")
         }
     }
 

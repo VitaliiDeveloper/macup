@@ -27,7 +27,7 @@ extension Updates {
                 let name = read(line, 2)[0]
                 guard !name.isEmpty else { continue }
                 out.step("Plugin %s", name)
-                _ = inHome(run, ["claude", "plugin", "update", "--scope", "user", name])
+                _ = run.shell.inHome(orElse: 1) { run.run(["claude", "plugin", "update", "--scope", "user", name]) }
             }
         }
         let pluginsNow = plugins(installed)
@@ -127,7 +127,7 @@ extension Updates {
         let before = skillHashes(lock)
         out.step("Agent skills")
         // -g: the global skills in ~/.agents, wherever macup is started from
-        guard inHome(run, ["env", "CI=1", "npx", "-y", "skills", "update", "-g"]) == 0 else {
+        guard run.shell.inHome(orElse: 1, { run.run(["env", "CI=1", "npx", "-y", "skills", "update", "-g"]) }) == 0 else {
             out.err("Agent skills: update failed (see the report)")
             return
         }

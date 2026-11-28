@@ -94,29 +94,6 @@ enum Updates {
         Bash.substitution(Bash.lines(run.shell.capture(argv, stdin: .inherit).output).map { Awk.field($0, number) }.joined(separator: "\n"))
     }
 
-    /// `(cd "$HOME" && run …)`: the step runs from the home folder (a project's settings in the current folder would apply),
-    /// with PWD and OLDPWD as cd leaves them.
-    static func inHome(_ run: Run, _ argv: [String]) -> Int32 {
-        let shell = run.shell, saved = (pwd: shell.vars["PWD"], oldpwd: shell.vars["OLDPWD"])
-        let here = open(".", O_RDONLY), herePath = FileManager.default.currentDirectoryPath
-        defer {
-            if here >= 0 { fchdir(here); close(here) } else { chdir(herePath) }
-            shell.vars["PWD"] = saved.pwd
-            shell.vars["OLDPWD"] = saved.oldpwd
-        }
-        // bash keeps the PWD it was given only when it names the folder it started in
-        var given = stat(), current = stat()
-        let pwdValid = saved.pwd.map { $0.hasPrefix("/") && stat($0, &given) == 0 && stat(".", &current) == 0 && given.st_dev == current.st_dev && given.st_ino == current.st_ino } ?? false
-        shell.vars["OLDPWD"] = pwdValid ? saved.pwd : herePath
-        guard chdir(run.env.home) == 0 else { return 1 }
-        var parts: [Substring] = []   // cd's logical path: no "//", "." or ".."
-        for part in run.env.home.split(separator: "/") where part != "." {
-            if part == ".." { _ = parts.popLast() } else { parts.append(part) }
-        }
-        shell.vars["PWD"] = "/" + parts.joined(separator: "/")
-        return run.run(argv)
-    }
-
     /// `read -r first second … rest` with the default IFS: words, then the rest of the line without its outer blanks.
     static func read(_ line: String, _ count: Int) -> [String] {
         let scalars = Array(line.unicodeScalars)

@@ -14,7 +14,7 @@ enum Tools {
         if run.task("check.devtools") { devtools(run) }
         if run.task("check.commands") { commands(run) }
         if run.task("check.docker"), shell.have("docker"), shell.tl(20, ["docker", "info"], stdout: .null, stderr: .null) == 0 { docker(run) }
-        if run.task("check.gh"), shell.have("gh"), hasContent(ghHosts(run.env)) { gh(run) }
+        if run.task("check.gh"), shell.have("gh"), Files.hasContent(ghHosts(run.env)) { gh(run) }
         if run.task("check.certs"), shell.have("security"), shell.have("openssl") { certs(run) }
         if run.task("check.crashes"), Run.isDirectory(run.env.home + "/Library/Logs/DiagnosticReports") { crashes(run) }
     }
@@ -23,7 +23,7 @@ enum Tools {
         let out = run.out
         out.step("Checking MCP servers")
         // from $HOME: the list depends on the current folder (local-scope servers)
-        let answer = inHome(run, orElse: (status: Int32(1), text: "", data: Data())) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
+        let answer = run.shell.inHome(orElse: (status: Int32(1), text: "", data: Data())) { capture(run.shell, 120, ["claude", "mcp", "list"], stdin: .null) }
         var shown = answer.data.filter { $0 != 0 }, status = answer.status
         // in a UTF-8 locale nocolor's sed stops at the first line that is not UTF-8, says so and fails the pipeline
         if run.env.utf8Locale, let bad = firstLineNotUTF8(shown) {
@@ -32,8 +32,8 @@ enum Tools {
             Shell.writeText("sed: RE error: illegal byte sequence\n", to: 2)
         }
         let list = Bash.lines(Bash.substitution(noColor(String(decoding: shown, as: UTF8.self))))
-        let total = list.filter { matches(mcpLine, $0) }.count
-        let bad = list.filter { matches(mcpBad, $0) }
+        let total = list.filter { mcpLine.hasMatch(in: $0) }.count
+        let bad = list.filter { mcpBad.hasMatch(in: $0) }
         if status == 124 {
             out.warn("%s: no answer in %s seconds, skipped", "claude mcp list", "120")
         } else if total == 0 {
@@ -61,7 +61,7 @@ enum Tools {
         let doctor = capture(run.shell, 240, ["brew", "doctor"], stderr: .stdout)
         let text = Bash.substitution(doctor.text)
         run.log.echo(doctor.data)
-        let warnings = Bash.lines(text).filter { starts($0, "Warning:") }.count
+        let warnings = Bash.lines(text).filter { Bash.starts($0, "Warning:") }.count
         if doctor.status == 124 {
             out.warn("%s: no answer in %s seconds, skipped", "brew doctor", "240")
         } else if warnings > 0 {
@@ -212,16 +212,10 @@ enum Tools {
         (Env.nonEmpty(env.vars, "GH_CONFIG_DIR") ?? ((Env.nonEmpty(env.vars, "XDG_CONFIG_HOME") ?? env.home + "/.config") + "/gh")) + "/hosts.yml"
     }
 
-    /// `[ -s path ]`.
-    static func hasContent(_ path: String) -> Bool {
-        var info = stat()
-        return stat(path, &info) == 0 && info.st_size > 0
-    }
-
     // a token GitHub no longer accepts fails later, in the middle of a push or a release
     static func gh(_ run: Run) {
         let status = capture(run.shell, 20, ["gh", "auth", "status"], stdin: .null, stderr: .stdout).text
-        if Bash.lines(status).contains(where: { matches(ghRefused, $0) }) {
+        if Bash.lines(status).contains(where: { ghRefused.hasMatch(in: $0) }) {
             run.out.warn("GitHub CLI: the saved login no longer works — run: gh auth login")
         }
     }
@@ -249,43 +243,12 @@ enum Tools {
         return nil
     }
 
-    /// `… >>"$RAW"` of bytes.
-    /// `(cd "$HOME" && …)`, as Updates.inHome has it for a step, around any work: PWD and OLDPWD as cd leaves them.
-    static func inHome<Result>(_ run: Run, orElse failed: Result, _ body: () -> Result) -> Result {
-        let shell = run.shell, saved = (pwd: shell.vars["PWD"], oldpwd: shell.vars["OLDPWD"])
-        let here = open(".", O_RDONLY), herePath = FileManager.default.currentDirectoryPath
-        defer {
-            if here >= 0 { fchdir(here); close(here) } else { chdir(herePath) }
-            shell.vars["PWD"] = saved.pwd
-            shell.vars["OLDPWD"] = saved.oldpwd
-        }
-        var given = stat(), current = stat()
-        let pwdValid = saved.pwd.map { $0.hasPrefix("/") && stat($0, &given) == 0 && stat(".", &current) == 0 && given.st_dev == current.st_dev && given.st_ino == current.st_ino } ?? false
-        shell.vars["OLDPWD"] = pwdValid ? saved.pwd : herePath
-        guard chdir(run.env.home) == 0 else { return failed }
-        var parts: [Substring] = []
-        for part in run.env.home.split(separator: "/") where part != "." {
-            if part == ".." { _ = parts.popLast() } else { parts.append(part) }
-        }
-        shell.vars["PWD"] = "/" + parts.joined(separator: "/")
-        return body()
-    }
-
     /// `$(… | head -1)`.
     static func firstLine(_ text: String) -> String { Bash.lines(text)[0] }
 
-    static func matches(_ expression: NSRegularExpression, _ line: String) -> Bool {
-        expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
-    }
-
-    /// `[[ $text == prefix* ]]`, scalar by scalar (a Character can join a combining mark to the last one).
-    static func starts(_ text: String, _ prefix: String) -> Bool {
-        text.unicodeScalars.starts(with: prefix.unicodeScalars)
-    }
-
     /// `sed 's/^prefix//'`
     static func dropPrefix(_ text: String, _ prefix: String) -> String {
-        starts(text, prefix) ? String(String.UnicodeScalarView(text.unicodeScalars.dropFirst(prefix.unicodeScalars.count))) : text
+        Bash.starts(text, prefix) ? String(String.UnicodeScalarView(text.unicodeScalars.dropFirst(prefix.unicodeScalars.count))) : text
     }
 
     /// Python's sorted(): stable.

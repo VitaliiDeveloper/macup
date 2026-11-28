@@ -42,7 +42,7 @@ extension Checks {
         let disabled = output(run, ["launchctl", "print-disabled", "system"])
         func listed(_ pattern: String) -> Bool {
             let expression = try! NSRegularExpression(pattern: pattern)
-            return Bash.lines(disabled).contains { matches(expression, $0) }
+            return Bash.lines(disabled).contains { expression.hasMatch(in: $0) }
         }
         func shared(_ service: String) -> Bool { listed("\"\(service)\" => (enabled|false)") }
         if shared("com.openssh.sshd") { run.out.info("Remote Login (SSH) is on: other computers can log in to this Mac (System Settings → General → Sharing)") }

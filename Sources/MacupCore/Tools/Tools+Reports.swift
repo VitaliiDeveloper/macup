@@ -93,7 +93,7 @@ extension Tools {
         var seen = Set<[Unicode.Scalar]>(), apps: [(name: [Unicode.Scalar], count: Int)] = [], system = 0
         for file in files {
             let base = PythonPath.basename(file)
-            guard !seen.contains(Array(base.unicodeScalars)), !starts(base, "ExcUserFault_") else { continue }
+            guard !seen.contains(Array(base.unicodeScalars)), !Bash.starts(base, "ExcUserFault_") else { continue }
             seen.insert(Array(base.unicodeScalars))
             var info = stat()
             guard let data = Bash.regularFileContents(file), stat(file, &info) == 0 else { continue }
@@ -121,7 +121,7 @@ extension Tools {
                 path = pythonStrip(all(crashPath, in: text, group: 1).first ?? "")
             }
             if now - when > 7 * 86400 { continue }
-            guard starts(path, "/Applications/") || starts(path, home + "/Applications/") else { system += 1; continue }
+            guard Bash.starts(path, "/Applications/") || Bash.starts(path, home + "/Applications/") else { system += 1; continue }
             guard countable else { return "" }   // a list or a dict as the name: Python cannot count it and stops
             let key = Array(name.unicodeScalars)
             if let index = apps.firstIndex(where: { $0.name == key }) { apps[index].count += 1 } else { apps.append((key, 1)) }

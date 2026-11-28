@@ -30,7 +30,7 @@ extension Updates {
             number += 1
             // mas runs itself through sudo, which would ask a bare "Password:" in the middle of the step line
             if !shell.sudoCached {
-                var given = canOpenTerminal()
+                var given = Terminal.available
                 if given {
                     out.write(out.colors.cl)
                     given = shell.askSudo("  " + Bash.substitution(out.i18n.translate("Mac password to install App Store updates:")) + " ")
@@ -66,13 +66,6 @@ extension Updates {
         return text.replacingCharacters(in: arrow, with: " → ")
     }
 
-    /// `{ : </dev/tty; } 2>/dev/null`
-    private static func canOpenTerminal() -> Bool {
-        let descriptor = open("/dev/tty", O_RDONLY)
-        guard descriptor >= 0 else { return false }
-        close(descriptor)
-        return true
-    }
 
     /// Apps installed from a download update themselves; macup only says which are behind the Homebrew catalog.
     static func apps(_ run: Run) {
@@ -81,11 +74,11 @@ extension Updates {
         let catalog = run.env.cacheDir + "/cask.json", fresh = catalog + ".new"
         try? FileManager.default.createDirectory(atPath: run.env.cacheDir, withIntermediateDirectories: true)
         // -z: downloads the catalog (about 20 MB) only when it changed; a failed download keeps the last copy
-        let ifNewer = hasData(catalog) ? ["-z", catalog] : []
+        let ifNewer = Files.hasContent(catalog) ? ["-z", catalog] : []
         let curl = ["curl", "-fsSL", "--compressed", "--max-time", "60"] + ifNewer + ["-o", fresh, "https://formulae.brew.sh/api/cask.json"]
-        if run.shell.tl(0, curl, stderr: .null) == 0, hasData(fresh) { rename(fresh, catalog) }
+        if run.shell.tl(0, curl, stderr: .null) == 0, Files.hasContent(fresh) { rename(fresh, catalog) }
         unlink(fresh)
-        guard hasData(catalog), let (checked, behind) = appsBehind(run, catalog) else {
+        guard Files.hasContent(catalog), let (checked, behind) = appsBehind(run, catalog) else {
             out.warn("%s: could not check for updates", out.i18n.translate(label))
             return
         }
@@ -97,12 +90,6 @@ extension Updates {
         } else if checked > 0 {
             out.ok("Apps outside Homebrew and the App Store: up to date (%s checked)", String(checked))
         }
-    }
-
-    /// `[ -s path ]`
-    private static func hasData(_ path: String) -> Bool {
-        var info = stat()
-        return stat(path, &info) == 0 && info.st_size > 0
     }
 
     /// macup_helpers.py `apps-behind`: how many apps were compared with the catalog, and "App have → new" for those behind it.

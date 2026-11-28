@@ -94,7 +94,7 @@ enum Checks {
         if !topMemory.isEmpty { out.info("Top memory: %s", topMemory) }
         let thermal = run.shell.capture(["pmset", "-g", "therm"], stdin: .inherit)
         let throttling = try! NSRegularExpression(pattern: "thermal warning level set|Speed_Limit[^0-9]*[0-9]{1,2}$", options: .caseInsensitive)
-        if thermal.status == 0, Bash.lines(thermal.output).contains(where: { matches(throttling, $0) }) { out.warn("Thermal: the Mac is throttling right now") }
+        if thermal.status == 0, Bash.lines(thermal.output).contains(where: { throttling.hasMatch(in: $0) }) { out.warn("Thermal: the Mac is throttling right now") }
     }
 
     /// awk's `l > c*1.5` with both passed by -v: a number compared as a number, anything else as text.
@@ -188,10 +188,6 @@ extension Checks {
         var scalars = Substring(text).unicodeScalars.drop(while: { " \t\n\r\u{0B}\u{0C}".unicodeScalars.contains($0) })
         while let last = scalars.last, last == " " || last == "\t" { scalars = scalars.dropLast() }
         return Int64(String(String.UnicodeScalarView(scalars)))
-    }
-
-    static func matches(_ expression: NSRegularExpression, _ line: String) -> Bool {
-        expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
     }
 }
 

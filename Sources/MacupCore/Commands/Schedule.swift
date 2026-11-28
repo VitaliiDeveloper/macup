@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// `macup schedule` (commands.sh `schedule`, `sched_off`): an optional LaunchAgent that runs `macup check` on its own and
+/// `macup schedule` (2.9's commands.sh `schedule`, `sched_off`): an optional LaunchAgent that runs `macup check` on its own and
 /// shows a notification. A check installs and deletes nothing, so the schedule never changes the Mac behind your back.
 /// The job runs this binary itself; 2.9's ran `/bin/bash <path>`, which `repair` moves onto the binary.
 public enum Schedule {
@@ -46,7 +46,7 @@ public enum Schedule {
         FileManager.default.contents(atPath: plist).map { $0.range(of: Data("<key>Weekday</key>".utf8)) != nil } ?? false
     }
 
-    /// The LaunchAgent as the bash build writes it, without its /bin/bash. launchd starts programs with a bare PATH: the
+    /// The LaunchAgent as 2.9 wrote it, without its /bin/bash. launchd starts programs with a bare PATH: the
     /// scheduled check gets today's, so it finds the same tools (nvm's node, ~/.cargo/bin).
     static func text(program: String, weekly: Bool, path: String, log: String) -> String {
         let day = weekly ? "<key>Weekday</key><integer>1</integer>" : ""

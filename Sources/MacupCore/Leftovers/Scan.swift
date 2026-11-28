@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Leftovers of deleted apps (leftovers.sh). An updater lives outside its app (Application Support), so deleting the app
+/// Leftovers of deleted apps (2.9's leftovers.sh). An updater lives outside its app (Application Support), so deleting the app
 /// leaves it registered and its program intact. The owner is found by signing team, then by bundle-id vendor; a vendor
 /// that does not match is a miss, not a removal.
 extension Leftovers {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// `macup` with no command and no run (commands.sh `menu`, `mline`; the end of arguments.sh): a terminal gets the menu,
+/// `macup` with no command and no run (2.9's commands.sh `menu`, `mline`; the end of arguments.sh): a terminal gets the menu,
 /// anything else the help.
 public enum Menu {
     public enum Choice: Equatable {

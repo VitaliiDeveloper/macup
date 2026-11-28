@@ -1,6 +1,6 @@
 import Foundation
 
-/// Column widths of core.sh: `ulen` counts the bytes that start a UTF-8 character, so a width is in Unicode scalars,
+/// Column widths of 2.9's core.sh: `ulen` counts the bytes that start a UTF-8 character, so a width is in Unicode scalars,
 /// not grapheme clusters ("é" written as e + combining accent is 2).
 public enum Text {
     public static func ulen(_ text: String) -> Int {

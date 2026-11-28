@@ -97,7 +97,6 @@ extension Leftovers {
         return (0, size)
     }
 
-    /// `^[A-Za-z0-9._-]+$`
     private static func isLabel(_ line: String) -> Bool {
         !line.isEmpty && line.unicodeScalars.allSatisfy { ("A"..."Z").contains($0) || ("a"..."z").contains($0) || ("0"..."9").contains($0) || "._-".unicodeScalars.contains($0) }
     }

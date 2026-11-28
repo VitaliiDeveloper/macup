@@ -1,4 +1,4 @@
-/// `tildify` and `expand` of core.sh. Both are a sed substitution on every line of the value:
+/// `tildify` and `expand` of 2.9's core.sh. Both are a sed substitution on every line of the value:
 ///   tildify: sed "s|^$HOME|~|"   (HOME is a regular expression there)
 ///   expand:  sed "s|^~|$HOME|"   (HOME is a replacement there: & is the match, \x is x)
 public struct Paths {
@@ -23,7 +23,7 @@ public struct Paths {
 
     /// How many scalars at the start of the line match HOME read as a basic regular expression, nil when it does not match.
     /// HOME is a path: the only special character it realistically has is ".", which matches any one character.
-    /// Anything rarer (* [ \ ^ $) is matched literally; the bash build may differ there.
+    /// Anything rarer (* [ \ ^ $) is matched literally; 2.9 may have differed there.
     func homePrefixLength(_ line: String) -> Int? {
         let homeScalars = Array(home.unicodeScalars), lineScalars = Array(line.unicodeScalars)
         guard lineScalars.count >= homeScalars.count else { return nil }

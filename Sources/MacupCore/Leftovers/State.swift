@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 extension Leftovers {
-    /// One launch agent or daemon the scan judged (leftovers.sh's O_* arrays); its index is the `orph:` key.
+    /// One launch agent or daemon the scan judged (2.9's leftovers.sh's O_* arrays); its index is the `orph:` key.
     public struct Orphan {
         public enum Reason { case broken, empty, missing, gone }
         public let plist: String
@@ -28,7 +28,7 @@ extension Leftovers {
         let path: String
     }
 
-    /// What one run found, read again by the startup section and by the cleanup of phase 3.
+    /// What one run found, read again by the startup section and by the moves after a pick.
     public final class State {
         var apps: [App] = []
         var teamsRead = false

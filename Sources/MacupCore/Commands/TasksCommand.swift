@@ -1,4 +1,4 @@
-/// `macup tasks` and `macup tasks --json` (commands.sh `list_tasks`, `tasks_json`).
+/// `macup tasks` and `macup tasks --json` (2.9's commands.sh `list_tasks`, `tasks_json`).
 public enum TasksCommand {
     /// The list after `load_conf`: the config with the command line's --skip, --only and --enable on top.
     static func text(_ context: OneOff.Context, json: Bool) -> String {

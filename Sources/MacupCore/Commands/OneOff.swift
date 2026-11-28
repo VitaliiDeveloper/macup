@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// The one-off commands the Swift build runs itself (arguments.sh, after the options are read).
+/// The one-off commands (2.9's arguments.sh, after the options are read).
 public enum OneOff {
     /// What every one-off command reads: the environment, the config, the language and colours the run settled on.
     struct Context {
@@ -23,7 +23,7 @@ public enum OneOff {
             self.translations = translations
             shell = Shell(env: env)
             config = Config(env: env)
-            // core.sh reads the language when it loads, before --lang is looked at: a config sed cannot read says so here
+            // 2.9's core.sh reads the language when it loads, before --lang is looked at: a config sed cannot read says so here
             let initial = Lang.initial(env: env, config: config, shell: shell)
             lang = arguments.lang ?? initial
             i18n = I18n(lang: lang, translationsJSON: translations)
@@ -72,7 +72,7 @@ public enum OneOff {
         return 0
     }
 
-    /// What arguments.sh says and exits with for a command line it rejects. core.sh has read the language by then: a config
+    /// What 2.9's arguments.sh says and exits with for a command line it rejects. core.sh has read the language by then: a config
     /// sed cannot read says so first.
     public static func rejected(_ failure: Arguments.Failure, env: Env, translations: String) -> Int32 {
         let shell = Shell(env: env), initial = Lang.initial(env: env, config: Config(env: env), shell: shell)

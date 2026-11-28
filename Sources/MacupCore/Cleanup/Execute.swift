@@ -88,7 +88,6 @@ extension Cleanup {
         return true
     }
 
-    /// `$(basename "$path")`.
     static func trashName(_ path: String) -> String {
         var scalars = Substring(path).unicodeScalars
         while scalars.count > 1, scalars.last == "/" { scalars.removeLast() }

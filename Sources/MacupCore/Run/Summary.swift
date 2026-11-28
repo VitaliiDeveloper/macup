@@ -43,7 +43,7 @@ enum Summary {
         } else {
             text += "- " + i18n.translate("Needs attention: nothing") + "\n"
         }
-        if !newer.isEmpty { text += "- " + i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand(run)]) + "\n" }
+        if !newer.isEmpty { text += "- " + i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand()]) + "\n" }
         run.writeReport(text, sayingSedErrors: true)
         run.reportDone = true
 
@@ -174,7 +174,7 @@ enum Summary {
         } else {
             line(colors.green, i18n.translate("Needs attention: nothing"))
         }
-        if !newer.isEmpty { line(colors.cyan, i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand(run)])) }
+        if !newer.isEmpty { line(colors.cyan, i18n.format("macup %s is available: %s", args: [newer, Version.updateCommand()])) }
         line(colors.dim, i18n.format("Report: %s · %s", args: [run.env.paths.tildify(run.report.path), took]))
         line(colors.dim, i18n.translate("Menu: macup · trends: macup history · help: macup help"))
     }

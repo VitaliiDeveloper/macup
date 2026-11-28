@@ -1,6 +1,6 @@
 import Foundation
 
-/// `macup config` and `macup lang` (commands.sh `open_conf`, `choose_lang`).
+/// `macup config` and `macup lang` (2.9's commands.sh `open_conf`, `choose_lang`).
 enum ConfigLang {
     static func open(_ context: OneOff.Context) -> Int32 {
         let env = context.env

@@ -1,6 +1,6 @@
 import Foundation
 
-/// `macup history` and `macup history --json` (commands.sh `show_history`, `history_json`): history.csv as awk -F, reads it.
+/// `macup history` and `macup history --json` (2.9's commands.sh `show_history`, `history_json`): history.csv as awk -F, reads it.
 enum History {
     static func text(_ context: OneOff.Context) -> String {
         let i18n = context.i18n, colors = context.colors

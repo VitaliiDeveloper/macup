@@ -2,7 +2,7 @@ import CryptoKit
 import Darwin
 import Foundation
 
-/// `macup self-update` (commands.sh `self_update`, `fetch_release`): main names the latest version, and that version's
+/// `macup self-update` (2.9's commands.sh `self_update`, `fetch_release`): main names the latest version, and that version's
 /// release asset, checked as the bootstrap (the root macup) checks it, replaces this binary by rename. A running macup
 /// keeps its file.
 enum SelfUpdate {

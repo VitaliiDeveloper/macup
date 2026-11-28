@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// updates.sh: every update.* task, in the order bash runs them, then check.macos_updates.
+/// 2.9's updates.sh: every update.* task, in the order bash runs them, then check.macos_updates.
 enum Updates {
     static func run(_ run: Run) {
         guard run.wantsUpdates else { return }

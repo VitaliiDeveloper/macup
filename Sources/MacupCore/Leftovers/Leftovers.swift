@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// What is registered here is cleaned only when a person picks it; moving it to the Trash comes with the pick (phase 3).
+/// What is registered here is cleaned only when a person picks it, and then goes to the Trash (Moves.swift).
 public enum Leftovers {
     static func registerCandidates(_ run: Run) {
         guard run.taskAllowed("clean.orphan_agents") || run.taskAllowed("clean.orphan_data") else { return }

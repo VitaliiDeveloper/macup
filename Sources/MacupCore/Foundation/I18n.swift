@@ -3,7 +3,7 @@ import Foundation
 public enum Lang: String, CaseIterable {
     case en, uk, ru
 
-    /// The language a run starts with (core.sh): MACUP_LANG, else `language` in the config, else the system's.
+    /// The language a run starts with (2.9's core.sh): MACUP_LANG, else `language` in the config, else the system's.
     /// Anything that is not en, uk or ru there is English ("ua" only works for --lang and macup lang).
     public static func initial(env: Env, config: Config, shell: Shell) -> Lang {
         var code = env.langHook ?? config.value("language", "")
@@ -31,7 +31,7 @@ public enum Lang: String, CaseIterable {
     }
 }
 
-/// Messages: core.sh's `_` and `_f`. The English text is the key; a message without a translation stays English.
+/// Messages: 2.9's core.sh's `_` and `_f`. The English text is the key; a message without a translation stays English.
 public struct I18n {
     public let lang: Lang
     private let table: [String: String]

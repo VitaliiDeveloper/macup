@@ -1,4 +1,4 @@
-/// The task table of core.sh (`TASKS`): id, whether it is on by default, what it does. `macup tasks` prints it in this order.
+/// The task table of 2.9's core.sh (`TASKS`): id, whether it is on by default, what it does. `macup tasks` prints it in this order.
 public struct Task: Equatable {
     public let id: String
     /// On unless turned off; an opt-in task is off until `enable` names it.
@@ -121,7 +121,7 @@ public enum Tasks {
     }
 }
 
-/// Which tasks a run does: core.sh's `task_allowed` and `task`, from the config and the command line.
+/// Which tasks a run does: 2.9's core.sh's `task_allowed` and `task`, from the config and the command line.
 public struct Selection {
     public let settings: Settings
 

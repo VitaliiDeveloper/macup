@@ -63,7 +63,7 @@ public enum Names {
     ]
 
     /// bash starts with setlocale(LC_ALL, ""). When a category names a locale macOS lacks, that fails as a whole, and bash
-    /// sets LANG, then each LC_x that exists over it; without a LANG that exists it stays C. core.sh's LC_CTYPE export
+    /// sets LANG, then each LC_x that exists over it; without a LANG that exists it stays C. 2.9's core.sh's LC_CTYPE export
     /// comes last, unless LC_ALL is set.
     static func bashNames(_ env: Env) -> (collate: String, ctype: String) {
         let vars = env.vars

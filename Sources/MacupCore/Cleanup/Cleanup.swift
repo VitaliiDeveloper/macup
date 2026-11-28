@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// cleanup.sh: every cleaner registers a candidate (what, how big, how risky); then the chosen ones run (Execute.swift).
+/// 2.9's cleanup.sh: every cleaner registers a candidate (what, how big, how risky); then the chosen ones run (Execute.swift).
 public enum Cleanup {
     static func run(_ run: Run) {
         guard run.wantsCleanup else { return }

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// tools.sh: the tools and services checks, in the order bash runs them.
+/// 2.9's tools.sh: the tools and services checks, in the order bash runs them.
 /// bash reads simulator runtimes, commands, certificates and crash reports with python3, and only `if have python3`;
 /// here they are read on every Mac (an intended difference).
 enum Tools {
@@ -50,7 +50,7 @@ enum Tools {
     private static let mcpBad = try! NSRegularExpression(pattern: "✗|✘|⚠|Failed|[Nn]eeds auth")
     private static let colorCode = try! NSRegularExpression(pattern: "\u{1B}\\[[0-9;?]*[A-Za-z]")
 
-    /// core.sh `nocolor`.
+    /// 2.9's core.sh `nocolor`.
     static func noColor(_ text: String) -> String {
         colorCode.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: "")
     }

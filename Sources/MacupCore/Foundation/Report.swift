@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-/// A run's files (arguments.sh): the report `macup_<date>.md` in the log folder, and while the run lasts a temporary
-/// body `$TMPDIR/macup.XXXXXX` with `.raw` (what the commands print) next to it. The names are the bash build's, so either
+/// A run's files (2.9's arguments.sh): the report `macup_<date>.md` in the log folder, and while the run lasts a temporary
+/// body `$TMPDIR/macup.XXXXXX` with `.raw` (what the commands print) next to it. The names are 2.9's, so either
 /// version tidies what a killed run of the other left behind.
 public struct Report {
     public let path: String

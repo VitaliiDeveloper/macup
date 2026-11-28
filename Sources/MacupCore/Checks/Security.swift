@@ -1,6 +1,6 @@
 import Foundation
 
-/// report.sh's Security section, Time Machine included.
+/// 2.9's report.sh's Security section, Time Machine included.
 extension Checks {
     static let protections: [(argv: [String], on: String, okText: String, warnText: String)] = [
         (["fdesetup", "status"], "is On", "FileVault: on", "FileVault: off — your disk is not encrypted (System Settings → Privacy & Security)"),

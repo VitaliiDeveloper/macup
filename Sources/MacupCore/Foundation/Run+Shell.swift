@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Where a run keeps what its commands print (core.sh's $RAW) and how long a command may take.
+/// Where a run keeps what its commands print (2.9's core.sh's $RAW) and how long a command may take.
 public struct RunLog {
     public let raw: String
     public var stepSeconds: Int

@@ -7,7 +7,7 @@ public enum MainPass {
         env.apply()
         let shell = Shell(env: env)
         let config = Config(env: env)
-        var lang = Lang.initial(env: env, config: config, shell: shell)   // core.sh reads it before the options
+        var lang = Lang.initial(env: env, config: config, shell: shell)   // 2.9's core.sh reads it before the options
         if let chosen = arguments.lang { lang = chosen }
         var colors = Colors.initial(env: env)
         if arguments.noColor { colors = .off }

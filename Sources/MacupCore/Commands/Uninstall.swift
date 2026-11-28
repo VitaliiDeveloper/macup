@@ -1,6 +1,6 @@
 import Foundation
 
-/// `macup uninstall` (commands.sh `uninstall`, `sched_off`): macup, older copies, settings, history, reports, the schedule,
+/// `macup uninstall` (2.9's commands.sh `uninstall`, `sched_off`): macup, older copies, settings, history, reports, the schedule,
 /// the installer's PATH line, leftover temp files.
 enum Uninstall {
     static func run(_ context: OneOff.Context, selfPath: String) {

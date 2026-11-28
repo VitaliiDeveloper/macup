@@ -1,6 +1,6 @@
 import Foundation
 
-/// The config file (`key = value` lines): core.sh's `conf`, `conf_set`, `load_conf`.
+/// The config file (`key = value` lines): 2.9's core.sh's `conf`, `conf_set`, `load_conf`.
 /// It reads the file as sed does in macup's locale: in UTF-8, [[:space:]] includes Unicode blanks (no-break space, ideographic
 /// space), and sed stops at the first line that is not valid UTF-8, saying so on stderr every time `conf` runs.
 public struct Config {
@@ -9,7 +9,7 @@ public struct Config {
     private let lines: [String]
     /// sed stops at a byte that is not UTF-8.
     public let sedFails: Bool
-    /// Whether `value` writes sed's error, as `conf` does; routing reads the config without saying anything.
+    /// Whether `value` writes sed's error, as `conf` does; the schedule's repair reads the config without saying anything.
     public var reportsErrors = true
     let utf8: Bool
 

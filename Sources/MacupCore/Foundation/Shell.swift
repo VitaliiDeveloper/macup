@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Running tools: core.sh's `have`, `tl`, `run` and `tick`.
+/// Running tools: 2.9's core.sh's `have`, `tl`, `run` and `tick`.
 /// Tools are found through PATH (`Env.path`), never at fixed paths, so the tests' fakes win.
 /// A tool runs in macup's process group: Ctrl-C and sudo's password prompt reach it.
 public final class Shell {
@@ -180,7 +180,7 @@ public final class Shell {
         return info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
     }
 
-    /// The process and every process below it, from `ps -Ao pid=,ppid=` (as core.sh's tl finds them).
+    /// The process and every process below it, from `ps -Ao pid=,ppid=` (as 2.9's core.sh's tl finds them).
     func descendants(of root: pid_t) -> [pid_t] {
         var parent: [pid_t: pid_t] = [:]
         for line in Bash.lines(capture(["ps", "-Ao", "pid=,ppid="]).output) {

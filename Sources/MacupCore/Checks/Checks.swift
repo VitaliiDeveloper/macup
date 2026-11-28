@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// checks.sh: the System section. report.sh's Security, sizes, Video & photo and the deep scan are in the other files here.
+/// 2.9's checks.sh: the System section. report.sh's Security, sizes, Video & photo and the deep scan are in the other files here.
 enum Checks {
     static func system(_ run: Run) {
         run.out.beginSection("System")

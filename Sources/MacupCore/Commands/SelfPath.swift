@@ -1,8 +1,8 @@
 import Foundation
 
-/// Where this macup is and who installed it (commands.sh `resolve_self`, `brew_prefix`), and what counts as a macup.
+/// Where this macup is and who installed it (2.9's commands.sh `resolve_self`, `brew_prefix`), and what counts as a macup.
 public enum SelfPath {
-    /// The path this binary was started by, as the bash build's $0 was: the path the shell found in PATH, a symlink kept as
+    /// The path this binary was started by, as 2.9's $0 was: the path the shell found in PATH, a symlink kept as
     /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at). Not resolved to the real file.
     public static func current() -> String { launchPath() }
 

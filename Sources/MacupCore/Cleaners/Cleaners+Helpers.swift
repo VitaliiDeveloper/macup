@@ -1,16 +1,15 @@
 import Darwin
 import Foundation
 
-/// The small shell pieces cleaners.sh leans on, and its registering helpers clean_old and measure_cmd (cleanup.sh).
+/// The small shell pieces 2.9's cleaners.sh leans on, and its registering helpers clean_old and measure_cmd (cleanup.sh).
 extension Cleaners {
     static func translate(_ run: Run, _ text: String) -> String { run.out.i18n.translate(text) }
 
     static func format(_ run: Run, _ fmt: String, _ args: String...) -> String { run.out.i18n.format(fmt, args: args) }
 
-    /// `[ -d "$1" ] && [ ! -L "$1" ]`.
     static func realFolder(_ path: String) -> Bool { Run.isDirectory(path) && !Run.isSymlink(path) }
 
-    /// `[ -e "$1" ]`, which follows a link.
+    /// A link counts as what it points to: one that points nowhere does not exist.
     static func exists(_ path: String) -> Bool { access(path, F_OK) == 0 }
 
     /// `$(find …  2>/dev/null)`.

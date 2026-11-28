@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// cleaners.sh up to `leftovers_cands`: every clean.* task registers what it found, in the order bash registers it.
+/// 2.9's cleaners.sh up to `leftovers_cands`: every clean.* task registers what it found, in the order bash registers it.
 enum Cleaners {
     static func register(_ run: Run) {
         let home = run.env.home, dev = run.env.dev, paths = run.env.paths

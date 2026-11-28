@@ -164,7 +164,7 @@ extension Updates {
         return false
     }
 
-    /// core.sh `link_fix`: the brew link that puts an interpreter back on PATH; nothing when no formula has it.
+    /// 2.9's core.sh `link_fix`: the brew link that puts an interpreter back on PATH; nothing when no formula has it.
     static func linkFix(_ run: Run, _ name: String) -> String {
         guard !run.shell.have(name) else { return "" }   // a dead venv interpreter named python3: brew's is linked, a link fixes nothing
         var versioned: [String] = []

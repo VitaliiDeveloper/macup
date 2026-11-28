@@ -43,7 +43,11 @@ release_asset(){
 
 # --- tools/bump-formula.sh: the formula points at the release asset, only once it exists and matches its SHA-256
 tap="$work/tap"; mkdir -p "$tap/Formula" "$FAKE_REMOTE"
-printf 'class Macup < Formula\n  url "https://example.com/old.tar.gz"\n  sha256 "%064d"\n  license "MIT"\nend\n' 0 >"$tap/Formula/macup.rb"
+formula(){ # DEPENDS_ON [URL SHA256]: a formula shaped like the tap's
+  printf 'class Macup < Formula\n  url "%s"\n  sha256 "%s"\n  license "MIT"\n\n%s  def install\n    bin.install "macup"\n  end\nend\n' \
+    "${2:-https://example.com/old.tar.gz}" "${3:-$(printf '%064d' 0)}" "${1:+  $1$'\n\n'}" >"$tap/Formula/macup.rb"
+}
+formula 'depends_on :macos'
 git -C "$tap" init -q && git -C "$tap" add . && git -C "$tap" -c user.name=test -c user.email=test@example.com commit -qm init
 before=$(cat "$tap/Formula/macup.rb")
 bump(){ : >"$FAKE_REMOTE/curl.log"; : >"$FAKE_REMOTE/git.log"; env FAKE_TAGS="${tags-v9.9.9}" tools/bump-formula.sh "$@" 2>&1; }
@@ -69,10 +73,11 @@ out=$(bump 9.9.9 "$tap"); rc=$?
 echo "$good_sum" >"$published"
 out=$(bump 9.9.9 "$tap"); rc=$?
 [ $rc = 0 ] && grep -qxF "  url \"$asset_url\"" "$tap/Formula/macup.rb" && grep -qx "  sha256 \"${good_sum%% *}\"" "$tap/Formula/macup.rb" \
-  && [ "$(git -C "$tap" diff --numstat | awk '{print $1+$2}')" = 4 ] && grep -q "^+  sha256 \"${good_sum%% *}\"" <<<"$out" && grep -q 'commit -m "macup 9.9.9"' <<<"$out" \
-  && [ "$(git -C "$tap" rev-list --count HEAD)" = 1 ] && ! grep -qE '^git (-C [^ ]+ )?(commit|push)' "$FAKE_REMOTE/git.log" \
+  && grep -qx '  depends_on macos: :ventura' "$tap/Formula/macup.rb" && ! grep -qx '  depends_on :macos' "$tap/Formula/macup.rb" \
+  && [ "$(git -C "$tap" diff --numstat | awk '{print $1+$2}')" = 6 ] && grep -q "^+  sha256 \"${good_sum%% *}\"" <<<"$out" && grep -qx '+  depends_on macos: :ventura' <<<"$out" \
+  && grep -q 'commit -m "macup 9.9.9"' <<<"$out" && [ "$(git -C "$tap" rev-list --count HEAD)" = 1 ] && ! grep -qE '^git (-C [^ ]+ )?(commit|push)' "$FAKE_REMOTE/git.log" \
   && [ "$(cat "$FAKE_REMOTE/curl.log")" = "$asset_url"$'\n'"$asset_url.sha256" ] \
-  && pass "bump-formula: url and sha256 of the release asset, the diff shown, the commands printed, nothing committed" || { fail "bump-formula edit (rc=$rc): $out"; cat "$tap/Formula/macup.rb"; }
+  && pass "bump-formula: url and sha256 of the release asset, depends_on :macos becomes macOS 13, the diff shown, nothing committed" || { fail "bump-formula edit (rc=$rc): $out"; cat "$tap/Formula/macup.rb"; }
 out=$(bump 9.9.9 "$tap"); rc=$?
 [ $rc = 0 ] && grep -q 'already points at v9.9.9' <<<"$out" && pass "bump-formula: running it twice changes nothing" || fail "bump-formula twice (rc=$rc): $out"
 out=$(bump --commit 9.9.9 "$tap"); rc=$?
@@ -81,6 +86,23 @@ git -C "$tap" checkout -q -- Formula/macup.rb
 out=$(bump --commit 9.9.9 "$tap"); rc=$?
 [ $rc = 0 ] && [ "$(git -C "$tap" log -1 --format=%s)" = "macup 9.9.9" ] && [ -z "$(git -C "$tap" status --porcelain)" ] && ! grep -qE '^git (-C [^ ]+ )?push' "$FAKE_REMOTE/git.log" \
   && pass "bump-formula --commit: committed, never pushed" || fail "bump-formula --commit (rc=$rc): $out"
+formula "" "$asset_url" "${good_sum%% *}"; formula_before=$(cat "$tap/Formula/macup.rb")
+git -C "$tap" -c user.name=test -c user.email=test@example.com commit -qam "no depends_on"
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 0 ] && [ "$(cat "$tap/Formula/macup.rb")" = "${formula_before/$'\n\n'  def install/$'\n\n'  depends_on macos: :ventura$'\n\n'  def install}" ] && grep -qx '+  depends_on macos: :ventura' <<<"$out" \
+  && pass "bump-formula: a formula without depends_on gets the macOS 13 limit, and nothing else changes" || { fail "bump-formula, no depends_on (rc=$rc): $out"; cat "$tap/Formula/macup.rb"; }
+formula 'depends_on macos: :monterey'; before=$(cat "$tap/Formula/macup.rb")
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 1 ] && grep -q 'names another macOS than "depends_on macos: :ventura": change it by hand' <<<"$out" && unchanged && [ ! -s "$FAKE_REMOTE/curl.log" ] \
+  && pass "bump-formula: another macOS limit is not overwritten" || fail "bump-formula, other macOS (rc=$rc): $out"
+printf 'class Macup < Formula\n  url "x"\n  sha256 "y"\nend\n' >"$tap/Formula/macup.rb"; before=$(cat "$tap/Formula/macup.rb")
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 1 ] && grep -q 'found no place for "depends_on macos: :ventura"' <<<"$out" && unchanged && [ ! -s "$FAKE_REMOTE/curl.log" ] \
+  && pass "bump-formula: a formula with no place for the macOS limit stops it before any download" || fail "bump-formula, no place (rc=$rc): $out"
+printf 'class Macup < Formula\n  url "x"\n  sha256 "y"\n\n  depends_on "z"\n  depends_on :macos\nend\n' >"$tap/Formula/macup.rb"
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 0 ] && [ "$(sed -n '/depends_on/p' "$tap/Formula/macup.rb")" = '  depends_on macos: :ventura'$'\n''  depends_on "z"' ] \
+  && pass "bump-formula: depends_on :macos after another depends_on is replaced, not kept beside the limit" || { fail "bump-formula, later :macos (rc=$rc): $out"; cat "$tap/Formula/macup.rb"; }
 
 # --- the bootstrap (the root macup) and the installer against a fake release
 cat >"$work/bin/sw_vers" <<'FAKE'
@@ -129,9 +151,42 @@ fresh "$work/macup-2.9.2"
 out=$(run /bin/bash "$bin/macup" self-update --no-color); rc=$?
 [ $rc = 0 ] && grep -q 'macup updated: 2.9.2 → 9.9.9' <<<"$out" && cmp -s "$bin/macup" "$work/bootstrap" && [ "$(urls)" = "main/macup v9.9.9/macup.sha256 main/macup.sha256" ] \
   && pass "2.9.2 self-update before the tag: the bootstrap from main" || { fail "2.9.2 self-update from main (rc=$rc): $out"; urls; }
-out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
-[ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz' <<<"$out" \
-  && untouched && /bin/bash -n "$bin/macup" && [ ! -e "$home/ran.log" ] && pass "bootstrap: no release asset yet, it stays and says so" || { fail "bootstrap before the asset (rc=$rc): $out"; ls -A "$bin"; }
+
+# before the release asset, each run uses 2.9.2 from a temporary copy and replaces nothing; a stub stands in for 2.9.2
+printf '#!/bin/bash\nMACUP_VERSION="2.9.2"\necho "$0 $*" >>"$HOME/ran.log"\nexit 3\n' >"$work/stub-2.9.2"; publish "$work/stub-2.9.2" v2.9.2
+asset_sum=v9.9.9/macup-9.9.9-macos-universal.tar.gz.sha256
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
+[ $rc = 3 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed; this run uses macup 2.9.2, and the next one tries again' <<<"$out" \
+  && [ "$(wc -l <"$home/ran.log")" -eq 1 ] && grep -qE "^$bin/\.macup-update\.[A-Za-z0-9]+/macup check --no-color$" "$home/ran.log" && untouched \
+  && [ "$(urls)" = "$asset_sum v2.9.2/macup.sha256 v2.9.2/macup" ] && pass "bootstrap before the release asset: the command runs on 2.9.2, its status kept, nothing replaced" \
+  || { fail "bootstrap before the asset (rc=$rc): $out"; urls; cat "$home/ran.log"; ls -A "$bin"; }
+fresh "$work/bootstrap"; out=$(run env XPC_SERVICE_NAME=com.vitaliideveloper.macup /bin/bash "$bin/macup" check --quiet --notify); rc=$?
+[ $rc = 3 ] && grep -q 'this run uses macup 2.9.2' <<<"$out" && grep -qE "^$home/tmp/+macup-update\.[A-Za-z0-9]+/macup check --quiet --notify$" "$home/ran.log" && untouched \
+  && pass "bootstrap from launchd before the release asset: the check runs on 2.9.2, nothing replaced or reloaded" || { fail "bootstrap from launchd before the asset (rc=$rc): $out"; cat "$home/ran.log"; }
+refused=1
+for command in self-update "--no-color selfupdate" upgrade "--lang en schedule weekly" uninstall; do
+  fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" $command); rc=$?
+  [ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz. Nothing' <<<"$out" && untouched && [ ! -e "$home/ran.log" ] \
+    && [ "$(urls)" = "$asset_sum" ] || { refused=0; echo "  $command (rc=$rc): $out"; }
+done
+[ $refused = 1 ] && pass "bootstrap before the release asset: self-update, schedule and uninstall, which act on their own file, are not run from a copy" || fail "bootstrap before the asset, commands on their own file"
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" schedule off); rc=$?
+[ $rc = 3 ] && grep -qE "^$bin/\.macup-update\.[A-Za-z0-9]+/macup schedule off$" "$home/ran.log" && untouched \
+  && pass "bootstrap before the release asset: schedule off runs on 2.9.2" || fail "bootstrap before the asset, schedule off (rc=$rc): $out"
+cp "$FAKE_REMOTE/raw/v2.9.2/macup.sha256" "$work/stub.sha256"; echo "$(printf '%064d' 4)  macup" >"$FAKE_REMOTE/raw/v2.9.2/macup.sha256"
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?; cp "$work/stub.sha256" "$FAKE_REMOTE/raw/v2.9.2/macup.sha256"
+[ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*. Nothing changed' <<<"$out" && ! grep -qE 'this run uses|checksum' <<<"$out" \
+  && untouched && [ ! -e "$home/ran.log" ] && pass "bootstrap before the release asset: a 2.9.2 that does not match its SHA-256 is never run" || fail "bootstrap, 2.9.2 checksum (rc=$rc): $out"
+rm -rf "$FAKE_REMOTE/raw/v2.9.2"; fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
+[ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz. Nothing changed' <<<"$out" \
+  && ! grep -qE 'this run uses|Download failed' <<<"$out" && untouched && [ ! -e "$home/ran.log" ] && pass "bootstrap before the release asset, without 2.9.2 either: it stays and says so" || { fail "bootstrap without both (rc=$rc): $out"; ls -A "$bin"; }
+publish "$work/macup-2.9.2" v2.9.2
+
+# in a source checkout the root macup is the tracked bootstrap: it never replaces itself there
+checkout="$work/checkout"; mkdir -p "$checkout"; touch "$checkout/Package.swift" "$checkout/build.sh"; cp "$work/bootstrap" "$checkout/macup"; : >"$FAKE_REMOTE/curl.log"
+out=$(cd "$checkout" && run /bin/bash ./macup version); rc=$?
+[ $rc = 1 ] && [ "$out" = 'This macup is the bootstrap in a source checkout: build the binary with ./build.sh and run .build/debug/macup.' ] && cmp -s "$checkout/macup" "$work/bootstrap" \
+  && [ "$(ls -A "$checkout" | wc -l)" -eq 3 ] && [ ! -s "$FAKE_REMOTE/curl.log" ] && pass "bootstrap in a source checkout: refused, nothing downloaded" || fail "bootstrap in a checkout ($rc): $out"
 
 # the release: 2.9.2 takes the bootstrap from the tag
 publish "$work/bootstrap" v9.9.9; release_asset 9.9.9 "$work/asset/macup"
@@ -186,6 +241,9 @@ fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" version);
 fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" self-update --no-color); rc=$?
 [ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && ! grep -q 'macup updated' <<<"$out" && [ "$(urls)" = "v2.9.2/macup.sha256 v2.9.2/macup" ] \
   && pass "bootstrap on macOS 12 asked to self-update: 2.9 stays, no update back to the bootstrap" || { fail "bootstrap on macOS 12, self-update ($rc): $out"; urls; }
+fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" --no-color upgrade); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && ! grep -q 'macup updated' <<<"$out" \
+  && pass "bootstrap on macOS 12 asked to upgrade after an option: 2.9 stays" || fail "bootstrap on macOS 12, --no-color upgrade ($rc): $out"
 
 # the real binary, packed as the release workflow packs it
 real=${MACUP_BIN:-$PWD/.build/debug/macup}
@@ -201,12 +259,14 @@ ihome="$work/inst"; mkdir -p "$ihome/.npm-global/bin"; printf '\317\372\355\376\
 install_remote(){ env HOME="$ihome" TMPDIR="$ihome/" MACUP_PREFIX="$ihome/.local/bin" FAKE_MACOS=15.1 /bin/bash -s -- --yes --lang en <install.sh 2>&1; }
 release_asset 9.9.9 "$work/asset/macup"; rm -rf "$FAKE_REMOTE/releases/v9.9.9"
 mkdir -p "$ihome/.local/bin"; cp "$work/macup-2.9.2" "$ihome/.local/bin/macup"
-out=$(install_remote); rc=$?
+: >"$FAKE_REMOTE/curl.log"; out=$(install_remote); rc=$?
 [ $rc = 1 ] && grep -q 'is not published yet' <<<"$out" && grep -q 'run the installer again in a few minutes' <<<"$out" && cmp -s "$ihome/.local/bin/macup" "$work/macup-2.9.2" \
+  && ! grep -qE 'this run uses|run macup again|Finishing' <<<"$out" && ! grep -q v2.9.2 "$FAKE_REMOTE/curl.log" \
   && [ "$(ls -A "$ihome/.local/bin")" = macup ] && pass "install.sh before the release asset: says so, the copy installed before keeps working" || { fail "install.sh before the asset ($rc): $out"; ls -A "$ihome/.local/bin"; }
 release_asset 9.9.9 "$work/asset/macup"
 out=$(install_remote); rc=$?
 [ $rc = 0 ] && cmp -s "$ihome/.local/bin/macup" "$work/asset/macup" && grep -q 'Installed: macup 9.9.9 → .*/.local/bin/macup$' <<<"$out" && [ ! -e "$ihome/.npm-global/bin/macup" ] \
+  && ! grep -qE 'Finishing the update|macup-install|is installed:' <<<"$out" \
   && [ "$(ls -A "$ihome/.local/bin")" = macup ] && pass "install.sh | bash: the release binary through the bootstrap, a 3.0 copy elsewhere removed" || { fail "install.sh remote ($rc): $out"; ls -A "$ihome/.local/bin"; }
 
 # from a checkout: the binary built last, over one that has already run

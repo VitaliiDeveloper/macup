@@ -4,7 +4,8 @@
 # A 2.9 copy updates itself from main/macup: it reads MACUP_VERSION below, installs this file over itself and checks it with
 # bash -n, nothing more. The next run lands here: this downloads the release binary, checks it, replaces itself with it by
 # rename, points the schedule at it and runs the command that was asked for. A Mac older than macOS 13, where the binary
-# cannot start, gets the last 2.9 script instead.
+# cannot start, gets the last 2.9 script instead. Until the binary is published, a run uses the last 2.9 from a temporary
+# copy and replaces nothing.
 MACUP_VERSION="3.0.0"
 LEGACY_VERSION="2.9.2"   # the last 2.9.x, for Macs older than macOS 13
 
@@ -35,6 +36,15 @@ say(){ # message id, its values → stderr, so a command's own output stays clea
     uk:missing)   text='macup %s ще не опубліковано, або завантаження не вдалося: %s. Нічого не змінено; запусти macup ще раз за кілька хвилин.' ;;
     ru:missing)   text='macup %s ещё не опубликован, или скачать не удалось: %s. Ничего не изменено; запустите macup ещё раз через несколько минут.' ;;
     *:missing)    text='macup %s is not published yet, or the download failed: %s. Nothing changed; run macup again in a few minutes.' ;;
+    uk:notyet)    text='macup %s ще не опубліковано, або завантаження не вдалося: %s.' ;;
+    ru:notyet)    text='macup %s ещё не опубликован, или скачать не удалось: %s.' ;;
+    *:notyet)     text='macup %s is not published yet, or the download failed: %s.' ;;
+    uk:waiting)   text='macup %s ще не опубліковано, або завантаження не вдалося; цей запуск використовує macup %s, а наступний спробує ще раз.' ;;
+    ru:waiting)   text='macup %s ещё не опубликован, или скачать не удалось; этот запуск использует macup %s, а следующий попробует ещё раз.' ;;
+    *:waiting)    text='macup %s is not published yet, or the download failed; this run uses macup %s, and the next one tries again.' ;;
+    uk:checkout)  text='Цей macup — завантажувач у копії вихідного коду: збери програму через ./build.sh і запускай .build/debug/macup.' ;;
+    ru:checkout)  text='Этот macup — загрузчик в копии исходного кода: соберите программу через ./build.sh и запускайте .build/debug/macup.' ;;
+    *:checkout)   text='This macup is the bootstrap in a source checkout: build the binary with ./build.sh and run .build/debug/macup.' ;;
     uk:dlfail)    text='Не вдалося завантажити: %s' ;;
     ru:dlfail)    text='Не удалось скачать: %s' ;;
     *:dlfail)     text='Download failed: %s' ;;
@@ -64,20 +74,43 @@ fetch(){ curl -fsSL --max-time 600 "$1" -o "$2" 2>/dev/null; }
 sum_ok(){ local want; want=$(awk '{print $1; exit}' "$2"); [ -n "$want" ] && [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$want" ]; }
 is_bootstrap(){ grep -q '^LEGACY_VERSION=' "$1" 2>/dev/null; }   # a line only this file has: never run or install it twice
 
-binary(){ # → $WORK/macup: the release binary, checked; exits with the reason when there is none
-  local asset="macup-$MACUP_VERSION-macos-universal.tar.gz" url
-  url="https://github.com/$REPO/releases/download/v$MACUP_VERSION/$asset"
-  if ! fetch "$url.sha256" "$WORK/sum" || ! fetch "$url" "$WORK/$asset"; then say missing "$MACUP_VERSION" "$url"; exit 1; fi
-  sum_ok "$WORK/$asset" "$WORK/sum" || { say sum; exit 1; }
-  tar -xzf "$WORK/$asset" -C "$WORK" macup 2>/dev/null && [ -f "$WORK/macup" ] && ! is_bootstrap "$WORK/macup" && chmod 755 "$WORK/macup" \
+ASSET="macup-$MACUP_VERSION-macos-universal.tar.gz"
+URL="https://github.com/$REPO/releases/download/v$MACUP_VERSION/$ASSET"
+binary(){ # → $WORK/macup: the release binary, checked. Status 1 when it could not be downloaded; a wrong one exits with the reason
+  fetch "$URL.sha256" "$WORK/sum" && fetch "$URL" "$WORK/$ASSET" || return 1
+  sum_ok "$WORK/$ASSET" "$WORK/sum" || { say sum; exit 1; }
+  tar -xzf "$WORK/$ASSET" -C "$WORK" macup 2>/dev/null && [ -f "$WORK/macup" ] && ! is_bootstrap "$WORK/macup" && chmod 755 "$WORK/macup" \
     && [ "$("$WORK/macup" version </dev/null 2>/dev/null)" = "macup $MACUP_VERSION" ] || { say broken; exit 1; }
 }
 
-legacy(){ # → $WORK/macup: the last 2.9 script, checked as 2.9 checks its own updates
+legacy(){ # → $WORK/macup: the last 2.9 script, checked as 2.9 checks its own updates; status 1 with the reason when there is none
   local url="https://raw.githubusercontent.com/$REPO/v$LEGACY_VERSION/macup"
-  fetch "$url.sha256" "$WORK/sum" && fetch "$url" "$WORK/macup" || { say dlfail "$url"; exit 1; }
-  sum_ok "$WORK/macup" "$WORK/sum" || { say sum; exit 1; }
-  /bin/bash -n "$WORK/macup" 2>/dev/null && grep -qx "MACUP_VERSION=\"$LEGACY_VERSION\"" "$WORK/macup" && chmod 755 "$WORK/macup" || { say broken; exit 1; }
+  fetch "$url.sha256" "$WORK/sum" && fetch "$url" "$WORK/macup" || { say dlfail "$url"; return 1; }
+  sum_ok "$WORK/macup" "$WORK/sum" || { say sum; return 1; }
+  /bin/bash -n "$WORK/macup" 2>/dev/null && grep -qx "MACUP_VERSION=\"$LEGACY_VERSION\"" "$WORK/macup" && chmod 755 "$WORK/macup" || { say broken; return 1; }
+}
+
+asks(){ # COMMAND ARGS…: whether 2.9's parser would run that command (schedule: daily or weekly), wherever it stands among the options
+  local command=$1 arg previous=""; shift
+  for arg in "$@"; do
+    case "$command:$previous:$arg" in
+      self-update:*:self-update|self-update:*:selfupdate|self-update:*:upgrade|uninstall:*:uninstall|schedule:schedule:daily|schedule:schedule:weekly) return 0 ;;
+    esac
+    previous=$arg
+  done
+  return 1
+}
+
+# A release is tagged minutes before its binary is uploaded, and from then on 2.9 copies update to this file. Until the
+# binary is there, a run uses the last 2.9 from a temporary copy and replaces nothing; the next run tries 3.0 again.
+waiting(){
+  # the installer says itself what to do next
+  [ -n "${MACUP_FROM_INSTALLER:-}" ] && { say notyet "$MACUP_VERSION" "$URL"; exit 1; }
+  # 2.9 takes its own path from $0: from a temporary copy these would schedule, update or uninstall that copy
+  { asks self-update "$@" || asks uninstall "$@" || asks schedule "$@"; } && { say missing "$MACUP_VERSION" "$URL"; exit 1; }
+  legacy 2>/dev/null || { say missing "$MACUP_VERSION" "$URL"; exit 1; }
+  say waiting "$MACUP_VERSION" "$LEGACY_VERSION"
+  /bin/bash "$WORK/macup" "$@"; exit
 }
 
 # 2.9 wrote ProgramArguments as /bin/bash <macup> check --quiet --notify; with a binary there launchd fails with 126 forever.
@@ -100,6 +133,8 @@ main(){
   # Homebrew owns that file, and the next brew upgrade would put its own version back
   case "$self" in */Cellar/macup/*) say brew; exit 1 ;; esac
   [ -f "$self" ] || { say write "$0"; exit 1; }
+  # there it would replace the tracked bootstrap with the release binary
+  [ -f "$(dirname "$self")/Package.swift" ] && [ -f "$(dirname "$self")/build.sh" ] && { say checkout; exit 1; }
   # a version it cannot read is taken as new enough: a binary that cannot start fails its check, and nothing changes
   major=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)
   case "$major" in ''|*[!0-9]*) major=99 ;; esac
@@ -108,22 +143,27 @@ main(){
   if [ "$major" -ge 13 ] && { [ "$PPID" = 1 ] || [ "${XPC_SERVICE_NAME:-}" = "$LABEL" ]; }; then
     # started by launchd: this check runs from a temporary copy and changes nothing, so the schedule keeps working
     WORK=$(mktemp -d "${TMPDIR:-/tmp}/macup-update.XXXXXX") || exit 1
-    binary; say scheduled "$MACUP_VERSION"
+    binary || waiting "$@"
+    say scheduled "$MACUP_VERSION"
     "$WORK/macup" "$@"; exit
   fi
   # next to the file it replaces, so the swap is a rename: a running macup keeps its old file
   WORK=$(mktemp -d "$(dirname "$self")/.macup-update.XXXXXX" 2>/dev/null) || { say write "$self"; exit 1; }
   if [ "$major" -lt 13 ]; then
-    legacy; mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
+    legacy || exit 1
+    mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
     say legacy "$MACUP_VERSION" "$LEGACY_VERSION"; rm -rf "$WORK"
     # 2.9's self-update would install this bootstrap again, which would put 2.9 back again
-    case "${1:-}" in self-update|selfupdate|upgrade) exit 0 ;; esac
+    asks self-update "$@" && exit 0
     exec /bin/bash "$self" "$@"
   fi
-  say finish "$MACUP_VERSION"; binary
+  binary || waiting "$@"
+  # the installer names the file it installs, not this temporary one
+  [ -n "${MACUP_FROM_INSTALLER:-}" ] || say finish "$MACUP_VERSION"
   reschedule || exit 1
   mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
-  say installed "$MACUP_VERSION" "$self"; rm -rf "$WORK"
+  [ -n "${MACUP_FROM_INSTALLER:-}" ] || say installed "$MACUP_VERSION" "$self"
+  rm -rf "$WORK"
   exec "$self" "$@"
 }
 main "$@"; exit

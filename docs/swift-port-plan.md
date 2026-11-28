@@ -255,7 +255,8 @@ Within a wave, a unit that needs a foundation change stops and asks the coordina
 So the repository root keeps a bash `macup` with that exact version line, and its `macup.sha256`: a bootstrap. The bootstrap:
 
 - downloads and checks the release binary and replaces itself by rename;
-- leaves itself working and says so if the release asset is not there yet (the minutes between the merge and the upload);
+- until the release asset is uploaded (from the merge into `main` until the release workflow attaches it), runs the command with the last 2.9.x from a temporary copy and replaces nothing, so the next run tries again; when that download fails too, it says so and changes nothing. `self-update`, `schedule` and `uninstall`, which act on 2.9's own file (`$0`), say "not published yet" instead. `install.sh` sets `MACUP_FROM_INSTALLER`, so it gets no 2.9 stand-in, none of the bootstrap's progress lines and no "run macup again": it installs nothing and says to run the installer again;
+- refuses to run next to `Package.swift` and `build.sh`, where it is the tracked bootstrap of a checkout;
 - refuses to run from a Homebrew Cellar path and says `brew upgrade macup`;
 - on a macOS older than the deployment target, installs the last 2.9.x instead of a binary that cannot start;
 - rewrites an existing LaunchAgent. 2.9.x wrote `/bin/bash <path> check --quiet --notify`, and with a binary at that path launchd would fail with exit 126 silently forever. The 3.0 binary also checks and rewrites it on its first run, which covers Homebrew installs.
@@ -267,10 +268,10 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 **Recognising macup.**
 
 - 2.9 copies keep being found by `^MACUP_VERSION=` and `^# macup`.
-- A 3.0 binary is found by a fixed marker string, not by running it with `version` (decided in phase 5). The marker is `Env.marker`: a line `# macup` and a line `MACUP_VERSION="<version>"`, one literal that `Env.version` is read from. So the 2.9 rules (`grep -q '^MACUP_VERSION='` in 2.9's `uninstall`, that and `'^# macup'` in its `install.sh`) and `SelfPath.isMacup` find a 3.0 binary unchanged, and running an unknown file named macup is never needed. `tools/release.sh` checks that each stripped slice holds both lines together, which the embedded bash build does not, so the check cannot pass on the bash text alone.
+- A 3.0 binary is found by a fixed marker string, not by running it with `version` (decided in phase 5). The marker is `Env.marker`: a line `# macup` and a line `MACUP_VERSION="<version>"`, one literal that `Env.version` is read from. So the 2.9 rules (`grep -q '^MACUP_VERSION='` in 2.9's `uninstall`, that and `'^# macup'` in its `install.sh`) and `SelfPath.isMacup` find a 3.0 binary unchanged, and running an unknown file named macup is never needed. `tools/release.sh` checks that each stripped slice holds both lines together. Until phase 4 removed it, the binary also embedded the bash build, whose own lines are apart; that is why the check asks for them together.
 - `install.sh` and `uninstall` use the same rule.
 
-**Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL and checks that the asset exists. `brew audit --strict --online` is run in the tap before relying on it.
+**Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL, checks that the asset exists, and gives the formula `depends_on macos: :ventura` (replacing `depends_on :macos`), so Homebrew on macOS 12 refuses the upgrade instead of installing a binary that cannot start, and 2.9.2 stays (not yet tried on a macOS 12 Mac). `brew audit --strict --online` is run in the tap before relying on it.
 
 **Cleanup.**
 
@@ -288,7 +289,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 3. The suite runs.
 4. One pull request goes from `swift/main` into `main`.
 
-Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap, which then says "not published yet" and exits 1 on every run, scheduled checks included, until the asset exists (`tests/shipping.sh` covers it; the copy recovers by itself).
+Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap. The release workflow does not wait for CI: pushed before CI on `main` has passed for the merge commit (12 to 40 minutes), it fails and must be re-run once CI is green, so watch it. Until the asset exists, its runs use 2.9.2 from a temporary copy, scheduled checks included, and `self-update`, `schedule` and `uninstall` say "not published yet". `tests/shipping.sh` covers it; the copy moves to 3.0 by itself once the asset is there. Run `tools/bump-formula.sh` only after the asset is up: it checks that.
 
 ## Every pull request into `swift/main`
 
@@ -344,6 +345,15 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [x] `diff.sh` flake (#26's pull_request run 46118275857, `upd-mas-asks uk tty`): bash's `tick` spinner (`src/core.sh:261`) polls `tail "$RAW"` in a subshell while the main shell lives, so when a step ends the run, the EXIT cleanup can remove `$RAW` first and bash prints `tail: …: No such file or directory`. Oracle-side only. Fix in `src/core.sh` with `2>/dev/null` on that `tail`; owner: the phase 4 PR2 session, since `src/` stays as the oracle until phase 5.
 - [x] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other. Owner: the phase 3 session, after #18. Done: `Names.codePointOrder`.
 
+## After 3.0.0
+
+- `main`'s test hole: a fake in the fake home's `~/.local/bin` comes after the real `/opt/homebrew/bin` and `/usr/local/bin`, so a case can reach a real `docker` (since 7eda6a1). Fixed on `swift/main` in #35 (`MACUP_PATH=keep`, `fake_first`); it goes away when 3.0 replaces `main`.
+- Untimed captures: `simctl runtime list`, `xcodebuild -version`, `security` and `openssl` have no time limit.
+- The `orph:N` and `odata:N` pick keys are indexes, not names.
+- Trashed leftovers are counted as "freed".
+- CHANGELOG: the `## 3.0.0 — unreleased` heading gets its date with the tag.
+- `tests/fixture.sh` still has one-letter loop names (`a`, `v`, `s`), against ground rule 8.
+
 ## Progress
 
 | Phase | Unit | Branch | PR | State |
@@ -372,4 +382,5 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
 | 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
 | 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | #35 | merged (8bcfd3c) |
+| 6 | release safety: 2.9.2 stands in until the binary is up, the formula's macOS 13 limit | `swift/release-safety` | #36 | open |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

@@ -49,7 +49,7 @@ final class ExecTests: XCTestCase {
         ("Library/Caches/com.bar/org.sparkle-project.Sparkle/Installation/y/Bar.app/Contents/GPUCache/g", false),
         ("Library/Caches/zen/Profiles/abc.default/cache2/entries", true), ("Library/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12", true),
         ("Library/Keychains/login.keychain-db", false), ("Library/Messages/chat.db", true), ("Library/Caches/../Documents", false),
-        ("Library/Caches/./x", true), ("Library/Caches/x.sqlite", false), (".ssh/id_rsa", false), (".ssh", false), (".gnupg/pubring.kbx", false),
+        ("Library/Caches/./x", false), ("Library/Caches/x.sqlite", false), (".ssh/id_rsa", false), (".ssh", false), (".gnupg/pubring.kbx", false),
         (".aws/credentials", false), (".aws", false), (".kube/config", false), (".netrc", false), (".config/macup/config", false), (".config", false),
         (".claude", false), (".claude/settings.json", false), (".claude/projects/-Users-me-app/aaaa-1111.jsonl", false),
         (".claude/file-history/bbbb-2222", true), (".claude/file-history/bbbb-2222/x", false), (".claude/file-history/a_b", false),

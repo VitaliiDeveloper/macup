@@ -26,7 +26,7 @@ macup updates all of them, deletes only caches that rebuild themselves (what is 
 - **Tidy with its own files:** macup keeps its reports for 30 days and never more than 20 runs, and removes its leftover temp files.
 - **Optional schedule:** `macup schedule weekly` runs a check on its own and shows a notification when something needs a look. Off unless you turn it on.
 - **Interface in English, Ukrainian and Russian.**
-- **No dependencies:** a single Bash file that runs on the bash 3.2 that ships with macOS.
+- **No dependencies:** one universal binary for Apple silicon and Intel, with nothing to install next to it.
 - **Tools you don't have are skipped.**
 
 <details>
@@ -62,9 +62,8 @@ Run `macup tasks` for the full list with task ids.
 
 ## Requirements
 
-- macOS. The installer refuses other systems. The tests run on macOS 15 and 26 on Apple silicon. Intel Macs and macOS 12 and later should work; older systems are not tested, and some checks are skipped there.
-- `/bin/bash` 3.2 and `curl`. Both ship with macOS.
-- Optional: `python3`, from the Xcode Command Line Tools. Some tasks use it to read JSON and property lists: npm globals, agent skills, Claude Code plugins, simulators, the commands check, apps that fall behind, expired provisioning profiles, signing certificates, and finding app caches by folder layout. Without it, those tasks are skipped.
+- macOS 13 Ventura or later, on Apple silicon or Intel: macup is one universal binary. The tests run on macOS 15 and 26 on Apple silicon; macOS 13 and 14 and Intel Macs are built for but not tested. On macOS 12 or older the installer and `self-update` install or keep macup 2.9.2, the last version that runs there; the Homebrew formula requires macOS 13. The installer refuses other systems.
+- `curl`, which ships with macOS, for the installer and `self-update`.
 - Optional: `git`, also from the Command Line Tools. Stale build folders are offered only when git can tell that it tracks no file in them.
 - Optional: the tools macup updates (Homebrew, `mas`, Claude Code, npm, …). Missing ones are skipped.
 
@@ -78,7 +77,8 @@ curl -fsSL https://raw.githubusercontent.com/VitaliiDeveloper/macup/main/install
 
 It asks for a language and your project folders, offers to install `mas`, then offers a first check. What it changes:
 
-- installs `~/.local/bin/macup` and removes older copies from `/usr/local/bin`, `/opt/homebrew/bin` and `~/.npm-global/bin`
+- installs `~/.local/bin/macup`: the binary of the latest release (`macup-<version>-macos-universal.tar.gz` on the GitHub release), checked against its published SHA-256 and run once before it replaces anything, so a copy you already have keeps working if the download fails
+- removes older copies from `/usr/local/bin`, `/opt/homebrew/bin` and `~/.npm-global/bin`
 - creates `~/.config/macup/config`, or keeps yours on reinstall
 - adds `~/.local/bin` to `PATH` in `~/.zshrc` (and `~/.bash_profile`, if you have one) when it is not there yet
 
@@ -96,7 +96,9 @@ Installer options: `--lang en|uk|ru`, `--projects "~/Code, ~/Work"`, `--prefix D
 brew install vitaliideveloper/macup/macup
 ```
 
-There are no installer questions here. The language follows macOS. Use `macup lang` to change it and `macup config` to set your project folders.
+It installs the same release binary. There are no installer questions here. The language follows macOS. Use `macup lang` to change it and `macup config` to set your project folders.
+
+Don't download the release archive in a browser: the binary is ad hoc signed, not notarized, so Gatekeeper blocks a copy the browser has quarantined. The installer and Homebrew don't quarantine it.
 
 **From source:**
 
@@ -105,8 +107,10 @@ git clone https://github.com/VitaliiDeveloper/macup.git
 ```
 
 ```bash
-cd macup && ./install.sh
+cd macup && ./build.sh && ./install.sh
 ```
+
+This needs Xcode 16 or later, or its Command Line Tools. `./install.sh` in a checkout installs the binary you just built.
 
 **Update or remove:**
 
@@ -118,8 +122,17 @@ macup self-update
 macup uninstall
 ```
 
-`self-update` installs the latest released version from GitHub: the file from that version's tag, checked against its published SHA-256 (`macup.sha256`). The installer does the same. For a Homebrew install it tells you to run `brew upgrade macup`.
-`uninstall` lists everything it will remove and asks once (`--yes` skips the question): the script, settings, history, reports, the schedule and the installer's `PATH` line. It keeps the `PATH` line if other programs live in that folder. For a Homebrew install it runs `brew uninstall macup`.
+`self-update` installs the latest release from GitHub when it is newer: the binary attached to that release, checked against its published SHA-256 and required to report that version. It then takes the old file's place by a rename, so a macup that is running at that moment is not disturbed. For a Homebrew install it tells you to run `brew upgrade macup`.
+`uninstall` lists everything it will remove and asks once (`--yes` skips the question): the binary, settings, history, reports, the schedule and the installer's `PATH` line. It keeps the `PATH` line if other programs live in that folder. For a Homebrew install it runs `brew uninstall macup`.
+
+**From 2.9 to 3.0:** run `macup self-update` as usual (`brew upgrade macup` for Homebrew). Version 2.9 was a bash script; 3.0 is a binary, so 2.9's self-update installs a small bootstrap first. Its next run does the rest:
+
+- downloads the 3.0 binary, checks its SHA-256 and that it runs, replaces itself with it and runs the command you typed;
+- points a schedule from `macup schedule` at the binary. A scheduled check that comes first still runs, from a temporary copy, and its log says to run macup once in Terminal to finish;
+- until the release's binary is uploaded (a release is tagged before its binary is attached), runs the command you typed with 2.9.2 from a temporary copy, says so and replaces nothing; the next run tries again. `self-update`, `schedule` and `uninstall` act on macup's own file, so they wait for the binary: they say so and change nothing, as every command does when neither download works (offline, for example);
+- on macOS 12 or older, installs 2.9.2 instead.
+
+With Homebrew, the first time you run macup 3.0 in Terminal, it moves the schedule onto the binary.
 
 ## Usage
 
@@ -170,7 +183,7 @@ Plain `macup` opens a menu:
 | `--notify` | Show a macOS notification when something needs attention (the schedule uses it) |
 | `--yes` | `uninstall` without the question |
 
-Exit status: `0` the run finished · `3` an update or cleanup step failed · `2` bad arguments · `1` unknown command, or macup is already running · `130` interrupted. Warnings from the health checks do not change it; read them from `--json` (`needs_attention`).
+Exit status: `0` the run finished · `3` an update or cleanup step failed · `2` bad arguments · `1` unknown command, macup is already running, or no temporary file can be made · `130` interrupted. Warnings from the health checks do not change it; read them from `--json` (`needs_attention`).
 
 ### Examples
 
@@ -235,7 +248,7 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 
 | Path | Contents |
 |---|---|
-| `~/.local/bin/macup` | The script |
+| `~/.local/bin/macup` | The binary |
 | `~/.config/macup/config` | Settings |
 | `~/Library/Logs/macup/` | One report per run (`.md`, with what the commands printed at the end), kept for `keep_reports_days` and at most `keep_reports` runs; `macup reports clean` removes them. `schedule.log`: the scheduled check's output, its last 200 lines |
 | `~/Library/Application Support/macup/history.csv` | Run history for `macup history`, its last 500 runs |
@@ -244,13 +257,14 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 
 ## Tech stack and architecture
 
-- **Bash**, compatible with the stock macOS bash 3.2. Small embedded Python 3 snippets read JSON.
-- **Single-file build:** the source lives in `src/*.sh`. `build.sh` joins the parts in a fixed order and embeds the translations from `src/i18n/translations.json`. The result is the one `macup` file users install, and `macup.sha256`, which `self-update` and the installer check the download against.
-- **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table in `src/core.sh`. `--skip`, `--only`, `skip` and `enable` all use these ids.
-- **Cleaners as data:** tables at the top of `src/cleaners.sh` (`CACHE_DIRS`, `TOOL_CACHES`, `ELECTRON_APPS`, `BROWSERS`). A new cache is usually one line.
+- **Swift, one universal binary** (arm64 and x86_64) for macOS 13 and later, with no dependencies beyond the system. It runs the tools it updates and measures (`brew`, `npm`, `du`, `find`, …) as programs, found through `PATH`.
+- **Swift package:** `Sources/macup` is the command line; `Sources/MacupCore` holds everything else, one folder per area (`Foundation`, `Run`, `Checks`, `Updates`, `Tools`, `Cleaners`, `Cleanup`, `Leftovers`, `Commands`). The translations live in `src/i18n/translations.json`; `build.sh` embeds them in the binary.
+- **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table, `Tasks.all` in `Foundation/Tasks.swift`. `--skip`, `--only`, `skip` and `enable` all use these ids.
+- **Cleaners as data:** cache folders are rows in `Cleanup/CacheTables.swift`. A new cache is usually one line.
 - **Two-phase cleanup:** cleaners first register candidates with a size and level, then the chosen ones run. Every path is checked against an allow-list again right before it is deleted.
-- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
-- **CI (GitHub Actions):** ShellCheck on Ubuntu; a bash 3.2 syntax check, the tests, an install and smoke runs on macOS 15 and 26, Apple silicon.
+- **The root `macup` is not the program.** It is the bash bootstrap that moves a 2.9 install onto the binary: 2.9's `self-update` reads it from `main` and checks it against `macup.sha256`. Both are committed; `install.sh` runs the bootstrap too, so the download and its checks live in one place.
+- **Tests:** `swift test` runs the unit tests. `tests/run.sh` runs the binary against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`); it checks that each level deletes exactly the expected files and that protected files survive. `tests/shipping.sh` (run by `tests/run.sh`) tests the formula bump, the installer, the bootstrap and the binary's `self-update` against a fake GitHub release, including a 2.9.2 `self-update`; `tools/release.sh` runs in CI on every pull request.
+- **CI (GitHub Actions):** ShellCheck on Ubuntu; the build, XCTest and the release archive on macOS 26; the suite, an install from the checkout and smoke runs on macOS 15 and 26, Apple silicon.
 
 Development:
 
@@ -259,10 +273,16 @@ Development:
 ```
 
 ```bash
+swift test
+```
+
+```bash
 tests/run.sh
 ```
 
-Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`. `tools/screenshots.sh` makes the screenshots in `docs/images` from the macup in the checkout, run against a made-up Mac (fake home, sizes and free space), so nothing of your own Mac shows up.
+`./build.sh` builds the binary (`swift build`, after writing `Sources/macup/Generated/Translations.swift`); `./build.sh --check` also fails if `macup.sha256` does not match the committed `macup`. `tests/run.sh` runs the suite on `.build/debug/macup`, or on `MACUP_BIN`. The history of the port from bash is in [docs/swift-port-plan.md](docs/swift-port-plan.md), and release notes are in [CHANGELOG.md](CHANGELOG.md).
+
+Releases: `tools/release.sh OUTDIR [VERSION]` builds the universal binary, strips and ad hoc signs it, and packs `macup-<version>-macos-universal.tar.gz` with its SHA-256; CI runs it on every pull request, and `.github/workflows/release.yml` runs it on a `v*` tag and uploads the archive. After the release is published, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at that archive (URL and SHA-256, once the asset exists), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`. `tools/screenshots.sh` makes the screenshots in `docs/images` from the binary in the checkout, run against a made-up Mac (fake home, sizes and free space), so nothing of your own Mac shows up.
 
 ## License
 

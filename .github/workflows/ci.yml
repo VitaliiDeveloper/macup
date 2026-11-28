@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]   # a release tag points at a commit main already ran
+    branches: [main, "swift/**"]   # a release tag points at a commit main already ran; swift/main is tested as merged
   pull_request:
   schedule:
     - cron: "17 6 * * 1"   # weekly, to catch macOS runner changes
@@ -10,42 +10,57 @@ on:
 permissions:
   contents: read
 
-# a new push replaces the run still going for the same branch or PR
+# a new push replaces the run still going for the same branch or PR; on main every commit has a group of its own, so each
+# keeps its run (GitHub cancels a pending run in a group, whatever cancel-in-progress says), which a release tag needs
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: ShellCheck
         run: |
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
-          shellcheck -s bash -S warning macup install.sh build.sh tests/*.sh tools/*.sh
-      - name: Python helpers
-        run: |
-          python3 tests/test_helpers.py
-          pipx run ruff check --select F src/py tests/*.py
+          # every tracked script, so a file that goes away leaves no stale name here; the root macup is the 2.9 bootstrap
+          git ls-files -z '*.sh' tests/macup_run macup | xargs -0 shellcheck -s bash -S warning
 
-  macos:
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: |
+          swift --version
+          ./build.sh
+          ./build.sh --check   # also: macup.sha256 matches the committed bootstrap
+      - name: XCTest
+        run: swift test
+      - name: The release archive, as a tag would build it (universal, stripped, signed, packed, checked; not uploaded)
+        run: tools/release.sh "$RUNNER_TEMP/dist"
+
+  suite:
     strategy:
       fail-fast: false
       matrix:
         os: [macos-26, macos-15]   # the current macOS and the one before, Apple silicon
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - name: Syntax check with the stock macOS bash 3.2
+        with:
+          fetch-depth: 0   # tests/shipping.sh updates the 2.9.2 of the v2.9.2 tag
+      - name: Build
         run: |
-          /bin/bash --version | head -1
-          /bin/bash -n macup
-          /bin/bash -n install.sh
+          ./build.sh
+          swift build -c release
       - name: Tests (fake home folders only)
-        run: tests/run.sh
+        run: MACUP_BIN="$(swift build -c release --show-bin-path)/macup" tests/run.sh
       - name: Install from the checkout
         run: /bin/bash ./install.sh --yes --lang en --projects "~/work"
       - name: Help, tasks, version
@@ -57,9 +72,9 @@ jobs:
       - name: Options without a command change nothing
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          for a in "" "--no-color" "--lang uk" "--skip check.docker"; do
-            if macup $a </dev/null >out.txt 2>&1; then echo "macup $a should exit non-zero"; exit 1; fi
-            grep -q 'macup check' out.txt || { echo "macup $a should print help"; cat out.txt; exit 1; }
+          for options in "" "--no-color" "--lang uk" "--skip check.docker"; do
+            if macup $options </dev/null >out.txt 2>&1; then echo "macup $options should exit non-zero"; exit 1; fi
+            grep -q 'macup check' out.txt || { echo "macup $options should print help"; cat out.txt; exit 1; }
           done
           if macup --lang xx check </dev/null; then exit 1; fi
           macup --deep --no-color --only check.system </dev/null 2>/dev/null | head -1 | grep -q 'check+deep'
@@ -72,5 +87,5 @@ jobs:
       - name: Languages
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          for l in uk ru en; do macup lang $l; macup tasks --no-color | head -4; macup help | head -3; done
+          for lang in uk ru en; do macup lang $lang; macup tasks --no-color | head -4; macup help | head -3; done
           MACUP_LANG=uk macup check --no-color --only check.system,check.disk,check.memory

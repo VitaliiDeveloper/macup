@@ -1,0 +1,102 @@
+import Darwin
+import Foundation
+
+/// The one-off commands (2.9's arguments.sh, after the options are read).
+public enum OneOff {
+    /// What every one-off command reads: the environment, the config, the language and colours the run settled on.
+    struct Context {
+        let arguments: Arguments
+        let env: Env
+        let shell: Shell
+        let config: Config
+        /// The run's language (--lang, else MACUP_LANG, the config, the system); a default config is written in it.
+        let lang: Lang
+        let i18n: I18n
+        let colors: Colors
+        let out: Output
+        /// src/i18n/translations.json, for `lang`, which prints in the language it sets.
+        let translations: String
+
+        init(_ arguments: Arguments, env: Env, translations: String) {
+            self.arguments = arguments
+            self.env = env
+            self.translations = translations
+            shell = Shell(env: env)
+            config = Config(env: env)
+            // 2.9's core.sh reads the language when it loads, before --lang is looked at: a config sed cannot read says so here
+            let initial = Lang.initial(env: env, config: config, shell: shell)
+            lang = arguments.lang ?? initial
+            i18n = I18n(lang: lang, translationsJSON: translations)
+            colors = arguments.noColor ? .off : Colors.initial(env: env)
+            out = Output(i18n: I18n(lang: .en, translations: [:]), colors: colors)
+        }
+    }
+
+    /// Under sudo the config, the reports and the history would become root's, and the next plain run could not write them.
+    static func refusesSudo(_ context: Context) -> Bool {
+        guard context.env.underSudo, !context.arguments.runsUnderSudo else { return false }
+        context.out.write(context.i18n.translate("macup does not need sudo: run it as yourself.") + "\n")
+        return true
+    }
+
+    /// Runs a one-off command; returns the exit status. `translations` is src/i18n/translations.json.
+    public static func run(_ command: Arguments.Command, _ arguments: Arguments, env: Env, translations: String) -> Int32 {
+        env.apply()
+        let context = Context(arguments, env: env, translations: translations)
+        let out = context.out
+        if refusesSudo(context) { return 1 }
+        switch command {
+        case .version:
+            out.write("macup \(Env.version)\n")
+        case .help:
+            out.write(Help.text(lang: context.lang, colors: context.colors, conf: env.paths.tildify(env.conf)))
+        case .tasks:
+            out.write(TasksCommand.text(context, json: arguments.json))
+        case .history:
+            out.write(arguments.json ? History.json(context) : History.text(context))
+        case .last:
+            FileHandle.standardOutput.write(Reports.last(context))
+        case .reports:
+            return Reports.run(context)
+        case .config:
+            return ConfigLang.open(context)
+        case .lang:
+            return ConfigLang.choose(context)
+        case .uninstall:
+            Uninstall.run(context, selfPath: SelfPath.current())
+        case .selfUpdate:
+            return SelfUpdate.run(context)
+        case .schedule:
+            return Schedule.run(context)
+        }
+        return 0
+    }
+
+    /// What 2.9's arguments.sh says and exits with for a command line it rejects. core.sh has read the language by then: a config
+    /// sed cannot read says so first.
+    public static func rejected(_ failure: Arguments.Failure, env: Env, translations: String) -> Int32 {
+        let shell = Shell(env: env), initial = Lang.initial(env: env, config: Config(env: env), shell: shell)
+        switch failure {
+        case .badLevel:
+            Shell.writeText("--level: safe | standard | aggressive\n", to: 1)
+            return 2
+        case .badLang:
+            Shell.writeText("--lang: en | uk | ru\n", to: 1)
+            return 2
+        case .unknownCommand(let word, let lang):
+            let i18n = I18n(lang: lang ?? initial, translationsJSON: translations)
+            Shell.writeText(i18n.format("Unknown command: %s", args: [word]) + "\n"
+                            + i18n.translate("Type  macup  for the menu or  macup help  for all commands.") + "\n", to: 1)
+            return 1
+        }
+    }
+
+    /// 127 and bash's message when the tool is not there.
+    static func runTool(_ argv: [String], _ shell: Shell) -> Int32 {
+        guard let pid = shell.spawn(argv) else {
+            Shell.writeText("macup: \(argv.first ?? ""): command not found\n", to: 2)
+            return 127
+        }
+        return Shell.wait(pid)
+    }
+}

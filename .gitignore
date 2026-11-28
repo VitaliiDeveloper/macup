@@ -1,3 +1,6 @@
 publish.sh
 .DS_Store
 review-*.diff
+/.build/
+/.swiftpm/
+/Sources/macup/Generated/

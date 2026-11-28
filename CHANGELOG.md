@@ -1,11 +1,55 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 — 2026-11-28
+
+**macup is now one universal binary, written in Swift, instead of a bash script.** Commands, options, the config file, reports, history, `--json` and exit statuses stay the same, and so does what each run prints, in all three languages, apart from the changes below. It needs macOS 13 Ventura or later, on Apple silicon or Intel.
+
+Upgrading:
+
+- **From 2.9: `macup self-update`.** 2.9 installs a small bootstrap and already says "macup updated: 2.9.x → 3.0.0". The bootstrap's first run downloads the 3.0 binary, checks its SHA-256 and that it runs, replaces itself with it and runs the command you typed. Until the release binary is uploaded (a release is tagged before its binary is attached), each run uses 2.9.2 from a temporary copy, says so and replaces nothing, so 2.9 keeps working, scheduled checks included; the next run tries again. `self-update`, `schedule` and `uninstall` wait for the binary instead: they say so and change nothing, as every command does when neither download works (offline, for example).
+- **A schedule moves onto the binary.** 2.9's LaunchAgent ran `/bin/bash <path>`, which cannot start a binary. The bootstrap rewrites it and loads it again, and so does the first run of 3.0 in Terminal, which covers Homebrew. A scheduled check that runs before that still works: it runs from a temporary copy and its log says to run macup once in Terminal. If launchd refuses the reload, macup says the schedule applies after the next login.
+- **macOS 12 and older keep 2.9.2.** The bootstrap installs the last 2.9 release there instead of a binary that cannot start, and the Homebrew formula requires macOS 13. 2.9.2 on such a Mac keeps saying that 3.0.0 is available; `self-update` there reports 3.0.0, and the next run puts 2.9.2 back and says why.
+- **Homebrew:** `brew upgrade macup`. The formula installs the same release binary.
+- **The installer** (`curl … | bash`) installs the release binary the same way. A copy you already have stays until the new one has run once. Run from a checkout, it installs the binary you built there.
+
+Changed:
+
+- **No more `python3`.** npm globals, agent skills, Claude Code plugins, simulators and simulator runtimes, apps that fall behind, finding app caches by folder layout, editor workspaces, expired provisioning profiles, the commands check, signing certificates and crash reports used to be skipped on a Mac without it. They now run everywhere.
+- **`self-update` installs the release binary.** It is checked against the release's published SHA-256 and must report the version it was downloaded for. It is downloaded only when a newer version is out, and it takes the old file's place by a rename, so a macup that is running at that moment is not disturbed.
+  - A folder macup cannot write is reported before the release is downloaded.
+  - Through a symlink, the file it points at is replaced and the link stays.
+  - A fork (`MACUP_REPO`) that publishes no release binary can no longer self-update: macup says the download failed.
+- **`macup schedule` writes the binary itself** as the LaunchAgent's program, without `/bin/bash`.
+
+Fixes:
+
+- **Edit backups of Claude Code sessions that still exist are no longer offered for the Trash** when there are more than about 1,770 sessions; the check of which session a backup belongs to could answer wrong there. The Grok CLI check is fixed the same way.
+- **Installed apps whose id has Cyrillic or CJK parts are no longer taken for deleted ones.** Their data could be listed as leftovers and offered for the Trash.
+- **Numbers with leading zeros in the config are read as decimal.** `step_timeout_minutes = 09` stopped the config from loading (no level, no project folders, and `macup tasks` printed the help), and `010` meant 8 minutes. Days written as `007` now show as `7` in the cleaners' labels and the `--deep` tip.
+- **Time Machine's backup age is right.** It occasionally came out a day short, so an 8-day-old backup passed the 7-day check.
+- **`macup history`'s trend line is bold and starts with its label.** It used to begin with the last freed size in bytes.
+- **A step-timeout warning from agent skills or a Claude Code plugin update counts** in the summary, `--json` and history, and that section's header prints once.
+- **An empty memory size from `sysctl` reads as 0 GB** instead of ending the run.
+- **A broken line in history.csv reads as 0** instead of stopping the run.
+- **A task id that is not valid UTF-8** (in `--skip` and the like) is reported as unknown instead of being ignored.
+- **`softwareupdate` output with non-UTF-8 text is read past that line,** and very long output can no longer turn into an error.
+- **A system leftover no longer takes its vendor folder along when macup cannot read that folder.** An unreadable folder counted as empty, so after the leftover moved, the whole vendor folder, other products' data included, could go to the Trash. A container whose contents could not be listed no longer counts as moved.
+- **A tool that leaves a process behind that ignores the stop signal no longer keeps a run waiting.** Once a tool's time is up, everything it started is killed 5 seconds later, and its output is taken at most 5 seconds after it ended; a scheduled check could wait forever and keep the lock.
+- **A `HOME` of `//` or `/.` is refused like `/`.** Every cleaner would have looked at the system's Library.
+- **`macup uninstall` removes what a killed self-update or install left next to macup** (`.macup-update.*`, `.macup-install.*`) and no longer keeps the PATH line because of it.
+
+Small differences you might notice:
+
+- When no temporary file can be made, the run stops with exit status 1 instead of going on without a report body.
+- `macup lang` says "Couldn't write …" and exits 1 when it cannot write the config, instead of announcing the new language.
+- A run killed by a signal it does not handle prints `Killed: 9` instead of bash's job line.
+- Stray errors from `uptime`, `pmset` and `date`, and bash's "integer expression expected" lines, are no longer printed.
+- Tool output that is not UTF-8 shows the replacement character (�) where bash printed the raw bytes. Counts and the report's command output are the same.
 
 For developers:
 
-- **The Python code is in a real file.** The 13 Python snippets that lived as strings inside `src/cleaners.sh`, `src/tools.sh` and `src/updates.sh` are now functions in `src/py/macup_helpers.py`, run as `python3 -c "$MACUP_PY" <command> args…` with the same input and output. `build.sh` embeds the file into `macup` (a `@py` line, like `@i18n`), checks that it compiles for Python 3.9 and `--check` covers it, so `macup` is still one file and still runs without Python. No change in what macup does.
-- **`tests/test_helpers.py`** (plain unittest, the stock `/usr/bin/python3` is enough) tests which editor workspaces count as gone, the Chromium and Electron cache scan and version parsing. `tests/run.sh` runs it, and ruff or pyflakes when one is installed; CI runs both.
+- **The bash source is gone.** `src/*.sh`, the Python helpers (`src/py`, `tests/test_helpers.py`) and the differential harness (`tests/diff.sh`), which compared the two builds case by case during the port, are deleted. The unit tests that ran bash as their reference now assert the values bash gave. `build.sh` builds the binary, `swift test` runs the unit tests and `tests/run.sh` the suite.
+- **The root `macup` is the 2.9 bootstrap,** committed with its `macup.sha256`; `./build.sh --check` fails when the two disagree. `tools/release.sh` builds and checks the release archive, and `tools/bump-formula.sh` points the Homebrew formula at it.
 
 ## 2.9.2 — 2026-11-25
 

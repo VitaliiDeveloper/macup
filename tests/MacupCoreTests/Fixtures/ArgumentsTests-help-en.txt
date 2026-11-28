@@ -1,0 +1,39 @@
+{B}macup{N} {version} — keep your Mac healthy from one command
+
+Just type  {B}macup{N}  to get a menu.
+
+Commands
+  macup check        Check everything, then pick what to clean (or nothing)
+  macup all          Update tools + safe cleanup + checks
+  macup update       Updates only (plus checks)
+  macup clean        Cleanup only (plus checks)
+  macup last         Show the latest report
+  macup history      Trends across runs: free space, swap, battery, freed space
+  macup reports      How many reports and their size; macup reports clean removes them
+  macup tasks        List every task id and whether it's on
+  macup config       Create or open your config file
+  macup lang         Change language (en, uk, ru)
+  macup self-update  Install the latest macup from GitHub (with Homebrew: brew upgrade macup)
+  macup schedule     Optional: a scheduled check with a notification (weekly, daily, off)
+  macup uninstall    Remove macup and everything it made; --yes skips the question
+  macup help         This help
+
+Options (combine with any run command)
+  --level LEVEL      What clean/all may remove: safe (default), standard, aggressive
+  --deep             Also scan the largest folders, Downloads and project build artifacts
+                     (macup --deep on its own is a deep check)
+  --skip a,b         Skip task ids for this run, e.g. --skip update.brew,clean.*
+  --only a,b         Run only these task ids, e.g. --only check.*
+  --enable a,b       Turn on opt-in tasks for this run, e.g. --enable clean.trash
+  --lang en|uk|ru    Language for this run
+  --no-color         Plain output
+  --quiet            Only the summary (the rest is in the report)
+  --json             The whole result as one JSON object, for scripts and other programs
+                     (also: macup tasks --json, macup history --json, macup reports --json)
+  --pick KEY,…       Clean exactly these items of macup check --json (their key), without asking
+
+Exit status: 0 done · 3 an update or cleanup step failed · 2 bad arguments.
+Nothing changes without a command (all, update, clean) or your pick after a check.
+Levels: safe rebuilds itself · standard downloads again · aggressive may sign apps out.
+Reports: ~/Library/Logs/macup/
+Config: ~/.config/macup/config

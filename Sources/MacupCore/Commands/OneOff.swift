@@ -40,36 +40,34 @@ public enum OneOff {
     }
 
     /// Runs a one-off command; returns the exit status. `translations` is src/i18n/translations.json.
-    public static func run(_ arguments: Arguments, env: Env, translations: String) -> Int32 {
+    public static func run(_ command: Arguments.Command, _ arguments: Arguments, env: Env, translations: String) -> Int32 {
         env.apply()
         let context = Context(arguments, env: env, translations: translations)
         let out = context.out
         if refusesSudo(context) { return 1 }
-        switch arguments.command {
-        case .version?:
+        switch command {
+        case .version:
             out.write("macup \(Env.version)\n")
-        case .help?:
+        case .help:
             out.write(Help.text(lang: context.lang, colors: context.colors, conf: env.paths.tildify(env.conf)))
-        case .tasks?:
+        case .tasks:
             out.write(TasksCommand.text(context, json: arguments.json))
-        case .history?:
+        case .history:
             out.write(arguments.json ? History.json(context) : History.text(context))
-        case .last?:
+        case .last:
             FileHandle.standardOutput.write(Reports.last(context))
-        case .reports?:
+        case .reports:
             return Reports.run(context)
-        case .config?:
+        case .config:
             return ConfigLang.open(context)
-        case .lang?:
+        case .lang:
             return ConfigLang.choose(context)
-        case .uninstall?:
+        case .uninstall:
             Uninstall.run(context, selfPath: SelfPath.current())
-        case .selfUpdate?:
+        case .selfUpdate:
             return SelfUpdate.run(context)
-        case .schedule?:
+        case .schedule:
             return Schedule.run(context)
-        case nil:
-            preconditionFailure("a run is MainPass's")
         }
         return 0
     }

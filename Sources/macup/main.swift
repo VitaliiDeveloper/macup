@@ -22,7 +22,7 @@ func parsed(_ argv: [String]) -> Arguments {
 }
 
 let arguments = parsed(argv)
-if arguments.command != nil { exit(OneOff.run(arguments, env: env, translations: Translations.json)) }
+if let command = arguments.command { exit(OneOff.run(command, arguments, env: env, translations: Translations.json)) }
 // no command word and no run: the menu on a terminal, the help anywhere else
 if arguments.action == nil, !arguments.deep {
     switch Menu.run(arguments, env: env, translations: Translations.json) {

@@ -1,6 +1,6 @@
 # Porting macup to Swift
 
-Status: in progress. Phases 0 to 5 are merged; phase 6 (the final review and the pull request into `main`) is under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
+Status: in progress. Phases 0 to 6 are done: the final review's fixes are merged, and the pull request from `swift/main` into `main` is open. Merging it and tagging 3.0.0 wait for the owner. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
 
 ## Why
 
@@ -382,5 +382,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
 | 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
 | 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | #35 | merged (8bcfd3c) |
-| 6 | release safety: 2.9.2 stands in until the binary is up, the formula's macOS 13 limit | `swift/release-safety` | #36 | open |
+| 6 | release safety: 2.9.2 stands in until the binary is up, the formula's macOS 13 limit | `swift/release-safety` | #36 | merged (747b8b7) |
+| 6 | the final review's fixes: unreadable folders not empty, the step limit's overflow, a timed-out tool's children killed, SIGPIPE, bytes, DRY | `swift/review-fixes` | #37 | merged (72c5064) |
+| 6 | `swift/main` into `main` | `swift/main` | (final) | waits for the owner |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

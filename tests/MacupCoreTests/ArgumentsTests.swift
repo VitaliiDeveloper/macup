@@ -104,22 +104,24 @@ final class ArgumentsTests: XCTestCase {
         XCTAssertEqual(environment.tmpDir, "/t/")
     }
 
-    func testHelpIsUsage() throws {
+    /// The usage text of 2.9's help.sh; the fixtures mark bold with {B} and {N}.
+    func testHelpIsUsage() {
         for lang in Lang.allCases {
-            for (colors, colorPrelude) in [(Colors.off, "B=; N="), (Colors.on, "B=$'\\033[1m'; N=$'\\033[0m'")] {
-                let prelude = "MACUP_VERSION=\(Env.version); MSG_LANG=\(lang.rawValue); \(colorPrelude)\n" + BashOracle.read("src/help.sh")
-                let got = try BashOracle.run(["usage; printf x"], home: "/Users/h.x", prelude: prelude)
-                XCTAssertEqual(Help.text(lang: lang, colors: colors, conf: "~/.config/macup/config") + "x", got[0], "help \(lang)")
+            let usage = Checkout.fixture("ArgumentsTests-help-\(lang.rawValue).txt").replacingOccurrences(of: "{version}", with: Env.version)
+            for colors in [Colors.off, Colors.on] {
+                let expected = usage.replacingOccurrences(of: "{B}", with: colors.bold).replacingOccurrences(of: "{N}", with: colors.reset)
+                XCTAssertEqual(Help.text(lang: lang, colors: colors, conf: "~/.config/macup/config"), expected, "help \(lang)")
             }
         }
     }
 
-    func testVersionIsCoreSh() {
-        XCTAssertTrue(BashOracle.read("src/core.sh").contains("\nMACUP_VERSION=\"\(Env.version)\"\n"))
+    /// 2.9 copies update themselves from the root macup, so it names this version (tools/release.sh checks it too).
+    func testVersionIsRootMacup() {
+        XCTAssertTrue(Checkout.read("macup").contains("\nMACUP_VERSION=\"\(Env.version)\"\n"))
     }
 
     /// The binary carries the translations; it carries no bash build.
     func testGeneratedSourcesAreCurrent() {
-        XCTAssertEqual(Translations.json, BashOracle.read("src/i18n/translations.json"), "run ./build.sh")
+        XCTAssertEqual(Translations.json, Checkout.read("src/i18n/translations.json"), "run ./build.sh")
     }
 }

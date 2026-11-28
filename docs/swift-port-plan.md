@@ -382,4 +382,5 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
 | 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
 | 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | #35 | merged (8bcfd3c) |
+| 6 | release safety: 2.9.2 stands in until the binary is up, the formula's macOS 13 limit | `swift/release-safety` | #36 | open |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

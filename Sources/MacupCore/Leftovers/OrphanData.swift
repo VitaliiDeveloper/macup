@@ -16,7 +16,7 @@ extension Leftovers {
     }
 
     static func registerData(_ run: Run, _ state: State) {
-        let names = Taken(apps: Set(sortedUnique(appNames(state)).map { Array($0.utf8) }), apple: Set(sortedUnique(appleNames(run)).map { Array($0.utf8) }))
+        let names = taken(run, state)
         let vendors = sortedUnique(state.orphans.filter { $0.reason != .broken && !$0.vendor.isEmpty }.map { ($0.vendor, $0.name) }, key: \.0)
         let i18n = run.out.i18n
         for (vendor, name) in vendors where !vendorInstalled(state, vendor) {
@@ -72,6 +72,12 @@ extension Leftovers {
             paths += glob("\(library)/Group Containers", prefix: team + ".", "*").filter { exists($0) && !Run.isSymlink($0) }
         }
         return paths
+    }
+
+    /// The names data is never taken under, as bytes: bash's `sort -u` kept one of the names strcoll ties at the same length
+    /// (Cyrillic, CJK), so an installed app's data could be reported as orphaned.
+    static func taken(_ run: Run, _ state: State) -> Taken {
+        Taken(apps: Set(appNames(state).map { Array($0.utf8) }), apple: Set(appleNames(run).map { Array($0.utf8) }))
     }
 
     static func appNames(_ state: State) -> [String] {

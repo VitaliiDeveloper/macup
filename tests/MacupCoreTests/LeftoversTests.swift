@@ -159,4 +159,17 @@ final class LeftoversTests: XCTestCase {
         XCTAssertTrue(swift("check --only clean.dev_containers"), "nothing to scan without a terminal")
         XCTAssertTrue(swift("clean --only clean.dev_containers", terminal: true), "scanned, and only ever cleaned when picked")
     }
+
+    /// strcoll ties дім and дом at the same length: bash's `sort -u` kept one of them, and the other app's data could look orphaned.
+    func testTakenKeepsNamesStrcollTies() throws {
+        let run = try makeRun()
+        defer { Names.bashLocale = nil; Names.toolLocale = nil }
+        Names.setLocale(try Env(["HOME": home, "LANG": "en_US.UTF-8", "LC_CTYPE": "en_US.UTF-8"]))
+        XCTAssertEqual(Leftovers.sortedUnique(["дім", "дом"]).count, 1, "the tie bash's sort -u merges")
+        let state = Leftovers.State(interactive: false)
+        state.apps = [Leftovers.App(id: "com.example.home", path: "/Applications/дім.app"), Leftovers.App(id: "com.example.house", path: "/Applications/дом.app")]
+        let names = Leftovers.taken(run, state)
+        XCTAssertFalse(Leftovers.nameOK(names, "дім"))
+        XCTAssertFalse(Leftovers.nameOK(names, "дом"))
+    }
 }

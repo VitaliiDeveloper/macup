@@ -37,7 +37,8 @@ final class RoutingTests: XCTestCase {
 
         XCTAssertThrowsError(try Arguments.parse(["--level", "huge", "help"]))
         XCTAssertThrowsError(try Arguments.parse(["--lang"]))
-        XCTAssertThrowsError(try Arguments.parse(["help", "bogus"])) { XCTAssertEqual($0 as? Arguments.Failure, .unknownCommand("bogus")) }
+        XCTAssertThrowsError(try Arguments.parse(["help", "bogus"])) { XCTAssertEqual($0 as? Arguments.Failure, .unknownCommand("bogus", lang: nil)) }
+        XCTAssertThrowsError(try Arguments.parse(["--lang", "uk", "bogus", "--lang", "ru"])) { XCTAssertEqual($0 as? Arguments.Failure, .unknownCommand("bogus", lang: .uk)) }
         XCTAssertEqual(try Arguments.parse(["--level=aggressive"]).level, 3)
         XCTAssertTrue(try Arguments.parse(["--deep"]).dry)
         XCTAssertFalse(try Arguments.parse(["update", "--deep"]).dry)
@@ -48,6 +49,7 @@ final class RoutingTests: XCTestCase {
         func route(_ line: String) -> String {
             switch Router.route(line.split(separator: " ").map(String.init), env: environment) {
             case .bash: return "bash"
+            case .rejected: return "rejected"
             case .swift(let arguments): return arguments.command?.rawValue ?? "run"
             }
         }
@@ -74,8 +76,9 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .swift(try Arguments.parse(["check"])), "on a terminal a check ends with the pick")
         XCTAssertEqual(route("clean --pick clean.derived_data:1"), "run")
         for line in ["help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
-            XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
+            XCTAssertEqual(route(line), "rejected", "'\(line)' gets arguments.sh's message")
         }
+        XCTAssertEqual(route("check --only chek.disk"), "run", "an unknown id: the run says so")
     }
 
     func testConfigBashCannotComputeGoesToBash() throws {
@@ -98,7 +101,7 @@ final class RoutingTests: XCTestCase {
         }
         XCTAssertTrue(route(["check", "--only", "check.disk"], ["check.disk"]))
         XCTAssertFalse(route(["check", "--only", "check.disk,check.memory"], ["check.disk"]))
-        XCTAssertFalse(route(["check", "--only", "chek.disk"], ["check.disk"]), "an unknown id goes to bash, which says so")
+        XCTAssertTrue(route(["check", "--only", "chek.disk"], ["check.disk"]), "an unknown id: the Swift run says so")
         XCTAssertFalse(route(["check"], ["check.disk"]))
         XCTAssertFalse(route(["check"], Set(Tasks.all.filter(\.on).map(\.id))), "opt-in tasks register what they find too")
         XCTAssertTrue(route(["check"], Set(Tasks.all.map(\.id))), "a full check once every task is ported")

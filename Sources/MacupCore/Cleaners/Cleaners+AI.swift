@@ -96,20 +96,21 @@ extension Cleaners {
     /// disk, so the deepest folder still there must be a real one on the home folder's disk.
     /// nil where urlparse raises (a bracket of an IPv6 address without its pair), which ends Python's whole listing.
     static func workspaceGone(_ uri: JSONValue, home: String) -> Bool? {
-        guard case .string(let text) = uri, text.hasPrefix("file://") else { return false }
+        // Python compares code points: a combining mark after "/" or "[" is a character of its own there
+        guard case .string(let text) = uri, Bash.starts(text, "file://") else { return false }
         // urlsplit drops tabs and line breaks anywhere in the URL first
-        var rest = Substring(String(text.unicodeScalars.dropFirst(7).filter { !["\t", "\r", "\n"].contains($0) }))
+        var rest = Substring(String(String.UnicodeScalarView(text.unicodeScalars.dropFirst(7).filter { !["\t", "\r", "\n"].contains($0) }))).unicodeScalars
         let hostEnd = rest.firstIndex { $0 == "/" || $0 == "?" || $0 == "#" } ?? rest.endIndex
         let host = String(rest[..<hostEnd])
-        if host.contains("[") != host.contains("]") { return nil }
+        if host.unicodeScalars.contains("[") != host.unicodeScalars.contains("]") { return nil }
         guard ["", "localhost"].contains(host) else { return false }
         rest = rest[hostEnd...]
         if let end = rest.firstIndex(where: { $0 == "?" || $0 == "#" }) { rest = rest[..<end] }
         let path = percentDecoded(String(rest))
-        guard Bash.starts(path, home + "/"), !path.contains("/../"), !Checks.exists(path), !Bash.starts(path, home + "/Library/") else { return false }
+        guard Bash.starts(path, home + "/"), !Bash.holds(path, "/../"), !Checks.exists(path), !Bash.starts(path, home + "/Library/") else { return false }
         var current = home
-        for part in after(home + "/", path).components(separatedBy: "/") {
-            let next = current.hasSuffix("/") ? current + part : current + "/" + part
+        for part in after(home + "/", path).unicodeScalars.split(separator: "/", omittingEmptySubsequences: false).map({ String(String.UnicodeScalarView($0)) }) {
+            let next = Bash.ends(current, "/") ? current + part : current + "/" + part
             if Run.isSymlink(next) { return false }
             if !Run.isDirectory(next) { break }
             current = next
@@ -120,7 +121,7 @@ extension Cleaners {
 
     /// urllib.parse.unquote: %XX as bytes, read as UTF-8 with a replacement character for what is not.
     static func percentDecoded(_ text: String) -> String {
-        guard text.contains("%") else { return text }
+        guard text.unicodeScalars.contains("%") else { return text }
         let bytes = Array(text.utf8)
         var out: [UInt8] = [], index = 0
         func hex(_ byte: UInt8) -> UInt8? {

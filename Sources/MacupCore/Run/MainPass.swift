@@ -19,6 +19,12 @@ public enum MainPass {
             exit(1)
         }
         let settings = Settings(config: config, env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
+        // a mistyped id used to match nothing without a word: `--only chek.disk` ran no task and said all was fine
+        let unknown = Tasks.unknown("\(settings.only),\(arguments.cliSkip),\(arguments.cliEnable)")
+        if !unknown.isEmpty {
+            out.write(i18n.format("Unknown task: %s (see every id with: macup tasks)", args: [unknown]) + "\n")
+            exit(2)
+        }
         func nospace(_ text: String) -> String { String(text.unicodeScalars.filter { $0 != " " }) }
         let unknownInConfig = Tasks.unknown("\(nospace(config.value("skip", ""))),\(nospace(config.value("enable", "")))")
         let fm = FileManager.default

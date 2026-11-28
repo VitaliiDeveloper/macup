@@ -7,6 +7,8 @@ public enum Router {
     public enum Route: Equatable {
         case bash
         case swift(Arguments)
+        /// A command line arguments.sh rejects.
+        case rejected(Arguments.Failure)
     }
 
     /// Commands the Swift build answers with "not available in this build" instead of handing them to bash:
@@ -16,7 +18,8 @@ public enum Router {
     /// `terminal`: stdin and stdout are a terminal, where a check ends with the pick.
     public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks,
                              terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
-        guard let arguments = try? Arguments.parse(argv) else { return .bash }
+        let arguments: Arguments
+        do { arguments = try Arguments.parse(argv) } catch { return .rejected(error as! Arguments.Failure) }
         func settings() -> Settings {
             var config = Config(env: env)
             config.reportsErrors = false   // bash says it, once it has the run
@@ -37,7 +40,7 @@ public enum Router {
         if arguments.deep, !ported.contains("deep") { return .bash }
         if !arguments.pick.isEmpty, !ported.contains("pick") { return .bash }
         let settings = settings()
-        guard !settings.bashArithmeticFails, Tasks.unknown("\(settings.only),\(arguments.cliSkip),\(arguments.cliEnable)").isEmpty else { return .bash }
+        guard !settings.bashArithmeticFails else { return .bash }
         // allowed, not only on: a cleaner registers what it finds for an opt-in task too, to be picked
         let allowed = Tasks.all.map(\.id).filter(Selection(settings).allowed)
         if arguments.dry, terminal, !arguments.quiet, !ported.contains("pick"), allowed.contains(where: { $0.hasPrefix("clean.") }) { return .bash }

@@ -15,6 +15,8 @@ Names.setLocale(env)
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()
+case .rejected(let failure):
+    exit(OneOff.rejected(failure, env: env, translations: Translations.json))
 case .swift(let arguments) where arguments.command == nil && arguments.action == nil && !arguments.deep:
     switch Menu.run(arguments, env: env, translations: Translations.json) {
     case .done(let status):

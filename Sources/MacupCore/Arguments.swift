@@ -30,11 +30,12 @@ public struct Arguments: Equatable {
     /// --lang.
     public var lang: Lang?
 
-    /// What makes arguments.sh stop: it prints a message and exits (2 for a bad value, 1 for an unknown word).
+    /// What makes arguments.sh stop: it prints a message and exits (2 for a bad value, 1 for an unknown word, said in the
+    /// language a --lang before it chose).
     public enum Failure: Error, Equatable {
         case badLevel
         case badLang
-        case unknownCommand(String)
+        case unknownCommand(String, lang: Lang?)
     }
 
     public init() {}
@@ -95,7 +96,7 @@ public struct Arguments: Equatable {
                 } else if word.hasPrefix("--lang=") {
                     guard let lang = Lang.option(value(word)) else { throw Failure.badLang }
                     result.lang = lang
-                } else { throw Failure.unknownCommand(word) }
+                } else { throw Failure.unknownCommand(word, lang: result.lang) }
             }
             index += 1
         }

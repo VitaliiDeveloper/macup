@@ -16,13 +16,13 @@ conf_language(){
   sed -n 's/^[[:space:]]*language[[:space:]]*=[[:space:]]*//p' "${XDG_CONFIG_HOME:-$HOME/.config}/macup/config" 2>/dev/null \
     | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' | tail -1
 }
-LANGUAGE="${MACUP_LANG:-$(conf_language)}"
-[ "$LANGUAGE" = ua ] && LANGUAGE=uk
+MESSAGE_LANG="${MACUP_LANG:-$(conf_language)}"
+[ "$MESSAGE_LANG" = ua ] && MESSAGE_LANG=uk
 
 # shellcheck disable=SC2059  # the format is one of the texts below
 say(){ # message id, its values → stderr, so a command's own output stays clean
   local text
-  case "$LANGUAGE:$1" in
+  case "$MESSAGE_LANG:$1" in
     uk:brew)      text='macup встановлено через Homebrew. Онови його так: brew upgrade macup' ;;
     ru:brew)      text='macup установлен через Homebrew. Обновите его так: brew upgrade macup' ;;
     *:brew)       text='macup was installed with Homebrew. Update it with: brew upgrade macup' ;;

@@ -195,8 +195,10 @@ else echo "SKIP bootstrap with the real binary: none at $real"; fi
 ihome="$work/inst"; mkdir -p "$ihome/.npm-global/bin"; printf '\317\372\355\376\n# macup\nMACUP_VERSION="9.9.8"\n' >"$ihome/.npm-global/bin/macup"
 install_remote(){ env HOME="$ihome" TMPDIR="$ihome/" MACUP_PREFIX="$ihome/.local/bin" FAKE_MACOS=15.1 /bin/bash -s -- --yes --lang en <install.sh 2>&1; }
 release_asset 9.9.9 "$work/asset/macup"; rm -rf "$FAKE_REMOTE/releases/v9.9.9"
+mkdir -p "$ihome/.local/bin"; cp "$work/macup-2.9.2" "$ihome/.local/bin/macup"
 out=$(install_remote); rc=$?
-[ $rc = 1 ] && grep -q 'is not published yet' <<<"$out" && grep -q 'run the installer again in a few minutes' <<<"$out" && pass "install.sh before the release asset: says so" || fail "install.sh before the asset ($rc): $out"
+[ $rc = 1 ] && grep -q 'is not published yet' <<<"$out" && grep -q 'run the installer again in a few minutes' <<<"$out" && cmp -s "$ihome/.local/bin/macup" "$work/macup-2.9.2" \
+  && [ "$(ls -A "$ihome/.local/bin")" = macup ] && pass "install.sh before the release asset: says so, the copy installed before keeps working" || { fail "install.sh before the asset ($rc): $out"; ls -A "$ihome/.local/bin"; }
 release_asset 9.9.9 "$work/asset/macup"
 out=$(install_remote); rc=$?
 [ $rc = 0 ] && cmp -s "$ihome/.local/bin/macup" "$work/asset/macup" && grep -q 'Installed: macup 9.9.9 → .*/.local/bin/macup$' <<<"$out" && [ ! -e "$ihome/.npm-global/bin/macup" ] \

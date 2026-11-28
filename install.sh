@@ -149,8 +149,8 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "$HERE/install.sh" ] && [ -f "$HERE/Package.swift" ]; then
   BUILT="$HERE/.build/release/macup"; [ "$HERE/.build/debug/macup" -nt "$BUILT" ] && BUILT="$HERE/.build/debug/macup"   # the last one built
   [ -f "$BUILT" ] || die "$(text nobuild)"
-  say "$(text local): $(tld "$BUILT")"; cp "$BUILT" "$TMP" && chmod 755 "$TMP" || die "$(text write) $TMP"
-  "$TMP" version </dev/null >/dev/null 2>&1 || die "$(text broken)"   # before it replaces a working install
+  say "$(text local): $(tld "$BUILT")"; cp "$BUILT" "$TMP" || die "$(text write) $TMP"
+  FAILED=broken
 else
   # main names the latest version; the bootstrap comes from that version's tag (main before it is tagged) and must match its
   # SHA-256. Its first run, below, downloads the release binary (the last 2.9 script on a Mac older than macOS 13) over itself.
@@ -161,10 +161,13 @@ else
   else rm -f "$TMP.tag"; WANT=$(curl -fsSL "$RAW/main/macup.sha256" 2>/dev/null | awk '{print $1; exit}'); fi
   [ -n "$WANT" ] && [ "$(shasum -a 256 "$TMP" 2>/dev/null | awk '{print $1}')" = "$WANT" ] || die "$(text sum)"
   /bin/bash -n "$TMP" || die "$(text broken)"
+  FAILED=unfinished
 fi
-chmod 755 "$TMP" && mv -f "$TMP" "$TARGET" || die "$(text write) $TARGET"
-VER=$(MACUP_LANG="$lang" "$TARGET" version </dev/null | sed -n 's/^macup //p')
-[ -n "$VER" ] || die "$(text unfinished)"
+# run where it is, so whatever was installed keeps working until this one does
+chmod 755 "$TMP" || die "$(text write) $TMP"
+VER=$(MACUP_LANG="$lang" "$TMP" version </dev/null | sed -n 's/^macup //p')
+[ -n "$VER" ] || die "$(text "$FAILED")"
+mv -f "$TMP" "$TARGET" || die "$(text write) $TARGET"
 say "$(text inst): macup $VER → $(tld "$TARGET")"
 
 for old in "$HOME/.npm-global/bin/macup" /usr/local/bin/macup /opt/homebrew/bin/macup; do

@@ -162,22 +162,24 @@ public final class Shell {
     /// SIGTERM, then SIGKILL for those still there after `grace` seconds. A process counts as still there while its pid has
     /// the start time it had: a pid that ended and was given to another process by then is left alone.
     func stop(_ pids: [pid_t], grace: TimeInterval = 5) {
-        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }
-        alive.forEach { kill($0.pid, SIGTERM) }
-        let deadline = Date() + grace
-        while !alive.isEmpty, Date() < deadline {
+        // one macup cannot signal (all root) would only hold up the others
+        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }.filter { kill($0.pid, SIGTERM) == 0 }
+        let deadline = DispatchTime.now() + grace
+        while !alive.isEmpty, DispatchTime.now() < deadline {
             usleep(50_000)
             alive = alive.filter { Shell.startTime($0.pid) == $0.start }
         }
         alive.forEach { kill($0.pid, SIGKILL) }
     }
 
-    /// When the process started, in microseconds; nil when there is none that macup may look at.
+    /// When the process started, in microseconds; nil when there is none. sysctl answers for any process: proc_pidinfo
+    /// refuses a setuid one such as sudo, which still takes macup's signals and passes them on.
     static func startTime(_ pid: pid_t) -> UInt64? {
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
-        return info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.size
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&name, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let started = info.kp_proc.p_un.__p_starttime
+        return UInt64(started.tv_sec) * 1_000_000 + UInt64(started.tv_usec)
     }
 
     /// The process and every process below it, from `ps -Ao pid=,ppid=` (as 2.9's core.sh's tl finds them).

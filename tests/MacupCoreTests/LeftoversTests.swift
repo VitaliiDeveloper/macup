@@ -100,6 +100,7 @@ final class LeftoversTests: XCTestCase {
             "\(support)/Linked/sub/x": "", "/opt/x/y/z": "", "\(support)//a/b": "",
             // a component of "." or ".." names the vendor folder or Application Support itself
             "\(support)/Vendor/./u": "", "\(support)/./Vendor/u": "", "\(support)/Vendor/../u": "", "\(support)/Vendor//u": "",
+            "\(support)/Vendor/Updater/../../Flat/updater": "",
             // by bytes, as bash: a combining mark after "/" starts a name of its own
             "\(support)/Vendor/\u{301}Mark/u": "\(support)/Vendor/\u{301}Mark",
         ]

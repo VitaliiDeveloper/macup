@@ -55,7 +55,7 @@ extension Cleaners {
                      kind: .rm, paths: expired, keySource: "profiles")
     }
 
-    /// macup_helpers.py profiles_expired: the profiles whose ExpirationDate has passed; an unreadable one is not ours to judge.
+    /// 2.9's inline Python: the profiles whose ExpirationDate has passed; an unreadable one is not ours to judge.
     static func expiredProfiles(_ folders: [String]) -> [String] {
         var expired: [String] = []
         for folder in folders where realFolder(folder) {

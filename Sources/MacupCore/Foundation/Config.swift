@@ -172,7 +172,7 @@ public struct Config {
         var template = Array("\(path).XXXXXX".utf8CString)
         let descriptor = mkstemp(&template)
         guard descriptor >= 0, stat(path, &info) == 0 else {
-            if descriptor >= 0 { close(descriptor); unlink(template) }
+            if descriptor >= 0 { close(descriptor); unlink(template) } else if ![EACCES, EPERM, EROFS].contains(errno) { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
             let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
             defer { try? handle.close() }
             try handle.truncate(atOffset: 0)

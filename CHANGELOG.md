@@ -41,6 +41,7 @@ Fixes:
 Small differences you might notice:
 
 - When no temporary file can be made, the run stops with exit status 1 instead of going on without a report body.
+- `macup lang` says "Couldn't write …" and exits 1 when it cannot write the config, instead of announcing the new language.
 - A run killed by a signal it does not handle prints `Killed: 9` instead of bash's job line.
 - Stray errors from `uptime`, `pmset` and `date`, and bash's "integer expression expected" lines, are no longer printed.
 - Tool output that is not UTF-8 shows the replacement character (�) where bash printed the raw bytes. Counts and the report's command output are the same.

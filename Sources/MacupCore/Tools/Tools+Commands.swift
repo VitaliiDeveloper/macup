@@ -58,7 +58,7 @@ extension Tools {
         return fields + [String(String.UnicodeScalarView(rest))]
     }
 
-    /// macup_helpers.py `commands`: bin folders → the number of scripts, then a line per interpreter that is gone or folder of
+    /// 2.9's inline Python: bin folders → the number of scripts, then a line per interpreter that is gone or folder of
     /// dead links: name, fix ("-" for none) or folder, the scripts, what the links pointed into; tab-separated.
     static func commandScan(_ folders: [String], home givenHome: String, shell: Shell) -> String {
         typealias Scalars = [Unicode.Scalar]
@@ -135,7 +135,7 @@ extension Tools {
     }
 }
 
-/// os.path as Python 3.9 has it on macOS, for the parts that macup_helpers.py's answers depend on.
+/// os.path as Python 3.9 has it on macOS, for the parts that 2.9's Python answers depend on.
 enum PythonPath {
     /// `str.isspace()`.
     static func isSpace(_ scalar: Unicode.Scalar) -> Bool {

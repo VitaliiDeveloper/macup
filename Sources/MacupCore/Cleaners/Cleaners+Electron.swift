@@ -63,7 +63,7 @@ extension Cleaners {
         let paths: [String]
     }
 
-    /// macup_helpers.py electron_cache_groups, as bash reads its lines back: by kind and name, folders sorted by code point.
+    /// 2.9's inline Python, as bash reads its lines back: by kind and name, folders sorted by code point.
     static func layoutGroups(support: String, caches: String, covered: String) -> [LayoutGroup] {
         let names = Set(CacheTables.electronCaches), coveredPaths = Bash.lines(covered).filter { !$0.isEmpty }
         let apps = CacheTables.electronApps, browserFolders = CacheTables.browsers.flatMap { browser in browser.folders.map { ($0, browser.name) } }

@@ -90,7 +90,7 @@ enum Tools {
         lines.dropFirst().forEach(out.mdonly)
     }
 
-    /// macup_helpers.py `sim-runtimes`: `simctl runtime list -j` → "count KB", then one line per runtime, by platform and version.
+    /// 2.9's inline Python: `simctl runtime list -j` → "count KB", then one line per runtime, by platform and version.
     /// Where Python stops with an error, what it printed before.
     static func simRuntimes(_ json: String) -> String {
         guard case .object(let entries)? = JSONValue.parse(Data(json.utf8)), entries.allSatisfy({ if case .object = $0.value { return true }; return false }) else { return "" }

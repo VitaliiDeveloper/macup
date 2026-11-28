@@ -1,6 +1,6 @@
 import Foundation
 
-/// JSON as macup_helpers.py reads it with Python's json module: an object keeps its keys in the order of the document
+/// JSON as 2.9's inline Python read it with its json module: an object keeps its keys in the order of the document
 /// (npm's outdated list is installed in that order), a repeated key keeps its first place and its last value.
 enum JSONValue {
     case string(String), number(String), bool(Bool), null

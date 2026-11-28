@@ -87,6 +87,7 @@ public enum Leftovers {
     static func ownFolder(_ run: Run, _ program: String) -> String {
         let home = run.env.home
         for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where Bash.starts(program, base + "/") {
+            if Bash.holds(program, "/./") || Bash.holds(program, "/../") { return "" }   // the folder named need not hold the program
             let parts = program.utf8.dropFirst(base.utf8.count + 1).split(separator: UInt8(ascii: "/"), maxSplits: 2, omittingEmptySubsequences: false)
             // right in the vendor folder: that folder may hold other data; "", "." and ".." would name another folder than the vendor's
             guard parts.count == 3, !parts.prefix(2).contains(where: { ["", ".", ".."].map { Array($0.utf8) }.contains(Array($0)) }) else { return "" }
@@ -124,7 +125,7 @@ public enum Leftovers {
         out.beginSection("Startup items")
         let state = state(run)
         scan(run, state)
-        let services = startupFiles(run).filter(isFile).map(plistName).filter { !$0.hasPrefix("com.apple.") }
+        let services = startupFiles(run).filter(isFile).map(plistName).filter { !Bash.starts($0, "com.apple.") }
         out.info("Third-party background services: %s (full list in the report)", String(services.filter { !$0.isEmpty }.count))
         for service in services where !service.isEmpty { out.mdonly(service) }
         var found = ""

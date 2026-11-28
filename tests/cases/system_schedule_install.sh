@@ -74,7 +74,7 @@ env HOME="$home" PATH="$work/mbin:$PATH" macup_run config </dev/null >/dev/null 
 rm -rf "$home"; env HOME="$home" PATH="$work/mbin:$PATH" macup_run lang uk </dev/null >/dev/null 2>&1
 [ ! -e "$home/ran.log" ] && grep -q '^language = uk' "$home/.config/macup/config" && pass "macup lang on a fresh home runs no command" || fail "macup lang ran: $(cat "$home/ran.log" 2>/dev/null | tr '\n' ' ')"
 rm -rf "$home"; mkdir -p "$home"; : >"$home/.config"   # a file where the config's folder goes
-env HOME="$home" macup_run lang ru </dev/null >"$work/lang.out" 2>&1; rc=$?
+env HOME="$home" MACUP_LANG=en macup_run lang ru </dev/null >"$work/lang.out" 2>&1; rc=$?
 [ $rc = 1 ] && grep -qx "Couldn't write ~/.config/macup/config" "$work/lang.out" && pass "macup lang says when it cannot write the config" || { fail "macup lang on an unwritable config (rc=$rc)"; cat "$work/lang.out"; }
 
 # --- installer, from this checkout: it installs the binary built here

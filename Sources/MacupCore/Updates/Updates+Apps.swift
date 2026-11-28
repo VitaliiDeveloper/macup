@@ -92,7 +92,7 @@ extension Updates {
         }
     }
 
-    /// macup_helpers.py `apps-behind`: how many apps were compared with the catalog, and "App have → new" for those behind it.
+    /// 2.9's inline Python: how many apps were compared with the catalog, and "App have → new" for those behind it.
     /// nil where Python would stop with an error.
     static func appsBehind(_ run: Run, _ catalog: String) -> (checked: Int, behind: [String])? {
         let brewed = Set(run.shell.capture(["brew", "list", "--cask"]).output.split(whereSeparator: \.isWhitespace).map(String.init))

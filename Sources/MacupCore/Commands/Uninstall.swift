@@ -54,7 +54,7 @@ enum Uninstall {
         }
         for dir in dirs { remove(["rm", "-rf", dir], .inherit) }
         for entry in pathLines { removeInstallerLine(entry.rc, entry.line) }
-        for file in temporary { remove(["rm", "-rf", file], .inherit) }
+        for file in temporary { remove(["rm", Run.isDirectory(file) ? "-rf" : "-f", file], .inherit) }
         for file in programs {
             remove(["rm", "-f", file], .null)
             if access(file, F_OK) == 0 {

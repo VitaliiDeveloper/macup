@@ -13,7 +13,7 @@ extension Tools {
         run.lines(expiring)
     }
 
-    /// macup_helpers.py `certs-expiring`: of the identities `security find-identity` lists, those whose newest certificate
+    /// 2.9's inline Python: of the identities `security find-identity` lists, those whose newest certificate
     /// expires within 30 days (one that already has is left to Keychain Access). Nothing where Python stops with an error.
     static func expiringCertificates(_ identities: String, shell: Shell) -> String {
         let names = Set(all(quoted, in: identities, group: 1).map { Array($0.unicodeScalars) })
@@ -76,7 +76,7 @@ extension Tools {
         }
     }
 
-    /// macup_helpers.py `crashes`: "S <system crashes>", then "A <count> <app>" for the apps in /Applications or
+    /// 2.9's inline Python: "S <system crashes>", then "A <count> <app>" for the apps in /Applications or
     /// ~/Applications that crashed 3 or more times in the last 7 days, most first. Nothing where Python stops with an error.
     static func crashCounts(home givenHome: String, now: Double) -> String {
         var home = String(String.UnicodeScalarView(givenHome.unicodeScalars.reversed().drop(while: { $0 == "/" }).reversed()))

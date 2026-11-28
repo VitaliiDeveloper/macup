@@ -176,6 +176,15 @@ final class OutputShellTests: XCTestCase {
         XCTAssertTrue(gone(try childPID(pidFile)))
     }
 
+    /// A setuid child (sudo, here top) is stopped too: it takes macup's signals, though macup may not read all about it.
+    func testTimedCaptureStopsASetuidChild() throws {
+        var info = stat()
+        guard stat("/usr/bin/top", &info) == 0, info.st_mode & S_ISUID != 0 else { throw XCTSkip("/usr/bin/top is not setuid here") }
+        let sh = Shell(env: try env()), pidFile = dir + "/child"
+        XCTAssertEqual(sh.timedCapture(1, ["/bin/sh", "-c", "/usr/bin/top -l 60 -s 1 >/dev/null & echo $! >\(pidFile); sleep 30"], stdin: .null).status, 124)
+        XCTAssertTrue(gone(try childPID(pidFile)))
+    }
+
     /// A timed tool that ends and leaves something running on its pipe: what it wrote comes back 5 seconds later at most.
     func testTimedCaptureDoesNotWaitForWhatTheToolLeftRunning() throws {
         let sh = Shell(env: try env()), pidFile = dir + "/child"

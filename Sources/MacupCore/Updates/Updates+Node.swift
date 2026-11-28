@@ -46,7 +46,7 @@ extension Updates {
         out.ok("Claude Code plugins: %s installed", String(Run.count(pluginsNow)))
     }
 
-    /// macup_helpers.py `plugins`: installed_plugins.json → "name version" of each user-scope plugin, sorted by name.
+    /// 2.9's inline Python: installed_plugins.json → "name version" of each user-scope plugin, sorted by name.
     /// As there, an entry Python could not read ends the list.
     static func plugins(_ path: String) -> String {
         guard isFile(path), let root = JSONValue.parse(file: path), case .object = root, case .object(let all) = root["plugins"] ?? root else { return "" }
@@ -96,7 +96,7 @@ extension Updates {
         }
     }
 
-    /// macup_helpers.py `npm-outdated`: `npm outdated -g --json` → "package current latest" lines, in the order npm gave.
+    /// 2.9's inline Python: `npm outdated -g --json` → "package current latest" lines, in the order npm gave.
     static func npmOutdated(_ json: String, root: String) -> String {
         guard case .object(let packages) = JSONValue.parse(Data(json.utf8)) ?? .object([]) else { return "" }
         var lines: [String] = []
@@ -144,7 +144,7 @@ extension Updates {
         out.ok("Agent skills: %s installed, %s updated", String(Run.count(now)), String(changed))
     }
 
-    /// macup_helpers.py `skills`: ~/.agents/.skill-lock.json → "name hash" lines, sorted by name.
+    /// 2.9's inline Python: ~/.agents/.skill-lock.json → "name hash" lines, sorted by name.
     static func skillHashes(_ path: String) -> String {
         guard let root = JSONValue.parse(file: path), case .object = root, case .object(let skills) = root["skills"] ?? .object([]) else { return "" }
         var lines: [String] = []

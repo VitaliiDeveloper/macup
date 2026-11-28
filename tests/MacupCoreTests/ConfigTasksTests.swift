@@ -106,6 +106,12 @@ final class ConfigTasksTests: XCTestCase {
         XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), "language = uk\nskip = clean.*\n")
         XCTAssertEqual((try fm.attributesOfItem(atPath: confPath)[.posixPermissions] as? NSNumber)?.intValue, 0o600)
         XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder), ["config"])
+        chmod(confPath, 0o400)   // a new file takes its place, as with sed -i: writing over it in place would be refused
+        try Config.set("skip", "", path: confPath) { "" }
+        XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), "language = uk\nskip = \n")
+        XCTAssertEqual((try fm.attributesOfItem(atPath: confPath)[.posixPermissions] as? NSNumber)?.intValue, 0o400)
+        chmod(confPath, 0o600)
+        try Config.set("skip", "clean.*", path: confPath) { "" }
         let real = dir + "/real"
         try fm.moveItem(atPath: confPath, toPath: real)
         try fm.createSymbolicLink(atPath: confPath, withDestinationPath: real)

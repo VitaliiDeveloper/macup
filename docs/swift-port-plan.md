@@ -1,6 +1,6 @@
 # Porting macup to Swift
 
-Status: in progress. Phases 0 to 3 are merged, and so are the phase 5 parts that do not wait for phase 4; phase 4 is under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
+Status: in progress. Phases 0 to 4 are merged, and so are the phase 5 parts that waited for nothing; the phase 5 docs and cleanup are under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
 
 ## Why
 
@@ -360,7 +360,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 3 | exec of every kind, `run_key`, the leftovers' moves, the dev container scan | `swift/exec` | #24 | merged (374f630) |
 | 3 | the pick, confirmations, `--pick` | `swift/pick` | #25 | merged (442f900) |
 | 4 | the last bash routes: rejected command lines, unknown task ids, leading zeros | `swift/no-bash` | #26 | merged (7e098f9) |
-| 4 | the bash exec and embedded script removed | | | in progress |
+| 4 | the bash exec and embedded script removed | `swift/swift-only` | #30 | merged (01b94ef) |
 | 4 | `self-update` and `schedule` for the binary, the first-run LaunchAgent check | `swift/self-update-schedule` | #27 | merged (ba9cbf2) |
 | 4 | the three reproduced bash bugs fixed | `swift/bash-bugs` | #28 | merged (fc9937c) |
 | 4 | `diff.sh` in four CI jobs (`DIFF_SHARD`) | `swift/diff-shards` | #29 | merged (1006a3f) |

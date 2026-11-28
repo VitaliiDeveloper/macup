@@ -77,7 +77,11 @@ final class ChecksTests: XCTestCase {
     /// rejects is 0, as bash's `|| date +%s` makes it.
     func testBackupAgeFromMidnightAsDate() {
         let days = ["2026-10-20", "2026-03-08", "2026-11-01", "2026-02-31", "2026-13-01", "2026-00-10", "2026-11-18"]
-        // local midnights, half a day off `now`'s: the ages hold in every zone from UTC-10 to UTC+12
-        XCTAssertEqual(days.map { Checks.backupAge($0, now: 1_795_000_000) }, [29, 255, 17, 260, 0, 0, 0])
+        // now is local noon, so the whole days to each local midnight are the same in any zone and across a DST change
+        var noon = tm()
+        _ = strptime("2026-11-18 12:00", "%Y-%m-%d %H:%M", &noon)
+        noon.tm_isdst = -1
+        let now = mktime(&noon)
+        XCTAssertEqual(days.map { Checks.backupAge($0, now: now) }, [29, 255, 17, 260, 0, 0, 0])
     }
 }

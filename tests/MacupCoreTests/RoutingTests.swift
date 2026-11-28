@@ -71,9 +71,9 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(route("clean --level aggressive"), "run")
         XCTAssertEqual(Router.route(["clean"], env: environment, terminal: true), .swift(try Arguments.parse(["clean"])), "a clean on a terminal picks nothing")
         XCTAssertEqual(route("--deep"), "run")
-        XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .bash, "on a terminal a check ends with the pick")
-        for line in ["clean --pick clean.derived_data:1",
-                  "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
+        XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .swift(try Arguments.parse(["check"])), "on a terminal a check ends with the pick")
+        XCTAssertEqual(route("clean --pick clean.derived_data:1"), "run")
+        for line in ["help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
             XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }
     }

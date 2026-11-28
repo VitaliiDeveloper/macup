@@ -35,6 +35,8 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 
 ## Routing
 
+Done with in phase 4: the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
+
 From phase 0 on, the Swift binary is the `macup` entry point. It carries the built bash script.
 
 **Routing rule.** The binary resolves the command and the task selection (`--only`, `--skip`, `--enable`, the config, the defaults). It runs itself only if the command is ported and every selected task is in the ported set. Otherwise it runs bash for the entire invocation. The suite's 94 `--only` runs give per-unit granularity for free. Full runs switch to Swift when the last unit lands.
@@ -114,14 +116,13 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
 
 ```
 Package.swift
-Sources/macup/                  main.swift: routing, the bash exec
+Sources/macup/                  main.swift: the command line and what runs it
 Sources/MacupCore/
   Foundation/                   Env, Shell, Output, I18n, Config, Tasks, Paths, Size, Lock, Report, JSON
   Run/                          the main pass, the summary, trends, --json, signals, sudo
-  Cleanup/                      candidate model, safe_path, measuring, settle; later exec and pick
+  Cleanup/                      candidate model, safe_path, measuring, settle, exec and pick
   Checks/ Updates/ Tools/ Cleaners/ Leftovers/ Commands/
-  Ported.swift                  the ported set, assembled from one list file per module (no shared edits)
-Sources/macup/Generated/        LegacyScript.swift, Translations.swift (written by build.sh, not committed)
+Sources/macup/Generated/        Translations.swift (written by build.sh, not committed)
 Tests/MacupCoreTests/           XCTest
 tests/run.sh, tests/diff.sh     black-box suite and differential harness
 ```

@@ -186,7 +186,7 @@ public final class Shell {
     public func askSudo(_ prompt: String) -> Bool { tl(0, ["sudo", "-v", "-p", prompt]) == 0 }
 
     /// `sudo -k`: forgets the cached password.
-    public func forgetSudo() { _ = tl(0, ["sudo", "-k"], stderr: .null) }
+    public func forgetSudo(errors: Out = .null) { _ = tl(0, ["sudo", "-k"], stderr: errors) }
 
     private func notFound(_ argv: [String], stderr: Out) {
         let msg = "macup: \(argv.first ?? ""): command not found\n"

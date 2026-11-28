@@ -16,7 +16,9 @@ public enum Cleanup {
             if inClean, candidate.kind == .trash { run.potTrash += size } else if inClean { run.potAuto += size } else { run.potMore += size }
         }
         run.potMore += Leftovers.total(run)   // counted together: their entries can share a folder
-        if run.cleans {
+        if run.cleans, !run.arguments.pick.isEmpty {
+            Pick.keys(run)
+        } else if run.cleans {
             run.out.beginSection("Cleanup")
             for index in run.candidates.list.indices where run.candidates.list[index].auto && run.candidates.list[index].level <= run.settings.level {
                 execute(run, index)

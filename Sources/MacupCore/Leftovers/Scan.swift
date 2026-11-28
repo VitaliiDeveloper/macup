@@ -35,7 +35,7 @@ extension Leftovers {
     }
 
     static func vendorInstalled(_ state: State, _ vendor: String) -> Bool {
-        !vendor.isEmpty && state.apps.contains { same($0.id, vendor) || startsWith($0.id, vendor + ".") }
+        !vendor.isEmpty && state.apps.contains { same($0.id, vendor) || Bash.starts($0.id, vendor + ".") }
     }
 
     static func teamInstalled(_ run: Run, _ state: State, _ team: String) -> Bool {
@@ -47,9 +47,9 @@ extension Leftovers {
     /// `in_owner_place`: places an app keeps its own helpers; /opt/homebrew, ~/.local and scripts are never judged by owner.
     static func inOwnerPlace(_ run: Run, program: String, label: String) -> Bool {
         let home = run.env.home
-        if fnmatch("*/*.app/*", program, 0) == 0 || startsWith(program, "\(home)/Library/Application Support/")
-            || startsWith(program, "\(run.env.sysLib)/Application Support/") { return true }
-        guard startsWith(program, "\(home)/Library/") else { return false }
+        if fnmatch("*/*.app/*", program, 0) == 0 || Bash.starts(program, "\(home)/Library/Application Support/")
+            || Bash.starts(program, "\(run.env.sysLib)/Application Support/") { return true }
+        guard Bash.starts(program, "\(home)/Library/") else { return false }
         let rest = String(decoding: program.utf8.dropFirst(home.utf8.count + 9), as: UTF8.self)
         let folder = lc(String(rest.prefix { $0 != "/" }))
         return lc(label).split(separator: ".", omittingEmptySubsequences: false).contains { same(String($0), folder) }
@@ -73,7 +73,7 @@ extension Leftovers {
             guard isFile(file), !Run.isSymlink(file) else { continue }
             let base = plistName(file)
             if base.hasPrefix("com.apple.") || base == Env.schedLabel { continue }
-            let system = startsWith(file, run.env.sysLib + "/")
+            let system = Bash.starts(file, run.env.sysLib + "/")
             func add(_ label: String, _ program: String, _ reason: Orphan.Reason, _ vendor: String, _ signer: String = "") {
                 state.orphans.append(Orphan(plist: file, label: label, program: program, reason: reason, system: system, vendor: vendor,
                                             name: signer.isEmpty ? capitalized(lastComponent(vendor)) : signer))

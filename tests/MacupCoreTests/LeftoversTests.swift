@@ -154,7 +154,7 @@ final class LeftoversTests: XCTestCase {
         }
         XCTAssertTrue(swift("check --only check.startup,clean.orphan_agents,clean.orphan_data"))
         XCTAssertTrue(swift("check --only check.startup", terminal: true), "no clean task: no pick")
-        XCTAssertFalse(swift("check --only clean.orphan_agents", terminal: true), "the pick")
+        XCTAssertTrue(swift("check --only clean.orphan_agents", terminal: true), "the pick")
         XCTAssertTrue(swift("clean --only clean.orphan_agents,clean.orphan_data", terminal: true), "only ever cleaned when picked")
         XCTAssertTrue(swift("check --only clean.dev_containers"), "nothing to scan without a terminal")
         XCTAssertTrue(swift("clean --only clean.dev_containers", terminal: true), "scanned, and only ever cleaned when picked")

@@ -7,7 +7,7 @@ extension Leftovers {
     /// `to_trash`: false when it was refused or did not move (the report says why).
     static func toTrash(_ run: Run, _ path: String, sudo: Bool = false) -> Bool {
         let home = run.env.home
-        if path.isEmpty || holds(path, "/../") || path.utf8.reversed().starts(with: "/..".utf8.reversed()) {
+        if path.isEmpty || Bash.holds(path, "/../") || path.utf8.reversed().starts(with: "/..".utf8.reversed()) {
             run.log.append("macup refused to move: \(path)\n")
             return false
         }
@@ -30,7 +30,7 @@ extension Leftovers {
         }
         if run.shell.tl(0, ["mv", path, target], stderr: .file(run.log.raw)) == 0 { return true }
         // macOS keeps a container folder itself; what is inside can go
-        guard startsWith(path, home + "/Library/Containers/") || startsWith(path, home + "/Library/Group Containers/"), Run.isDirectory(path) else { return false }
+        guard Bash.starts(path, home + "/Library/Containers/") || Bash.starts(path, home + "/Library/Group Containers/"), Run.isDirectory(path) else { return false }
         if run.shell.tl(0, ["mkdir", "-p", target]) == 0 {
             _ = run.shell.tl(0, ["find", path, "-mindepth", "1", "-maxdepth", "1", "-exec", "mv", "{}", target + "/", ";"], stderr: .file(run.log.raw))
         }
@@ -69,7 +69,11 @@ extension Leftovers {
     /// `run_orph`: the agent stopped, then its file, helper and folder to the Trash; `freed` is the folder's size.
     static func removeAgent(_ run: Run, _ index: Int) -> Cleanup.KeyResult {
         let state = state(run)
-        guard state.orphans.indices.contains(index) else { return (0, nil) }
+        // orph_still finds no file for an index the scan does not have, and names the item as bash names an empty one
+        guard state.orphans.indices.contains(index) else {
+            run.out.info("%s: still in use, skipped", " · " + run.out.i18n.translate("background program"))
+            return (2, nil)
+        }
         let orphan = state.orphans[index]
         guard stillOrphaned(run, orphan) else {
             run.out.info("%s: still in use, skipped", "\(orphan.name) · \(kind(run, orphan))")

@@ -61,6 +61,7 @@ public enum MainPass {
         Checks.sizes(run)
         Leftovers.startup(run)
         Checks.deep(run)
+        Pick.afterCheck(run)
         Summary.write(run)
     }
 

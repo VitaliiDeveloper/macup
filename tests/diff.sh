@@ -61,7 +61,8 @@ type_answers(){ # a/b output-file done-file
       if [ "$now" -gt "$size" ] && tail -c 2 "$2" | grep -qE '[]:] ?$'; then sleep 0.3; [ "$(wc -c <"$2")" = "$now" ] && break
       else sleep 0.1; fi
     done
-    size=$now; printf '%s\n' "$answer"
+    # a control character alone (^C, ^D) is a key, not a line: no newline after it
+    size=$now; case "$answer" in [[:cntrl:]]) printf '%s' "$answer" ;; *) printf '%s\n' "$answer" ;; esac
   done
   until [ -e "$3" ] || [ ! -d "${3%/*}" ] || [ $SECONDS -gt $end ]; do sleep 0.1; done   # the work folder goes when diff.sh ends
 }

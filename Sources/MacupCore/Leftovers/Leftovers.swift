@@ -86,7 +86,7 @@ public enum Leftovers {
 
     static func ownFolder(_ run: Run, _ program: String) -> String {
         let home = run.env.home
-        for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where startsWith(program, base + "/") {
+        for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where Bash.starts(program, base + "/") {
             let rest = String(decoding: program.utf8.dropFirst(base.utf8.count + 1), as: UTF8.self)
             guard rest.filter({ $0 == "/" }).count >= 2 else { return "" }   // right in the vendor folder: that folder may hold other data
             let parts = rest.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
@@ -97,7 +97,7 @@ public enum Leftovers {
     }
 
     static func domain(_ orphan: Orphan) -> String {
-        orphan.plist.contains("/LaunchDaemons/") ? "system" : "gui/\(getuid())"
+        Bash.holds(orphan.plist, "/LaunchDaemons/") ? "system" : "gui/\(getuid())"
     }
 
     static func helper(_ run: Run, _ orphan: Orphan) -> String {

@@ -125,7 +125,7 @@ Both are opt-in by pick (`manual: true`), level 3, kind `.trash`, on by default,
 | Task id | Text |
 |---|---|
 | `clean.ai_chats_gone` | Claude Code chats of folders that are gone: worktrees, temporary folders, deleted projects (only when you pick them, to the Trash; memory stays) |
-| `clean.ai_chats_old` | AI chats older than `ai_chat_days`: Claude Code sessions archived in Claude.app or never opened in it, archived Codex chats (only when you pick them, to the Trash) |
+| `clean.ai_chats_old` | AI chats older than `ai_chat_days`: Claude Code sessions archived in Claude.app or never opened in it (only when you pick them, to the Trash). "and Codex chats" is added once a Codex folder is offered |
 
 **Claude.app rules apply to both tasks.** The app records are read once, before either task runs:
 

@@ -7,14 +7,17 @@ printf '#!/bin/bash\necho "open $*" >>"$HOME/open.log"\n' >"$work/bin/open"; pri
 # main's macup as the version check fetches it: $HOME/.fake/remote-macup, a failed download without it; other URLs are real
 printf '#!/bin/bash\nfor url; do :; done\ncase "$url" in */main/macup) ;; *) exec /usr/bin/curl "$@" ;; esac\necho "curl $url" >>"$HOME/curl.log"\ncat "$HOME/.fake/remote-macup" 2>/dev/null || exit 22\n' >"$work/bin/curl"
 chmod +x "$work/bin/open" "$work/bin/editor" "$work/bin/curl"; fakes "$work/bin" launchctl
+# history's trend line is bold, with nothing before its label: bash's awk h() set the global b, the bold colour, to the last
+# freed value in bytes
+expect_trend(){ perl -pi -e '/(?:▁|▂|▃|▄|▅|▆|▇|█)+  \(.* … .*\)\r?$/ and (s/^[0-9.e+]+(?=.*\e\[0m )/\e[1m/ or s/^[0-9.e+]+//)' "$1"; }
 CASES="$CASES"'
 cmd-history-none|||history
-cmd-history|cmd_history||history
-cmd-history-no-color|cmd_history||history --no-color
+cmd-history|cmd_history|EXPECT=trend|history
+cmd-history-no-color|cmd_history|EXPECT=trend|history --no-color
 cmd-history-one|history||history
-cmd-history-long|reports||history
-cmd-history-odd|cmd_history_odd||history
-cmd-history-flat|cmd_history_flat||history
+cmd-history-long|reports|EXPECT=trend|history
+cmd-history-odd|cmd_history_odd|EXPECT=trend|history
+cmd-history-flat|cmd_history_flat|EXPECT=trend|history
 cmd-history-json|cmd_history_odd||history --json
 cmd-history-json-none|||history --json
 cmd-last-none|||last

@@ -371,5 +371,5 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | merged (4f16158) |
 | 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
 | 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
-| 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | C/3 | open |
+| 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | #35 | open |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

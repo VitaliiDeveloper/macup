@@ -135,8 +135,10 @@ Both are opt-in by pick (`manual: true`), level 3, kind `.trash`, on by default,
   no transcript would match one, and visible sessions would be offered by age. So treat the records as unreadable
   when either holds:
   - the folder holds session records but none has `cliSessionId` and `isArchived`;
-  - fewer than half of the transcripts modified in the last 7 days map to a record, while records exist that were
-    active in those 7 days (`lastActivityAt`).
+  - of the non-archived records active in the last 7 days (`lastActivityAt`), fewer than half have an id whose
+    transcript is on disk. This direction does not lock out someone who works mostly in the terminal, whose
+    transcripts have no record.
+  - When the records are treated as unreadable, `check.ai_memory` says so in one line.
 
 Example: on the owner's Mac, 2 sessions still shown in the sidebar have a `cwd` that is gone. They stay.
 
@@ -180,8 +182,18 @@ the 4.1 GB a week later. Setting it to 7 frees 4.14 GB now.
   - `~/.codex/sessions/<yyyy>/<mm>/<dd>/rollout-*`
 
   The existing deny rules for `*/.claude/*` and `*/.codex/sessions*` stay for everything else.
-- **Per-session busy:** a session modified in the last 24 hours, or with any file open by a process (`lsof +D` on
-  candidates only), is skipped. The whole-tool `proc:` pattern is not used for these two tasks.
+- **Session ids:** only names shaped as a lowercase UUID count as sessions, both in the scan and in the allowlist.
+  Every transcript and session folder on the owner's Mac has this shape. A folder Claude Code may add later is never
+  taken for an orphaned session.
+- **Per-session busy:**
+  - At scan time, a session modified in the last 24 hours is skipped.
+  - Right before the move, the whole session is skipped if any of its paths was modified in the last 24 hours, or if
+    one lsof snapshot shows a file of it open, or if lsof cannot tell. Resuming touches only `<id>.jsonl`, so the
+    whole session must stay.
+  - The whole-tool `proc:` pattern is not used for these two tasks.
+- **Gone** reuses the walk of `clean.editor_workspaces`: no symlink on the way, not under `~/Library`, and the deepest
+  existing folder is on the home disk. A project behind a symlink to an unmounted disk is not gone.
+- **Sizes are measured natively**, not with one `du` per path, because a candidate can hold thousands of paths.
 - **Trash only**, through the existing mover. The Trash total is already reported apart.
   - The owner decided, 2026-11-28, that the Trash is only there to be emptied: restoring a chat is not supported.
   - Pieces of one session land in the Trash under their own names (`<id>.jsonl`, `<id>`, `<id> 2`), and Finder's
@@ -232,8 +244,9 @@ For each `~/.claude/projects/<dir>/memory/` that holds at least one file. On the
   `~/.claude/projects`".
 - **Stale hints**, per file:
   - absolute or `~/` paths in the text that no longer exist;
-  - not modified for `memory_days`;
-  - index lines in `MEMORY.md` that point to a missing file.
+  - index lines in `MEMORY.md` that point to a missing file;
+  - not modified for `memory_days`. This one is listed only beside one of the two above. On its own it would flag a
+    correct, stable memory on every run, forever.
 - **Index size** in characters, with a rough token count (characters ÷ 4).
 - **Recommendation:** when a project has any stale hint, suggest asking the agent in that project to review its
   memory, or editing it through `/memory`. `/consolidate-memory` is a plugin skill and not part of every install, so

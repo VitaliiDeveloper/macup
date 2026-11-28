@@ -32,11 +32,25 @@ its reasons.
 - **Trash only** (kind `.trash`), through the existing `Cleanup.moveToTrash`. Restoring is not supported.
 - **Both cleaners register with `manual: true`, level 3.** Nothing goes without a pick, in any run.
 - **Config defaults, verbatim:** `ai_chat_days = 14`, `memory_days = 60`.
+- **A session id is a lowercase UUID** (`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`). All 1581
+  transcripts and every session folder on the owner's Mac have this shape. A name of any other shape is never a
+  session, never scanned as one and never allowed.
+- **Load order:**
+  1. List the transcript ids on disk (names only).
+  2. Load `AppRecords`; its guard needs those ids.
+  3. Scan the projects, with the records' `cwd`s as the fallback.
+
+  It runs once per run; the report reuses the result.
+- **Sizes are measured natively** (sum of `st_blocks` over a walk, in KB, as `du -sk` counts them). Never one `du`
+  per session: a candidate can hold thousands of paths.
 - **Thresholds, verbatim:**
-  - a session is busy if modified in the last 24 hours or if lsof shows a file of it open;
+  - at scan time, a session is busy if modified in the last 24 hours (no lsof);
+  - at execute time, a session is busy if modified in the last 24 hours, or if lsof shows a file of it open, or if
+    lsof cannot tell. The whole session is then skipped;
   - report lines appear only at 100 MB or more (`atLeast: 102_400` KB);
   - cwd lines are capped at 1 MB;
-  - format guard: 7 days and one half.
+  - format guard: of the non-archived records with `lastActivityAt` in the last 7 days, at least half must have an
+    id whose transcript is on disk. If there are no such records, the guard passes.
 - **Every user-facing English string** gets uk and ru in `src/i18n/translations.json`, then `./build.sh` regenerates
   `Sources/macup/Generated`.
 
@@ -48,15 +62,17 @@ named in brackets.
 1. **Claude.app changed its record keys.** Records parse, but none has `cliSessionId`/`isArchived`, so nothing
    matches. Expected: no Claude Code session is offered by either task. [Task 2]
 2. **A session in use while the user is picking.** It was idle at scan time, and the user resumes it before
-   confirming. Expected: that path is skipped at execute time, and the rest of the candidate still goes. [Task 5]
+   confirming. Resuming touches only `<id>.jsonl`. Expected: all of that session's paths stay (transcript, `<id>/`,
+   `file-history/<id>/`), and the other sessions of the candidate still go. [Task 5]
 3. **A dir whose transcripts are all gone and which holds only `memory/`, from a project that was renamed.**
    Expected: the folder is resolved through the app records, the memory is flagged "gone or moved", and nothing in it
    is offered. [Tasks 1 and 7]
 4. **A dir name that differs from the `cwd` only by characters that encode to `-`.** For example, `/a.b` and `/a-b`
    both encode to `-a-b`. Expected: whichever folder exists makes the dir live. The dir is never treated as gone
    while one of its encoded `cwd`s exists. [Task 1]
-5. **Symlinked `~/.claude`, `~/.claude/projects`, or a symlinked session dir.** Expected: nothing is scanned through
-   the symlink, and nothing is offered from it. [Tasks 1 and 4]
+5. **`~/Projects` is a symlink to a disk that is not mounted.** Expected: its chats are not "gone", and its memory
+   is not flagged. The same goes for a symlinked `~/.claude`, `~/.claude/projects` or session dir: nothing is
+   scanned through it, and nothing is offered from it. [Tasks 1 and 4]
 
 ---
 
@@ -71,12 +87,20 @@ named in brackets.
   first.
 - Produces:
   - `enum ProjectClass { case live, worktree, temporary, project, unknown }`
+  - `static func isSessionID(_ name: String) -> Bool` (the UUID shape from Global constraints)
   - `struct ChatSession { let id: String; let dir: String; let paths: [String]; let kb: Int64; let newest: Date; let orphaned: Bool }`
     - `paths` holds `<dir>/<id>.jsonl` if present, `<dir>/<id>/` if present, and `~/.claude/file-history/<id>/` if
       present.
   - `struct ChatProject { let dir: String; let folder: String?; let kind: ProjectClass; let sessions: [ChatSession]; let memory: String? }`
     - `memory` is the `memory/` path when it holds at least one file.
-  - `enum ClaudeProjects { static func encode(_ path: String) -> String; static func scan(home: String, fallbackCwds: [String]) -> [ChatProject] }`
+  - `enum ClaudeProjects { static func encode(_ path: String) -> String; static func transcriptIDs(home: String) -> Set<String>; static func scan(home: String, fallbackCwds: [String]) -> [ChatProject] }`
+  - `Cleaners.folderGone(_ path: String, home: String) -> Bool`. This is the home-folder walk factored out of
+    `workspaceGone` with no change in behaviour:
+    - the path is under `home + "/"`, has no `/../`, does not exist, and is not under `~/Library/`;
+    - no symlink is on the way;
+    - the deepest existing folder is on the home folder's device.
+
+    `workspaceGone` then calls it.
 
 - [ ] **Step 1: Write the failing tests.**
   - `testEncodeReplacesEveryNonAlphanumeric`: `encode("/Users/me/a.b/.claude/worktrees/x-1") == "-Users-me-a-b--claude-worktrees-x-1"`.
@@ -92,10 +116,18 @@ named in brackets.
   - `testAmbiguousEncodingPrefersExistingFolder`: the `cwd`s are `$home/a.b` (missing) and `$home/a-b` (existing),
     both in one dir → `.live`.
   - `testOutsideHomeAndTmpIsNotGone`: the matching `cwd` is `/Volumes/Ext/p`, which is missing → `.unknown`.
-  - `testSessionPathsSizeAndAge`:
-    - session `s1` has `s1.jsonl`, `s1/subagents/a.jsonl` and `file-history/s1/x`; `paths.count == 3`;
+  - `testSymlinkToMissingDiskIsNotGone`: `$home/Projects` is a symlink to a missing path, and the `cwd` is
+    `$home/Projects/app` → `.unknown`.
+  - `testLibraryPathIsNotGone`: the `cwd` is a missing `$home/Library/x` → `.unknown`.
+  - `testWorkspaceGoneUnchanged`: the existing `CleanersTests.testWorkspacesArePython` still passes after the
+    extraction.
+  - `testSessionPathsSizeAndAge`. The ids are real UUIDs, written `S1` and `S2` here:
+    - session `S1` has `S1.jsonl`, `S1/subagents/a.jsonl` and `file-history/S1/x`; `paths.count == 3`;
+    - `kb` equals `du -sk` of the three, within 4 KB;
     - `newest` equals the newest mtime among them (set with `FileManager.setAttributes`);
-    - `s2/` with no `s2.jsonl` has `orphaned == true`.
+    - `S2/` with no `S2.jsonl` has `orphaned == true`.
+  - `testNonSessionFolderIgnored`: a folder `cache/` and a file `notes.jsonl` beside the sessions → not sessions, not
+    orphans.
   - `testEmptyMemoryIsNil`: `memory/` exists with no files → `memory == nil`.
   - `testSymlinkedProjectsFolderScansNothing`: `~/.claude/projects` is a symlink → `[]`.
   - `testLongLineIsCapped`: a 3 MB first line with no newline, followed by a matching `cwd` line → still resolved, and
@@ -111,16 +143,20 @@ named in brackets.
     3. Find every `"cwd":"…"`. A `cwd` counts if `encode(cwd) == dir`. Stop at the first one whose folder exists. If
        none exists, keep the first that matched.
     4. Then try `fallbackCwds` under the same rule.
-  - **Gone counts only under** `home + "/"`, `/private/tmp/`, `/tmp/` or `/var/folders/`. Anything else that is
-    missing is `.unknown`.
+  - **Gone:**
+    - under `home + "/"`: `Cleaners.folderGone`;
+    - under `/private/tmp/`, `/tmp/` or `/var/folders/`: the folder does not exist;
+    - anything else that is missing is `.unknown`.
+  - **Sizes:** sum `st_blocks / 2` (KB) over an `lstat` walk.
   - **Symlinks:** skip any symlinked dir, session dir or file.
 
 - [ ] **Step 4: Run them; expect a pass.**
   `swift test --filter AIChatsScanTests`. Expected: PASS.
 
-- [ ] **Step 5: Time the scan on a real home folder; it must stay near 0.2 s.**
+- [ ] **Step 5: Time the whole scan on a real home folder: cwds, sizes and mtimes.**
   Run it in a throwaway test, kept out of the commit: `ClaudeProjects.scan(home: NSHomeDirectory(), fallbackCwds: [])`.
-  The spec measured 0.16 s.
+  The spec measured 0.16 s for the cwds alone. Expected: under 2 s for ~5 GB in ~300 dirs. If it is slower, report
+  the time before going on.
 
 - [ ] **Step 6: Commit.**
   Message: "AI chats: scan Claude Code projects and sessions".
@@ -137,7 +173,7 @@ named in brackets.
   - `struct AppSession { let ids: [String]; let archived: Bool; let title: String; let cwd: String?; let originCwd: String?; let lastActivity: Date? }`
     - `ids` holds `cliSessionId` and `lastAssistantCliSessionId`, without nils.
   - `enum AppRecords { case absent; case unreadable; case loaded([AppSession]) }`
-  - `static func load(home: String, recentTranscriptIDs: Set<String>, now: Date) -> AppRecords`
+  - `static func load(home: String, transcriptIDs: Set<String>, now: Date) -> AppRecords`
     - reads `~/Library/Application Support/Claude/claude-code-sessions/*/*/*.json`.
   - `func visibleIDs() -> Set<String>`: every id of every non-archived session; empty for `.absent`.
   - `func cwds() -> [String]`: all `cwd` and `originCwd` values.
@@ -149,11 +185,11 @@ named in brackets.
   - `testUnparsableFileMakesUnreadable`: a file holding `{` → `.unreadable`.
   - `testRenamedKeysMakeUnreadable`: records hold `sessionId`/`archived` but no `cliSessionId`/`isArchived` →
     `.unreadable`.
-  - `testRecentTranscriptsMostlyUnmatchedMakeUnreadable`:
-    - there are 4 recent transcript ids, 1 of which maps to a record;
-    - one record has `lastActivityAt` within 7 days;
-    - expect `.unreadable`.
-  - `testRecentGuardNeedsRecentRecords`: the same transcripts, but no record active in the last 7 days → `.loaded`.
+  - `testRecentRecordsWithoutTranscriptsMakeUnreadable`: 4 non-archived records active within 7 days, only 1 of
+    whose ids is in `transcriptIDs` → `.unreadable`.
+  - `testTerminalOnlyUserIsNotLockedOut`: 50 transcript ids, 2 non-archived records active within 7 days, both found
+    → `.loaded`. Most transcripts here have no record, as for a CLI user.
+  - `testNoRecentRecordsPassesGuard`: records exist, but none active in the last 7 days → `.loaded`.
 
 - [ ] **Step 2: Run them; expect failures.**
   `swift test --filter AIChats`. Expected: FAIL.
@@ -161,7 +197,8 @@ named in brackets.
 - [ ] **Step 3: Implement `AppRecords` in `AppRecords.swift`.**
   - Parse with the existing `JSONValue.parse(file:)`.
   - `lastActivityAt` is epoch milliseconds or ISO-8601; accept both.
-  - The guard follows the spec's section "Claude.app rules apply to both tasks".
+  - The guard follows Global constraints. It replaces the spec's "fewer than half of recent transcripts" variant,
+    which would lock out a user who works mostly in the terminal. Update the spec's "Format guard" bullet to match.
 
 - [ ] **Step 4: Run them; expect a pass.**
   `swift test --filter AIChats`. Expected: PASS.
@@ -225,17 +262,22 @@ Template lines:
 - Produces: `SafePaths.aiPath` additionally allows exactly these paths:
   - `home/.claude/projects/<dir>/<uuid>.jsonl`
   - `home/.claude/projects/<dir>/<uuid>`
-  - `<dir>` is `[A-Za-z0-9-]+`, `<uuid>` passes `isIdentifier`, and `<uuid>` is never `memory`.
+  - `<dir>` is `[A-Za-z0-9-]+`, and `<uuid>` passes `ClaudeProjects.isSessionID`. That makes `memory` or any other
+    name impossible.
   - Codex paths are **not** added here; Task 8 adds them.
 
 - [ ] **Step 1: Write the failing test `testChatPathsAllowed`.**
+  With `U = 0b3f6a2e-1c4d-4e5f-8a9b-0c1d2e3f4a5b`:
+
   - Allowed:
-    - `…/projects/-Users-me-app/1a2b-3c.jsonl`
-    - `…/projects/-Users-me-app/1a2b-3c`
+    - `…/projects/-Users-me-app/U.jsonl`
+    - `…/projects/-Users-me-app/U`
   - Refused:
     - `…/projects/-Users-me-app/memory`
     - `…/projects/-Users-me-app/memory/a.md`
-    - `…/projects/-Users-me-app/1a2b-3c/subagents/x.jsonl` (too deep)
+    - `…/projects/-Users-me-app/cache`
+    - `…/projects/-Users-me-app/1a2b-3c.jsonl` (not a UUID)
+    - `…/projects/-Users-me-app/U/subagents/x.jsonl` (too deep)
     - `…/projects/-Users-me-app`
     - `…/projects/../x.jsonl`
     - `…/projects/-Users-me-app/a.b.jsonl`
@@ -266,21 +308,32 @@ Template lines:
 
 **Interfaces:**
 - Produces:
-  - `enum SessionBusy { static func busy(_ path: String, openFiles: [String]?, now: Date) -> Bool }`. It returns true
-    when any of these holds:
-    - the path, or any file under it, has an mtime newer than `now - 24h`;
-    - `openFiles` is nil (lsof cannot tell);
-    - a line of it equals `n<path>` or starts with `n<path>/`.
-  - `Candidate.perPathBusy: Bool`. When true, Execute takes one `Cleanup.openFiles` snapshot and skips each busy path,
-    counting it as skipped rather than refused.
+  - `enum SessionBusy`:
+    - `static func sessionID(of path: String) -> String?`: the UUID a chat path belongs to. That is the last
+      component without `.jsonl`, for all three path shapes. It returns nil for anything else.
+    - `static func busy(_ paths: [String], openFiles: [String]?, now: Date) -> Bool`: the paths of **one session**.
+      It returns true when any of these holds:
+      - any path, or any file under it, has an mtime newer than `now - 24h`;
+      - `openFiles` is nil (lsof cannot tell);
+      - a line of `openFiles` equals `n<path>` or starts with `n<path>/`.
+  - `Candidate.perPathBusy: Bool`. When true, Execute:
+    1. groups the paths by `SessionBusy.sessionID`;
+    2. takes one `Cleanup.openFiles` snapshot;
+    3. skips every path of a busy group, counting them as skipped rather than refused;
+    4. measures before and after with `Size.kbMany`, not `run.kbl`.
+  - `Size.kbMany(_ paths: [String]) -> Int64`: the same native `st_blocks` walk as Task 1. Task 1 defines it here,
+    in `Size.swift`, and uses it.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `testBusyByMtime`, `testBusyByOpenFile`, `testBusyWhenLsofUnknown`, `testIdleOldPath`: unit tests of
+  - `testBusyByMtime`, `testBusyByOpenFile`, `testBusyWhenLsofUnknown`, `testIdleOldSession`: unit tests of
     `SessionBusy.busy`.
-  - `testExecuteSkipsOnlyTheBusySession`:
-    - a candidate with `perPathBusy: true` and two old session paths;
-    - one path is touched to now just before execute;
-    - expect the idle one in the Trash, the busy one in place, and no "nothing removed" error.
+  - `testExecuteSkipsTheWholeBusySession`:
+    - a candidate with `perPathBusy: true` holds two old sessions, each with `<id>.jsonl`, `<id>/` and
+      `file-history/<id>/`;
+    - just before execute, only the first session's `.jsonl` is touched to now;
+    - expect all three paths of the first session in place, all three of the second in the Trash, and no "nothing
+      removed" error.
+  - `testExecuteManyPaths`: a candidate with 3000 small session paths runs in under 10 s, and all of them go.
 
 - [ ] **Step 2: Run them; expect failures.**
   `swift test --filter ExecTests`. Expected: FAIL.
@@ -316,9 +369,10 @@ Template lines:
 
 Rules (from the spec):
 
-- If records are `.unreadable`, register nothing for Claude Code.
+- `AIChatScan.load` follows the load order in Global constraints.
+- If records are `.unreadable`, register nothing for Claude Code. The report says why (Task 7).
 - Drop any session whose id is in `visibleIDs()`.
-- Drop any session where `SessionBusy.busy` holds at scan time (one lsof snapshot).
+- Drop any session modified in the last 24 hours. lsof is not run at scan time, only at execute (Task 5).
 
 `aiChatsGone` registers up to four candidates. Each is `.trash`, level 3, `manual: true`, `perPathBusy: true`.
 
@@ -391,7 +445,13 @@ Rules (from the spec):
   - `struct MemoryHint { let file: String; let reason: Reason }`, where
     `enum Reason { case missingPath(String), untouched(days: Int), brokenIndexLink(String) }`;
   - `enum MemoryScan { static func hints(memory: String, home: String, untouchedDays: Int, now: Date) -> [MemoryHint]; static func indexChars(memory: String) -> Int }`;
-  - `enum AIReport { static func sizes(_ run: Run); static func memory(_ run: Run) }`.
+  - `enum AIReport { static func sizes(_ run: Run, atLeast: Int64 = 102_400); static func memory(_ run: Run) }`.
+    `atLeast` exists so tests can use small files.
+
+**Untouched files never trigger a line on their own.** A correct memory that never changes would otherwise be
+flagged on every run, forever. A project gets the "may be stale" line only when it has a `missingPath` or
+`brokenIndexLink` hint. Its `untouched` files are then appended to that line. This narrows the spec's per-file
+"not modified for `memory_days`" hint; update the spec to match.
 
 Lines, verbatim. Each `%s` size line is shown only at `atLeast: 102_400`.
 
@@ -403,6 +463,8 @@ Lines, verbatim. Each `%s` size line is shown only at `atLeast: 102_400`.
 - "Codex generated images: %s; Codex logs: %s"
 
 **Under `check.ai_memory`:**
+
+- If records are `.unreadable`: "Claude.app session records are in a format macup does not know; no Claude Code chats are offered"
 
 - "Claude Code deletes chats older than %s days when it starts (cleanupPeriodDays), including sessions still shown in Claude.app"
   - Read `cleanupPeriodDays` from `~/.claude/settings.json`; use 30 when it is absent.
@@ -418,10 +480,11 @@ Lines, verbatim. Each `%s` size line is shown only at `atLeast: 102_400`.
   - `testMissingPathHint`: a memory file mentions `~/nope/file` and `/Users/x/also-nope` → two `missingPath` hints;
     an existing path → no hint.
   - `testUntouchedHint`: a file with an mtime 61 days ago and `untouchedDays: 60` → `untouched(days: 61)`.
+  - `testUntouchedAloneIsSilent`: a project whose only hint is `untouched` → no "may be stale" line.
+  - `testUnreadableRecordsLine`: records hold `{` → the "format macup does not know" line appears.
   - `testBrokenIndexLink`: `MEMORY.md` links `[x](gone.md)` → `brokenIndexLink("gone.md")`.
-  - `testSizesLineCountsArchivedAndGone`: a fake home with 150 MB of transcripts, split between archived, gone and
-    visible sessions → the line shows the right three sizes. Create the bytes with sparse files, or lower the
-    threshold through a parameter.
+  - `testSizesLineCountsArchivedAndGone`: a fake home with small transcripts, split between archived, gone and
+    visible sessions, and `AIReport.sizes(run, atLeast: 0)` → the line shows the right three sizes.
   - `testGoneProjectMemoryFlaggedOnlyForProjectClass`: worktree and temporary dirs with memory produce no "gone"
     line; a project-class dir does.
   - `testVisibleOldSessionListed`: a visible session 20 days old with `ai_chat_days = 14` → its title appears in the

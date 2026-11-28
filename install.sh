@@ -154,6 +154,7 @@ if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "$HERE/install.sh" ] && [ -f "$HERE/Pack
 else
   # main names the latest version; the bootstrap comes from that version's tag (main before it is tagged) and must match its
   # SHA-256. Its first run, below, downloads the release binary (the last 2.9 script on a Mac older than macOS 13) over itself.
+  # Told it runs for the installer, it does not stand in with 2.9 while the binary is unpublished, and leaves the messages here.
   say "$(text dl)"; curl -fsSL "$RAW/main/macup" -o "$TMP" || die "$(text dlfail): $RAW/main/macup"
   VER=$(sed -n 's/^MACUP_VERSION="\(.*\)"/\1/p' "$TMP" | head -1); REF="v$VER"
   WANT=$(curl -fsSL "$RAW/$REF/macup.sha256" 2>/dev/null | awk '{print $1; exit}')
@@ -165,7 +166,7 @@ else
 fi
 # run where it is, so whatever was installed keeps working until this one does
 chmod 755 "$TMP" || die "$(text write) $TMP"
-VER=$(MACUP_LANG="$lang" "$TMP" version </dev/null | sed -n 's/^macup //p')
+VER=$(MACUP_LANG="$lang" MACUP_FROM_INSTALLER=1 "$TMP" version </dev/null | sed -n 's/^macup //p')
 [ -n "$VER" ] || die "$(text "$FAILED")"
 mv -f "$TMP" "$TARGET" || die "$(text write) $TARGET"
 say "$(text inst): macup $VER → $(tld "$TARGET")"

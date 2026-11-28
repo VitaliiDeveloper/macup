@@ -144,13 +144,14 @@ public final class Shell {
             let ended = Shell.waitForSignal(pid)
             return (ended.status, ended.signal, false)
         }
+        let rootStart = Shell.startTime(pid)
         let ended = DispatchSemaphore(value: 0), watched = DispatchSemaphore(value: 0)
         let stopped = ManagedFlag()
         Thread { [self] in
             defer { watched.signal() }
             guard ended.wait(timeout: .now() + .seconds(seconds)) == .timedOut else { return }
             stopped.set()
-            stop(descendants(of: pid))
+            stop(descendants(of: pid), known: rootStart.map { [pid: $0] } ?? [:])
         }.start()
         let result = Shell.waitForSignal(pid)
         ended.signal()
@@ -160,10 +161,12 @@ public final class Shell {
     }
 
     /// SIGTERM, then SIGKILL for those still there after `grace` seconds. A process counts as still there while its pid has
-    /// the start time it had: a pid that ended and was given to another process by then is left alone.
-    func stop(_ pids: [pid_t], grace: TimeInterval = 5) {
-        // one macup cannot signal (all root) would only hold up the others
-        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }.filter { kill($0.pid, SIGTERM) == 0 }
+    /// the start time it had: a pid that ended and was given to another process by then is left alone. `known`: start times
+    /// read earlier (the tool's own, at spawn: it may have ended and been reaped before the list was made).
+    func stop(_ pids: [pid_t], known: [pid_t: UInt64] = [:], grace: TimeInterval = 5) {
+        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }
+            .filter { process in known[process.pid].map { $0 == process.start } ?? true }
+            .filter { kill($0.pid, SIGTERM) == 0 }   // one macup cannot signal (all root) would only hold up the others
         let deadline = DispatchTime.now() + grace
         while !alive.isEmpty, DispatchTime.now() < deadline {
             usleep(50_000)

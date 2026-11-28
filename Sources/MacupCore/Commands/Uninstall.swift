@@ -19,6 +19,7 @@ enum Uninstall {
             var dir = String(String(decoding: line, as: UTF8.self).dropFirst(13))
             if dir.hasSuffix(":$PATH\"") { dir = String(dir.dropLast(7)) }
             if let home = dir.range(of: "$HOME") { dir.replaceSubrange(home, with: env.home) }
+            while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
             binDirs.append(dir)
             // the line also serves whatever else lives in that folder
             let others = neighbours(dir)

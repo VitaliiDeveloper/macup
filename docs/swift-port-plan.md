@@ -35,6 +35,8 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 
 ## Routing
 
+Done with in phase 4: the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
+
 From phase 0 on, the Swift binary is the `macup` entry point. It carries the built bash script.
 
 **Routing rule.** The binary resolves the command and the task selection (`--only`, `--skip`, `--enable`, the config, the defaults). It runs itself only if the command is ported and every selected task is in the ported set. Otherwise it runs bash for the entire invocation. The suite's 94 `--only` runs give per-unit granularity for free. Full runs switch to Swift when the last unit lands.
@@ -114,14 +116,13 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
 
 ```
 Package.swift
-Sources/macup/                  main.swift: routing, the bash exec
+Sources/macup/                  main.swift: the command line and what runs it
 Sources/MacupCore/
   Foundation/                   Env, Shell, Output, I18n, Config, Tasks, Paths, Size, Lock, Report, JSON
   Run/                          the main pass, the summary, trends, --json, signals, sudo
-  Cleanup/                      candidate model, safe_path, measuring, settle; later exec and pick
+  Cleanup/                      candidate model, safe_path, measuring, settle, exec and pick
   Checks/ Updates/ Tools/ Cleaners/ Leftovers/ Commands/
-  Ported.swift                  the ported set, assembled from one list file per module (no shared edits)
-Sources/macup/Generated/        LegacyScript.swift, Translations.swift (written by build.sh, not committed)
+Sources/macup/Generated/        Translations.swift (written by build.sh, not committed)
 Tests/MacupCoreTests/           XCTest
 tests/run.sh, tests/diff.sh     black-box suite and differential harness
 ```
@@ -337,7 +338,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR. The pin only took effect with #23 (it tested 4 arguments; the call has 5).
 - [x] `diff.sh` flake: the `tmutil` fake wrote `destinationinfo` with `printf` in pieces, and bash's `grep -q` under pipefail closed the pipe between them in about 1% of runs ("no backup destination" in bash only). The fake writes once, as the real `tmutil` does (#18). Fakes that a `grep -q` reads should write in one piece.
 - [x] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it (#20).
-- [ ] `diff.sh` flake (#26's pull_request run 46118275857, `upd-mas-asks uk tty`): bash's `tick` spinner (`src/core.sh:261`) polls `tail "$RAW"` in a subshell while the main shell lives, so when a step ends the run, the EXIT cleanup can remove `$RAW` first and bash prints `tail: …: No such file or directory`. Oracle-side only. Fix in `src/core.sh` with `2>/dev/null` on that `tail`; owner: the phase 4 PR2 session, since `src/` stays as the oracle until phase 5.
+- [x] `diff.sh` flake (#26's pull_request run 46118275857, `upd-mas-asks uk tty`): bash's `tick` spinner (`src/core.sh:261`) polls `tail "$RAW"` in a subshell while the main shell lives, so when a step ends the run, the EXIT cleanup can remove `$RAW` first and bash prints `tail: …: No such file or directory`. Oracle-side only. Fix in `src/core.sh` with `2>/dev/null` on that `tail`; owner: the phase 4 PR2 session, since `src/` stays as the oracle until phase 5.
 - [ ] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other. Owner: the phase 3 session, after #18.
 
 ## Progress

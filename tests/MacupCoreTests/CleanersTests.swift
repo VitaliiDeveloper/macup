@@ -25,22 +25,6 @@ final class CleanersTests: XCTestCase {
         try? FileManager.default.createSymbolicLink(atPath: "\(home)/\(relative)", withDestinationPath: target)
     }
 
-    func testCleanerRunsRouteToSwift() throws {
-        let environment = try Env(["HOME": home + "/none", "PATH": "/usr/bin:/bin"])
-        func route(_ line: String) -> String {
-            switch Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false) {
-            case .bash: return "bash"
-            case .rejected: return "rejected"
-            case .swift: return "swift"
-            }
-        }
-        let registered = Ported.cleaners.tasks.joined(separator: ",")
-        XCTAssertEqual(route("check --only \(registered)"), "swift")
-        XCTAssertEqual(route("check --level aggressive --only \(registered) --json"), "swift")
-        XCTAssertEqual(route("clean --level aggressive --only \(registered)"), "swift")
-        XCTAssertEqual(route("check --only clean.trash,clean.dev_containers"), "swift", "dev containers register through the leftovers unit")
-    }
-
     func testReadIsBashRead() throws {
         let lines = ["x|y|z|", "x|y|z|w|", "x|y|", "|y| z ", "x|y|z||", "", "a", "a||b", "\tx\t\ty\tz\t", "x\ty", "\t\t", " a\tb c \t", "a\t\tb\t\tc\t\td\t"]
         for separator in ["|", "\t"] {

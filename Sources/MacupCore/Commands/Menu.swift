@@ -9,7 +9,7 @@ public enum Menu {
         case run(String)
     }
 
-    /// It leaves the environment as it was: a run it starts may still be bash's.
+    /// It leaves the environment as it was, for the run it starts.
     public static func run(_ arguments: Arguments, env: Env, translations: String) -> Choice {
         let context = OneOff.Context(arguments, env: env, translations: translations)
         if OneOff.refusesSudo(context) { return .done(1) }

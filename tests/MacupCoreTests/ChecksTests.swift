@@ -3,16 +3,6 @@ import XCTest
 
 /// The text the checks read out of macOS tools: the same answer as the sed, awk and grep of checks.sh and report.sh.
 final class ChecksTests: XCTestCase {
-    func testChecksAndDeepRouteToSwift() throws {
-        let environment = try Env(["HOME": NSTemporaryDirectory() + "macup-none-\(UUID().uuidString)", "PATH": "/usr/bin:/bin"])
-        let lines = ["check --only check.system,check.memory,check.cpu,check.battery", "all --only check.security --skip check.time_machine",
-                     "check --only check.time_machine", "update --only check.sizes,check.creative", "check --deep --only check.disk",
-                     "update --deep --only check.sizes --json", "check --only check.*,update.brew --skip check.startup,check.mcp,check.brew_doctor,check.macos_updates,check.xcode,check.devtools,check.commands,check.docker,check.gh,check.certs,check.crashes,check.self_update"]
-        for line in lines {
-            XCTAssertNotEqual(Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false), .bash, line)
-        }
-        XCTAssertNotEqual(Router.route(["clean", "--deep", "--only", "clean.npm"], env: environment, terminal: false), .bash)
-    }
 
     func testUptimeAsSed() throws {
         let samples = ["10:00  up 3 days,  4:05, 2 users, load averages: 1.00 1.20 1.30", "16:35  up 20:31, 3 users, load averages: 2.81 3.07 2.53",

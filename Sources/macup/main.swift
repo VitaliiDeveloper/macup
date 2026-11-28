@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import MacupCore
 
-// The macup binary: it runs what is ported itself and hands every other invocation, whole, to the bash build it carries.
+// The macup binary.
 let argv = Array(CommandLine.arguments.dropFirst())
 let env: Env
 do {
@@ -13,22 +13,22 @@ do {
 }
 Names.setLocale(env)
 Schedule.repair(env, translations: Translations.json)
-switch Router.route(argv, env: env) {
-case .bash:
-    BashExec.run()
-case .rejected(let failure):
-    exit(OneOff.rejected(failure, env: env, translations: Translations.json))
-case .swift(let arguments) where arguments.command == nil && arguments.action == nil && !arguments.deep:
-    switch Menu.run(arguments, env: env, translations: Translations.json) {
-    case .done(let status):
-        exit(status)
-    case .run(let word):
-        // first, not last: a trailing --only with no value would take it
-        if case .swift(let picked) = Router.route([word] + argv, env: env) { MainPass.run(picked, env: env, translations: Translations.json) }
-        BashExec.run(prepending: [word])
-    }
-case .swift(let arguments) where arguments.command == nil:
-    MainPass.run(arguments, env: env, translations: Translations.json)
-case .swift(let arguments):
-    exit(OneOff.run(arguments, env: env, translations: Translations.json))
+
+/// The command line as arguments.sh reads it; one it rejects ends macup with its message.
+func parsed(_ argv: [String]) -> Arguments {
+    do { return try Arguments.parse(argv) } catch let failure as Arguments.Failure {
+        exit(OneOff.rejected(failure, env: env, translations: Translations.json))
+    } catch { preconditionFailure("Arguments.parse throws only Arguments.Failure") }
 }
+
+let arguments = parsed(argv)
+if let command = arguments.command { exit(OneOff.run(command, arguments, env: env, translations: Translations.json)) }
+// no command word and no run: the menu on a terminal, the help anywhere else
+if arguments.action == nil, !arguments.deep {
+    switch Menu.run(arguments, env: env, translations: Translations.json) {
+    case .done(let status): exit(status)
+    // first, not last: a trailing --only with no value would take it
+    case .run(let word): MainPass.run(parsed([word] + argv), env: env, translations: Translations.json)
+    }
+}
+MainPass.run(arguments, env: env, translations: Translations.json)

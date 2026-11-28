@@ -96,16 +96,6 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(["y", "Y", "т", "Т", "д", "Д", "yes", "n", ""].map(Terminal.isYes), [true, true, true, true, true, true, false, false, false])
     }
 
-    func testTheMenuRoutesWhenPorted() throws {
-        let home = "\(folder)/home"
-        let environment = try Env(["HOME": home, "PATH": "/usr/bin:/bin", "MACUP_LANG": "en"])
-        XCTAssertEqual(Router.route(["--no-color"], env: environment, ported: ["menu"]), .swift(try Arguments.parse(["--no-color"])))
-        XCTAssertEqual(Router.route([], env: environment, ported: ["run"]), .bash)
-        try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
-        try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
-        XCTAssertEqual(Router.route([], env: environment, ported: ["menu"]), .swift(try Arguments.parse([])), "09 is 9 minutes, no longer bash's arithmetic error")
-    }
-
     /// bash's awk h() set the global b, which was also the bold colour: its trend line began with the last FREED in bytes.
     func testHistoryTrendLineStartsWithItsLabel() throws {
         let home = NSTemporaryDirectory() + "macup-history-\(UUID().uuidString)"

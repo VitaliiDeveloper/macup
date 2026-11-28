@@ -8,7 +8,7 @@ set -eo pipefail
 cd "$(dirname "$0")"
 
 # bash runs the script top to bottom, so the order matters
-ORDER="core help commands translations arguments checks updates tools cleanup leftovers cleaners report summary"
+ORDER="core help commands translations arguments processes checks updates tools cleanup leftovers cleaners report summary"
 for f in src/*.sh; do
   case " $ORDER " in *" $(basename "$f" .sh) "*) ;; *) echo "build.sh: add $f to ORDER" >&2; exit 1 ;; esac
 done

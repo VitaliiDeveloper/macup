@@ -37,7 +37,7 @@ CLT_OK=0; [ -d "$(xcode-select -p 2>/dev/null)" ] && CLT_OK=1
 # id | default (on/off) | description          `macup tasks` prints this table.
 TASKS='check.system|on|macOS version, model, uptime (warns after 14 days without restart)
 check.disk|on|Free space, disk health (SMART), local Time Machine snapshots
-check.memory|on|Memory pressure and swap usage
+check.memory|on|Memory pressure and swap usage, Claude Code sessions open in the Claude app for a day or more
 check.cpu|on|Load average, top CPU and memory processes, thermal throttling
 check.battery|on|Charge, cycle count, maximum capacity, condition
 check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates
@@ -129,7 +129,8 @@ clean.brew_autoremove|off|Homebrew packages installed only as dependencies that 
 clean.trash|off|Empty the Trash (opt-in)
 clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
 clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)
-clean.dev_containers|off|Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)'
+clean.dev_containers|off|Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)
+clean.stray_processes|off|Programs left running after what started them quit: scripts, test runs, dev servers (only when you pick them; stopped, never automatically)'
 
 # ---------------------------------------------------------------- config
 conf(){ # key default

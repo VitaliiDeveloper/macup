@@ -855,4 +855,7 @@ grep -q 'cleanup' "$H/brew.log" 2>/dev/null && pass "MACUP_PATH=keep: the brew o
 # --- leftovers of deleted apps
 tests/leftovers.sh || F=1
 
+# --- programs left running, Claude sessions open in the Claude app
+tests/processes.sh || F=1
+
 echo; [ $F = 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

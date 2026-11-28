@@ -1,9 +1,10 @@
 # ================================================================ PICK (interactive check)
-if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE + POT_TRASH)) -gt 0 ]; then
+if [ "$DRY" = 1 ] && [ "${C_N:-0}" -gt 0 ] && [ -t 0 ] && [ -t 1 ] && [ $((POT_AUTO + POT_MORE + POT_TRASH + ${STRAY_N:-0})) -gt 0 ]; then
   echo
   CHOSEN=$(pick)
   if [ -n "$CHOSEN" ]; then
     RISKY=0; for i in $CHOSEN; do { [ "${C_LVL[i]}" = 3 ] || [ "${C_AUTO[i]}" = 0 ]; } && RISKY=1; done
+    for i in $CHOSEN; do [ "${C_TASK[i]}" = clean.stray_processes ] && { printf '%s\n' "$(_ 'The picked programs are stopped: what they have not saved is lost.')" >/dev/tty; break; }; done
     for i in $CHOSEN; do [ "${C_TASK[i]}" = clean.dev_containers ] && { printf '%s\n' "$(_ 'The picked containers hold app data (documents, settings, databases): it goes to the Trash.')" >/dev/tty; break; }; done
     if [ "$RISKY" = 1 ]; then
       c=$(ask "$(_ 'This includes aggressive or opt-in items: apps may sign you out or rebuild caches slowly. Quit those apps first. Continue? [y/N] ')")

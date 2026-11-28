@@ -895,10 +895,6 @@
     "uk": "Вільне місце, стан диска (SMART), локальні знімки Time Machine",
     "ru": "Свободное место, состояние диска (SMART), локальные снимки Time Machine"
   },
-  "Memory pressure and swap usage": {
-    "uk": "Навантаження на пам'ять і swap",
-    "ru": "Нагрузка на память и swap"
-  },
   "Load average, top CPU and memory processes, thermal throttling": {
     "uk": "Навантаження CPU, найважчі процеси, перегрів",
     "ru": "Нагрузка CPU, самые тяжёлые процессы, перегрев"
@@ -1926,5 +1922,73 @@
   "Claude Code chat history: %s (not a cache; Claude Code deletes transcripts older than cleanupPeriodDays, 30 days by default)": {
     "uk": "Історія чатів Claude Code: %s (це не кеш; Claude Code сам видаляє транскрипти, старші за cleanupPeriodDays, типово 30 днів)",
     "ru": "История чатов Claude Code: %s (это не кэш; Claude Code сам удаляет транскрипты старше cleanupPeriodDays, по умолчанию 30 дней)"
+  },
+  "Memory pressure and swap usage, Claude Code sessions open in the Claude app for a day or more": {
+    "uk": "Навантаження на пам'ять і swap, сесії Claude Code, відкриті в застосунку Claude день і довше",
+    "ru": "Нагрузка на память и swap, сессии Claude Code, открытые в приложении Claude день и дольше"
+  },
+  "Programs left running after what started them quit: scripts, test runs, dev servers (only when you pick them; stopped, never automatically)": {
+    "uk": "Програми, що лишилися працювати після того, як закрилось те, що їх запустило: скрипти, прогони тестів, dev-сервери (лише якщо вибереш; зупиняються, ніколи автоматично)",
+    "ru": "Программы, оставшиеся работать после того, как закрылось то, что их запустило: скрипты, прогоны тестов, dev-серверы (только если выберешь; останавливаются, никогда автоматически)"
+  },
+  "%s d": {
+    "uk": "%s дн",
+    "ru": "%s дн"
+  },
+  "%s h": {
+    "uk": "%s год",
+    "ru": "%s ч"
+  },
+  "%s min": {
+    "uk": "%s хв",
+    "ru": "%s мин"
+  },
+  "this session": {
+    "uk": "ця сесія",
+    "ru": "эта сессия"
+  },
+  "What: %s": {
+    "uk": "Що: %s",
+    "ru": "Что: %s"
+  },
+  "Started %s ago in %s.": {
+    "uk": "Запущено %s тому в %s.",
+    "ru": "Запущено %s назад в %s."
+  },
+  "It started %s more processes; they stop with it.": {
+    "uk": "Вона запустила ще процесів: %s; вони зупиняться разом з нею.",
+    "ru": "Она запустила ещё процессов: %s; они остановятся вместе с ней."
+  },
+  "Stopping: it is asked to quit, and stopped after 5 seconds if it does not; what it has not saved is lost.": {
+    "uk": "Зупинка: її просять завершитись, а якщо за 5 секунд не завершиться, зупиняють; незбережене в ній пропаде.",
+    "ru": "Остановка: её просят завершиться, а если за 5 секунд не завершится, останавливают; несохранённое в ней пропадёт."
+  },
+  "%s · left running for %s (%s of memory)": {
+    "uk": "%s · лишилась працювати %s (%s пам'яті)",
+    "ru": "%s · осталась работать %s (%s памяти)"
+  },
+  "%s: no longer running or no longer left over, skipped": {
+    "uk": "%s: вже не працює або вже не покинута, пропущено",
+    "ru": "%s: уже не работает или уже не брошена, пропущено"
+  },
+  "%s: stopped": {
+    "uk": "%s: зупинено",
+    "ru": "%s: остановлено"
+  },
+  "Programs left running after what started them quit — found %s": {
+    "uk": "Програми, що лишилися працювати після того, як закрилось те, що їх запустило — знайдено %s",
+    "ru": "Программы, оставшиеся работать после того, как закрылось то, что их запустило — найдено %s"
+  },
+  "The picked programs are stopped: what they have not saved is lost.": {
+    "uk": "Вибрані програми буде зупинено: незбережене в них пропаде.",
+    "ru": "Выбранные программы будут остановлены: несохранённое в них пропадёт."
+  },
+  "Claude Code sessions open in the Claude app for a day or more: %s, %s of memory": {
+    "uk": "Сесії Claude Code, відкриті в застосунку Claude день і довше: %s, %s пам'яті",
+    "ru": "Сессии Claude Code, открытые в приложении Claude день и дольше: %s, %s памяти"
+  },
+  "Why: what started it has quit, and neither macOS nor an app looks after it.": {
+    "uk": "Чому: те, що її запустило, вже закрилось, і ні macOS, ні жоден застосунок за нею не стежить.",
+    "ru": "Почему: то, что её запустило, уже закрылось, и ни macOS, ни какое-либо приложение за ней не следит."
   }
 }

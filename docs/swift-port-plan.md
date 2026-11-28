@@ -345,7 +345,10 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | merged (85dc350) |
 | 3 | Foundation moves for the pick (`Terminal`, `Config.isSpace`) | `swift/foundation-followups` | #20 | merged (d5fb784) |
 | 3 | exec of every kind, `run_key`, the leftovers' moves, the dev container scan | `swift/exec` | #24 | merged (374f630) |
-| 3 | the pick, confirmations, `--pick` | | | in progress |
+| 3 | the pick, confirmations, `--pick` | `swift/pick` | #25 | merged (442f900) |
+| 4 | the last bash routes, then the bash exec and embedded script removed | | | in progress |
+| 4 | `self-update` and `schedule` for the binary, the first-run LaunchAgent check | | | in progress |
+| 4 | the three reproduced bash bugs fixed | | | in progress |
 | 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | merged (84f4222) |
 | 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | merged (4f16158) |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

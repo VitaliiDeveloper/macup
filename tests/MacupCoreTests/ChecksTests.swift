@@ -11,7 +11,7 @@ final class ChecksTests: XCTestCase {
         for line in lines {
             XCTAssertNotEqual(Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false), .bash, line)
         }
-        XCTAssertEqual(Router.route(["clean", "--deep", "--only", "clean.npm"], env: environment, terminal: false), .bash)
+        XCTAssertNotEqual(Router.route(["clean", "--deep", "--only", "clean.npm"], env: environment, terminal: false), .bash)
     }
 
     func testUptimeAsSed() throws {

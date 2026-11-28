@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Only the empty kind so far: the router keeps runs that need rm, trash, cmd or the pick on bash.
+/// cleanup.sh: every cleaner registers a candidate (what, how big, how risky); then the chosen ones run (Execute.swift).
 public enum Cleanup {
     static func run(_ run: Run) {
         guard run.wantsCleanup else { return }
@@ -89,37 +89,6 @@ public enum Cleanup {
             let candidate = run.candidates.list[index]
             run.candidates.list[index].busy = running(run, candidate.proc) || files.map { openIn(run.shell, candidate.open, snapshot: $0) } ?? false
         }
-    }
-
-    static func execute(_ run: Run, _ index: Int) {
-        let candidate = run.candidates.list[index]
-        let size = Size.hum(candidate.kb ?? 0)
-        run.measure.forget()
-        if running(run, candidate.proc) || openIn(run.shell, candidate.open) {
-            run.out.info("%s: %s — skipped while the app is open", candidate.label, size)
-            run.skipped.append("\(candidate.label) (\(size))")
-            return
-        }
-        run.out.step("%s", candidate.label)
-        guard candidate.kind == .empty else { preconditionFailure("cleaning a \(candidate.kind) candidate is not ported yet") }
-        let before = run.kbl(candidate.paths)
-        for folder in Bash.lines(candidate.paths) where Run.isDirectory(folder) && !Run.isSymlink(folder) && run.safePaths.allows(folder) {
-            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? [] { delete(run, "\(folder)/\(name)") }
-        }
-        let freed = max(0, before - run.kbl(candidate.paths))
-        run.didClean = true
-        run.freed += freed
-        if freed >= 1024 { run.out.ok("%s: freed %s", candidate.label, Size.hum(freed)) } else { run.out.ok("%s: cleaned", candidate.label) }
-    }
-
-    /// A symlink is never followed or removed.
-    static func delete(_ run: Run, _ path: String) {
-        if Run.isSymlink(path) || access(path, F_OK) != 0 { return }
-        guard run.safePaths.allows(path) else {
-            run.log.append("macup refused to delete: \(path)\n")
-            return
-        }
-        _ = run.shell.tl(0, ["rm", "-rf", path], stderr: .file(run.log.raw))
     }
 
     static func levelWord(_ level: Int, _ i18n: I18n) -> String {

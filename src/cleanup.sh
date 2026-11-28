@@ -214,6 +214,7 @@ run_key(){ local out r=0
     orph:*)    run_orph "${1#orph:}"; return ;;
     devc:*)    run_devc "${1#devc:}"; return ;;
     odata:*)   run_odata "${1#odata:}"; return ;;
+    proc:*)    set -- "${1#proc:}"; run_stray "${1%%:*}" "${1#*:}"; return ;;   # proc:<pid>:<start>
     docker)    out=$({ docker builder prune -f || exit 1; docker image prune -f; } 2>&1) || r=1; echo "$out" >>"$RAW"
                KEY_FREED=$(echo "$out" | sed -n 's/^Total reclaimed space: *//p' | while read -r v; do tokb10 "$v"; echo; done | awk '{s+=$1} END{print s+0}'); return $r ;;
   esac
@@ -271,6 +272,7 @@ EOF2
            [ -n "$KEY_FREED" ] && { b=$KEY_FREED; a=0; } ;;
   esac
   d=$((b - a)); [ "$d" -lt 0 ] && d=0; DID_CLEAN=1
+  [ "${C_TASK[i]}" = clean.stray_processes ] && { ok '%s: stopped' "$lbl"; return 0; }
   # the Trash still holds it: nothing is freed until it is emptied
   if [ "${C_KIND[i]}" = trash ]; then ok '%s: moved %s to the Trash' "$lbl" "$(hum "$d")"; return 0; fi
   FREED=$((FREED + d))
@@ -290,19 +292,23 @@ mark_busy(){ # check: what is in use right now is said in the list and left out 
 visible(){ case "${C_TASK[$1]}" in clean.ai_tools|clean.editor_workspaces) return 0 ;; esac   # few, and each worth a look at any size
   [ "${C_KB[$1]}" -ge 1024 ] || { [ "${C_KIND[$1]}" = cmd ] && [ "${C_AUTO[$1]}" = 0 ]; } || [ "${C_TASK[$1]}" = clean.profiles ] || [ "${C_TASK[$1]}" = clean.dev_containers ]; }   # small pick-only commands too; expired profiles and dev containers at any size
 list_cands(){ # numbered list of what can be cleaned
-  local i n=0 tag head=0 ln lc=0
+  local i n=0 tag head=0 ln lc=0 sz
   for ((i = 0; i < C_N; i++)); do case "${C_TASK[i]}" in clean.orphan_*) visible "$i" && lc=$((lc + 1)) ;; esac; done
   for ((i = 0; i < C_N; i++)); do
     visible "$i" || continue
     case "${C_TASK[i]}" in clean.orphan_*)
       if [ "$head" = 0 ]; then head=1; flush; echo; ln=$(_f 'Leftovers of deleted apps — found %s, total %s' "$lc" "$(hum "$(lo_total)")")
         printf '%s  %s%s%s\n' "$CL" "$B" "$ln" "$N"; md ""; md "**$ln**"; fi ;;
+      clean.stray_processes)
+      if [ "$head" != 2 ]; then head=2; flush; echo; ln=$(_f 'Programs left running after what started them quit — found %s' "$STRAY_N")
+        printf '%s  %s%s%s\n' "$CL" "$B" "$ln" "$N"; md ""; md "**$ln**"; fi ;;
     esac
     n=$((n + 1)); tag=""; [ "${C_AUTO[i]}" = 0 ] && tag=" $(_ '(only if you pick it)')"
     [ "${C_BUSY[i]:-0}" = 1 ] && tag="$tag $(_ '(in use now — skipped until it is closed)')"
     flush
-    printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$(hum "${C_KB[i]}")" "${C_LBL[i]}" "$D" "$tag" "$N"
-    md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}: $(hum "${C_KB[i]}")$tag"
+    sz=$(hum "${C_KB[i]}"); [ "${C_TASK[i]}" = clean.stray_processes ] && sz=""   # memory, said in its label: nothing on disk
+    printf '%s  %3s  %s%s%s %9s  %s%s%s%s\n' "$CL" "$n" "$(lvl_col "${C_LVL[i]}")" "$(pad "$(lvl_word "${C_LVL[i]}")" 11)" "$N" "$sz" "${C_LBL[i]}" "$D" "$tag" "$N"
+    md "- $n. [$(lvl_word "${C_LVL[i]}")] ${C_LBL[i]}${sz:+: $sz}$tag"
     [ -n "${C_INFO[i]}" ] && printf '%s\n' "${C_INFO[i]}" | while IFS= read -r ln; do
       case "$ln" in "") ;; @*) md "    - \`${ln#@}\`" ;; *) printf '%s        %s%s%s\n' "$CL" "$D" "$ln" "$N"; md "    - $ln" ;; esac; done
   done
@@ -319,8 +325,8 @@ pick(){ # reads a choice, prints the chosen indexes one per line
       for ((i = 0; i < C_N; i++)); do [ "${C_AUTO[i]}" = 1 ] && [ "${C_LVL[i]}" -le "$lv" ] && echo "$i"; done
     elif echo "$tok" | grep -E '^[0-9]{1,4}(-[0-9]{1,4})?$' >/dev/null; then
       a=$((10#${tok%-*})); b=$((10#${tok#*-})); [ "$b" -gt "$C_N" ] && b=$C_N   # 08 is not octal; 1-9999 does not loop for minutes
-      # leftovers of deleted apps and dev containers hold data: only their own number takes them, never a range
-      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && { [ "${tok%-*}" = "${tok#*-}" ] || case "${C_TASK[i]}" in clean.orphan_*|clean.dev_containers) false ;; esac; } && echo "$i"; a=$((a + 1)); done
+      # leftovers of deleted apps and dev containers hold data, a program left running may hold work: only their own number takes them, never a range
+      while [ "$a" -le "$b" ]; do i=$(vis_index "$a"); [ -n "$i" ] && { [ "${tok%-*}" = "${tok#*-}" ] || case "${C_TASK[i]}" in clean.orphan_*|clean.dev_containers|clean.stray_processes) false ;; esac; } && echo "$i"; a=$((a + 1)); done
     fi
   done | sort -un
 }

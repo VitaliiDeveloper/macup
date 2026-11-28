@@ -473,6 +473,7 @@ if task_allowed clean.app_caches; then
 fi
 
 leftovers_cands
+stray_cands
 
 # what a plain `macup all` would free, and what more is there
 settle

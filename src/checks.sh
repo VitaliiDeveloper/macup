@@ -36,6 +36,7 @@ if task check.memory; then
   SWAP=${SWAP:-0}
   if [ "${MEMFREE:-100}" -lt 15 ] || [ "$SWAP" -gt 6144 ]; then warn 'Memory: %s GB, %s%% free, swap %s — memory is tight; quit heavy apps or restart' "$RAM" "${MEMFREE:-?}" "$(hum $((SWAP * 1024)))"
   else ok 'Memory: %s GB, %s%% free, swap %s' "$RAM" "${MEMFREE:-?}" "$(hum $((SWAP * 1024)))"; fi
+  claude_sessions
 fi
 
 if task check.cpu; then

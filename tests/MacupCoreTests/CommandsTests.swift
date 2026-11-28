@@ -103,6 +103,6 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(Router.route([], env: environment, ported: ["run"]), .bash)
         try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
         try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
-        XCTAssertEqual(Router.route([], env: environment, ported: ["menu"]), .bash, "the tasks of choice 8 load a config bash cannot compute")
+        XCTAssertEqual(Router.route([], env: environment, ported: ["menu"]), .swift(try Arguments.parse([])), "09 is 9 minutes, no longer bash's arithmetic error")
     }
 }

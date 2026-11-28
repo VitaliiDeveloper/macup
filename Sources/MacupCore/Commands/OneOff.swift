@@ -74,6 +74,25 @@ public enum OneOff {
         return 0
     }
 
+    /// What arguments.sh says and exits with for a command line it rejects. core.sh has read the language by then: a config
+    /// sed cannot read says so first.
+    public static func rejected(_ failure: Arguments.Failure, env: Env, translations: String) -> Int32 {
+        let shell = Shell(env: env), initial = Lang.initial(env: env, config: Config(env: env), shell: shell)
+        switch failure {
+        case .badLevel:
+            Shell.writeText("--level: safe | standard | aggressive\n", to: 1)
+            return 2
+        case .badLang:
+            Shell.writeText("--lang: en | uk | ru\n", to: 1)
+            return 2
+        case .unknownCommand(let word, let lang):
+            let i18n = I18n(lang: lang ?? initial, translationsJSON: translations)
+            Shell.writeText(i18n.format("Unknown command: %s", args: [word]) + "\n"
+                            + i18n.translate("Type  macup  for the menu or  macup help  for all commands.") + "\n", to: 1)
+            return 1
+        }
+    }
+
     /// 127 and bash's message when the tool is not there.
     static func runTool(_ argv: [String], _ shell: Shell) -> Int32 {
         guard let pid = shell.spawn(argv) else {

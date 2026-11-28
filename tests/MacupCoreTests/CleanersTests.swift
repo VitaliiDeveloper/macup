@@ -30,6 +30,7 @@ final class CleanersTests: XCTestCase {
         func route(_ line: String) -> String {
             switch Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false) {
             case .bash: return "bash"
+            case .rejected: return "rejected"
             case .swift: return "swift"
             }
         }
@@ -82,7 +83,8 @@ final class CleanersTests: XCTestCase {
                     "query": "file://\(home)/Projects/q?x=1#frag", "hash": "file://\(home)/Projects/h#x/y", "bad": "file://\(home)/Projects/%E9%zz",
                     "deep": "file://\(home)/Projects/here/a/b/c", "double": "file://\(home)//Projects/missing", "home": "file://\(home)", "slash": "file://\(home)/",
                     "nfc": "file://\(home)/caf\u{E9}/missing", "nfd": "file://\(home)/Projects/here/cafe\u{301}", "Upper": "FILE://\(home)/x", "tab": "file://\(home)/Proj\\tects/here/x", "newline": "file://\(home)/Projects/here\\n",
-                    "zzzz-bracket": "file://[x\(home)/Projects/missing", "zzzzz-after": "file://\(home)/Projects/missing", "pair": "file://[x]\(home)/Projects/missing"]
+                    "zzzz-bracket": "file://[x\(home)/Projects/missing", "zzzzz-after": "file://\(home)/Projects/missing", "pair": "file://[x]\(home)/Projects/missing",
+                    "mark": "file://\(home)/Projects/gone/../\u{301}x"]
         for (name, uri) in uris { make("\(storage)/\(name)/workspace.json", #"{"folder": "\#(uri)"}"#) }
         make("\(storage)/ws/workspace.json", #"{"folder": "", "workspace": "file://\#(home)/Projects/w.code-workspace"}"#)
         make("\(storage)/none/workspace.json", #"{"folder": null}"#)

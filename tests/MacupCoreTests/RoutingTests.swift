@@ -66,7 +66,10 @@ final class RoutingTests: XCTestCase {
         }
         XCTAssertEqual(route(""), "run", "the menu, or the help without a terminal")
         XCTAssertEqual(route("all --only check.disk,update.brew,clean.derived_data --json"), "run")
-        for line in ["check", "all --only clean.trash", "--deep", "clean --deep --only clean.trash", "clean --pick clean.derived_data:1",
+        XCTAssertEqual(route("check"), "run", "every check, update, cleaner and leftover is ported for a dry run")
+        XCTAssertEqual(route("--deep"), "run")
+        XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .bash, "on a terminal a check ends with the pick")
+        for line in ["all --only clean.npm", "clean --deep --only clean.npm", "clean --pick clean.derived_data:1",
                   "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
             XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }

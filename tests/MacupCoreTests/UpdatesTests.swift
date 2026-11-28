@@ -14,20 +14,7 @@ final class UpdatesTests: XCTestCase {
 
     /// macup_helpers.py `command args…` with this input: what it prints (as `$(…)` keeps it) and whether it ended well.
     func python(_ command: String, _ arguments: [String], input: String = "") throws -> (output: String, ok: Bool) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [BashOracle.repo + "/src/py/macup_helpers.py", command] + arguments
-        process.environment = ["HOME": home, "PATH": "\(home)/bin:/usr/bin:/bin", "LC_CTYPE": "en_US.UTF-8"]
-        let stdout = Pipe(), stdin = Pipe()
-        process.standardOutput = stdout
-        process.standardInput = stdin
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        stdin.fileHandleForWriting.write(Data(input.utf8))
-        try stdin.fileHandleForWriting.close()
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (Bash.substitution(String(decoding: data, as: UTF8.self)), process.terminationStatus == 0)
+        try BashOracle.python(command, arguments, input: input, home: home)
     }
 
     func write(_ text: String, _ name: String) throws -> String {

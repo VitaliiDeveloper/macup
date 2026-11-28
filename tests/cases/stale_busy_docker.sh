@@ -59,7 +59,10 @@ env HOME="$home" macup_run clean --level standard --only clean.npm --no-color </
 
 # --- Docker: the build cache at standard; images and stopped containers only when picked; volumes never. A fake docker records what is asked
 home="$work/dk"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
-# an exported function, like mas above: a real docker in /usr/local/bin would win over a fake file
+# an exported function: a real docker in /usr/local/bin would win over a fake file.
+# Bash only: the Swift binary cannot see a shell function; the docker program below covers both builds
+DK='clean.docker,clean.docker_images,clean.docker_containers,check.docker'
+if bash_only "Docker with an exported docker function"; then
 docker(){ case "$*" in
   info) ;;
   "system df --format {{.Type}}|{{.Reclaimable}}") printf 'Images|2.5GB (50%%)\nContainers|12MB (100%%)\nLocal Volumes|3GB (100%%)\nBuild Cache|1.5GB\n' ;;
@@ -69,7 +72,6 @@ docker(){ case "$*" in
   *) echo "$*" >>"$HOME/docker.log"; echo "Total reclaimed space: 1.5GB" ;;
 esac; }
 export -f docker
-DK='clean.docker,clean.docker_images,clean.docker_containers,check.docker'
 env HOME="$home" macup_run check --only "$DK" --no-color </dev/null >"$work/dk.out" 2>&1
 grep -q 'standard .*1.5 GB  Docker build cache' "$work/dk.out" && grep -q '2.5 GB  Docker images no container uses.*(only if you pick it)' "$work/dk.out" && grep -q 'aggressive .*Stopped Docker containers (2).*(only if you pick it)' "$work/dk.out" \
   && grep -q 'Docker volumes no container uses: 1 — macup never deletes volumes' "$work/dk.out" && [ ! -e "$home/docker.log" ] && pass "Docker: a check lists the cache, the images, the stopped containers and unused volumes; nothing is removed" || { fail "Docker check"; cat "$work/dk.out" "$home/docker.log" 2>/dev/null; }
@@ -79,6 +81,7 @@ rm -f "$home/docker.log"; env HOME="$home" macup_run clean --level aggressive --
 grep -qx 'image prune -a -f' "$home/docker.log" && grep -qx 'container prune -f' "$home/docker.log" && ! grep -q volume "$home/docker.log" && grep -q 'Docker images no container uses.*freed 1.5 GB' "$work/dk.out" \
   && pass "Docker: images and stopped containers when enabled; volumes never" || { fail "Docker opt-in"; cat "$home/docker.log" "$work/dk.out"; }
 unset -f docker
+fi
 # the same, with a docker program in PATH, as it prints it: sizes and answers come from FAKE_DK_* so a run can be empty, failing or stuck
 home="$work/dk2"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
 cat >"$home/.local/bin/docker" <<'FAKE'

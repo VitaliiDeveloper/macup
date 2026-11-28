@@ -87,10 +87,10 @@ public enum Leftovers {
     static func ownFolder(_ run: Run, _ program: String) -> String {
         let home = run.env.home
         for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where Bash.starts(program, base + "/") {
-            let rest = String(decoding: program.utf8.dropFirst(base.utf8.count + 1), as: UTF8.self)
-            guard rest.filter({ $0 == "/" }).count >= 2 else { return "" }   // right in the vendor folder: that folder may hold other data
-            let parts = rest.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
-            let vendorFolder = "\(base)/\(parts[0])", folder = "\(vendorFolder)/\(parts[1])"
+            let parts = program.utf8.dropFirst(base.utf8.count + 1).split(separator: UInt8(ascii: "/"), maxSplits: 2, omittingEmptySubsequences: false)
+            // right in the vendor folder: that folder may hold other data; "", "." and ".." would name another folder than the vendor's
+            guard parts.count == 3, !parts.prefix(2).contains(where: { ["", ".", ".."].map { Array($0.utf8) }.contains(Array($0)) }) else { return "" }
+            let vendorFolder = "\(base)/\(String(decoding: parts[0], as: UTF8.self))", folder = "\(vendorFolder)/\(String(decoding: parts[1], as: UTF8.self))"
             return Run.isDirectory(folder) && !Run.isSymlink(folder) && !Run.isSymlink(vendorFolder) ? folder : ""
         }
         return ""

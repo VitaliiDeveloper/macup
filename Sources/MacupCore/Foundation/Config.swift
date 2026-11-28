@@ -198,11 +198,19 @@ public struct Settings {
         keepReports = Config.num(config.value("keep_reports", "20"), 20)
         staleProjectDays = Config.num(config.value("stale_project_days", "90"), 90)
         simulatorDays = Config.num(config.value("simulator_days", "30"), 30)
-        var step = Config.num(config.value("step_timeout_minutes", "60"), 60) * 60
+        var step = Config.num(config.value("step_timeout_minutes", "60"), 60).saturatingTimes(60)
         if let seconds = env.stepSecsHook { step = Config.num(seconds, step) }   // seconds, for the tests
         stepSeconds = step
         level = cliLevel ?? Config.level(config.value("clean_level", "safe")) ?? 1
         devPrefixes = config.value("dev_container_prefixes", "")
         projectDirs = config.value("project_dirs", "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
+    }
+}
+
+extension Int {
+    /// The product, or Int.max when it does not fit: a limit of a billion years is as good as none.
+    func saturatingTimes(_ factor: Int) -> Int {
+        let product = multipliedReportingOverflow(by: factor)
+        return product.overflow ? Int.max : product.partialValue
     }
 }

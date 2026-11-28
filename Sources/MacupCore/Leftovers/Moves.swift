@@ -37,9 +37,10 @@ extension Leftovers {
         return isEmptyFolder(path)
     }
 
-    /// `[ -z "$(ls -A "$path" 2>/dev/null)" ]`: also true when it cannot be read.
+    /// A folder macup cannot read counts as not empty: 2.9 took it for empty, so a root-only vendor folder went to the Trash
+    /// with other products' data in it.
     static func isEmptyFolder(_ path: String) -> Bool {
-        (try? FileManager.default.contentsOfDirectory(atPath: path))?.isEmpty ?? true
+        (try? FileManager.default.contentsOfDirectory(atPath: path))?.isEmpty ?? false
     }
 
     /// `re_esc`: a path as a pgrep pattern that matches only itself.

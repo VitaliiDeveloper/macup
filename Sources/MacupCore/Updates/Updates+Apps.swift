@@ -22,7 +22,7 @@ extension Updates {
         out.info("App Store: updates: %s", String(count))
         run.lines(names)
         var log = run.log
-        log.runSeconds = log.stepSeconds * 4   // an Xcode download alone can take longer than any other step
+        log.runSeconds = log.stepSeconds.saturatingTimes(4)   // an Xcode download alone can take longer than any other step
         var number = 0
         for line in Bash.lines(outdated) {
             let words = read(line, 2), id = words[0], app = words[1]

@@ -38,10 +38,19 @@ public struct Env {
         public var message: String { "macup: HOME is not set" }
     }
 
+    /// "/", "//", "/." or "/x/..": the folder is the root, whose Library is the system's.
+    static func namesRoot(_ path: String) -> Bool {
+        var depth = 0
+        for part in path.utf8.split(separator: UInt8(ascii: "/")) where !part.elementsEqual(".".utf8) {
+            depth = part.elementsEqual("..".utf8) ? max(0, depth - 1) : depth + 1
+        }
+        return depth == 0
+    }
+
     public init(_ vars: [String: String]) throws {
         self.vars = vars
         let home = vars["HOME"] ?? ""
-        guard home.hasPrefix("/"), home.count > 1 else { throw Failure.noHome }
+        guard home.hasPrefix("/"), !Env.namesRoot(home) else { throw Failure.noHome }
         self.home = home
         userPath = vars["PATH"] ?? ""
         if vars["MACUP_PATH"] == "keep" {

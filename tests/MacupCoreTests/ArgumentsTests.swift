@@ -82,9 +82,27 @@ final class ArgumentsTests: XCTestCase {
         }
     }
 
+    /// A limit too large to count in seconds is no limit: `* 60` trapped (exit 133 on every run), and `* 4` after a mas install.
+    func testHugeStepLimitSaturates() throws {
+        let environment = try env()
+        try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: environment.home) }
+        for (text, seconds, apps) in [("999999999999999999", Int.max, Int.max), ("99999999999999999", 5_999_999_999_999_999_940, Int.max),
+                                      ("99999999999999999999", 3600, 14400), ("60", 3600, 14400)] {
+            try "step_timeout_minutes = \(text)\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+            let settings = Settings(config: Config(env: environment), env: environment, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
+            XCTAssertEqual(settings.stepSeconds, seconds, text)
+            XCTAssertEqual(settings.stepSeconds.saturatingTimes(4), apps, text)
+        }
+        let shell = Shell(env: environment)
+        XCTAssertEqual(shell.tl(Int.max, ["/bin/sh", "-c", "exit 3"]), 3, "the watchdog takes Int.max seconds")
+        XCTAssertEqual(shell.timedCapture(Int.max, ["/bin/echo", "hi"]).data, Data("hi\n".utf8))
+    }
+
     func testEnvironment() throws {
         XCTAssertThrowsError(try Env(["HOME": ""]))
-        XCTAssertThrowsError(try Env(["HOME": "/"]))
+        for root in ["/", "//", "/.", "/./", "/x/..", "/x/./../.."] { XCTAssertThrowsError(try Env(["HOME": root]), root) }
+        for home in ["/h", "/../h", "/h/.", "/.h"] { XCTAssertNoThrow(try Env(["HOME": home]), home) }
         XCTAssertThrowsError(try Env(["HOME": "relative"]))
         var environment = try Env(["HOME": "/h", "PATH": "/usr/bin"])
         XCTAssertEqual(environment.path, "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/h/.local/bin:/h/.npm-global/bin:/h/.cargo/bin:/usr/bin")

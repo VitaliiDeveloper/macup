@@ -112,7 +112,7 @@ extension Cleaners {
         for name in entries where Run.isDirectory(folder + "/" + name) {
             let path = folder + "/" + name
             if Run.isSymlink(path) || name.hasSuffix(".app") || name.hasSuffix(".ShipIt") || name == "org.sparkle-project.Sparkle" { continue }
-            if depth == 0, name.hasPrefix("com.apple.") || name == "macup" { continue }
+            if depth == 0, Bash.starts(name, "com.apple.") || name == "macup" { continue }
             if names.contains(name) || (name == "cache2" && isCaches) {
                 if depth > 0, isCaches || (name != "cache2" && chromium(folder)) { record(root, path) }
                 continue

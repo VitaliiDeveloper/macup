@@ -1,7 +1,7 @@
 @testable import MacupCore
 import XCTest
 
-/// hum, tokb, tokb10, ulen, pad, jstr, jlines, jarr: byte-identical with core.sh.
+/// hum, tokb, tokb10, ulen, pad, jstr, jlines, jarr: byte-identical with what 2.9's core.sh printed.
 final class SizeTextJSONTests: XCTestCase {
     // captured from `hum` of the bash build (awk 20200816)
     let humCaptured: [(String, String)] = [
@@ -53,28 +53,34 @@ final class SizeTextJSONTests: XCTestCase {
         XCTAssertEqual(JSON.array([]), "[]")
     }
 
-    /// The same inputs and more through the bash functions themselves.
-    func testAgainstBash() throws {
-        let nums = humCaptured.map(\.0) + ["2147483647", "99999999999", "-0", "1e9", "1,5", "5.", "  -3  ", "3 x", "nan", "-inf", "0x1p3"]
-        let sizes = tokbCaptured.map(\.0) + ["1.5 MB", "MB", "1.5TB", "0.5gB", "12.34567GB", "-E", "1KB\n\n3KB", "9e2MB"]
-        // \001 and \177 are left out: bash 3.2 mangles them in script text (its own quoting bytes)
-        let texts = ["", "x", "Пам'ять", "e\u{301}e\u{301}", "🇺🇦", "a\tb", "日本語テキスト", "tab\there", "q\"\\'", "\u{1F}é\u{1B}", "line1\nline2\n\nline4"]
-        var calls: [String] = []
-        calls += nums.map { "hum \(BashOracle.quoted($0))" }
-        calls += sizes.flatMap { ["tokb \(BashOracle.quoted($0))", "tokb10 \(BashOracle.quoted($0))"] }
-        calls += texts.flatMap { text in ["ulen", "pad", "jstr", "jlines", "jarr"].map { "\($0) \(BashOracle.quoted(text)) \($0 == "pad" ? "12" : $0 == "jarr" ? "b" : "")" } }
-        let got = try BashOracle.run(calls)
-        var index = 0
-        for number in nums { XCTAssertEqual(Size.hum(number), got[index], "hum \(number)"); index += 1 }
-        for size in sizes {
-            XCTAssertEqual(Size.tokb(size), got[index], "tokb \(size.debugDescription)")
-            XCTAssertEqual(Size.tokb10(size), got[index + 1], "tokb10 \(size.debugDescription)")
-            index += 2
+    /// More inputs, as core.sh's functions answered them.
+    func testMoreCaptured() {
+        let hum = [("2147483647", "2199.0 GB"), ("99999999999", "102400.0 GB"), ("-0", "0 KB"), ("1e9", "1024.0 GB"), ("1,5", "1 KB"), ("5.", "5 KB"),
+                   ("  -3  ", "-3 KB"), ("3 x", "3 KB"), ("nan", "nan GB"), ("-inf", "-inf GB"), ("0x1p3", "8 KB")]
+        for (kilobytes, want) in hum { XCTAssertEqual(Size.hum(kilobytes), want, "hum \(kilobytes)") }
+        let tokb = [("1.5 MB", "0", "0"), ("MB", "0", "0"), ("1.5TB", "1610612736", "1464843750"), ("0.5gB", "524288", "488281"),
+                    ("12.34567GB", "12945373", "12056318"), ("-E", "0", "0"), ("1KB\n\n3KB", "103", "002"), ("9e2MB", "0", "0")]
+        for (size, kb, kb10) in tokb {
+            XCTAssertEqual(Size.tokb(size), kb, "tokb \(size.debugDescription)")
+            XCTAssertEqual(Size.tokb10(size), kb10, "tokb10 \(size.debugDescription)")
         }
-        for text in texts {
+        // text, ulen, pad to 12, jstr, jlines; jarr is [jstr, "b"]
+        let texts: [(String, Int, String, String, String)] = [
+            ("", 0, "            ", "", "[]"),
+            ("x", 1, "x           ", "x", "[\"x\"]"),
+            ("Пам'ять", 7, "Пам'ять     ", "Пам'ять", "[\"Пам'ять\"]"),
+            ("e\u{301}e\u{301}", 4, "e\u{301}e\u{301}        ", "e\u{301}e\u{301}", "[\"e\u{301}e\u{301}\"]"),
+            ("🇺🇦", 2, "🇺🇦          ", "🇺🇦", "[\"🇺🇦\"]"),
+            ("a\tb", 3, "a\tb         ", "ab", "[\"ab\"]"),
+            ("日本語テキスト", 7, "日本語テキスト     ", "日本語テキスト", "[\"日本語テキスト\"]"),
+            ("tab\there", 8, "tab\there    ", "tabhere", "[\"tabhere\"]"),
+            ("q\"\\'", 4, "q\"\\'        ", "q\\\"\\\\'", "[\"q\\\"\\\\'\"]"),
+            ("\u{1F}\u{E9}\u{1B}", 3, "\u{1F}\u{E9}\u{1B}         ", "\u{E9}", "[\"\u{E9}\"]"),
+            ("line1\nline2\n\nline4", 18, "line1\nline2\n\nline4 ", "line1line2line4", "[\"line1\",\"line2\",\"line4\"]"),
+        ]
+        for (text, length, padded, string, lines) in texts {
             let swift = [String(Text.ulen(text)), Text.pad(text, 12), JSON.str(text), JSON.lines(text), JSON.array([text, "b"])]
-            XCTAssertEqual(swift, Array(got[index..<index + 5]), "text \(text.debugDescription)")
-            index += 5
+            XCTAssertEqual(swift, [String(length), padded, string, lines, "[\"\(string)\",\"b\"]"], "text \(text.debugDescription)")
         }
     }
 
@@ -84,9 +90,7 @@ final class SizeTextJSONTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: dir) }
         try Data(count: 300 * 1024).write(to: URL(fileURLWithPath: dir + "/blob"))
         let shell = Shell(env: try Env(["HOME": "/Users/someone", "PATH": "/usr/bin:/bin", "MACUP_PATH": "keep"]))
-        let want = try BashOracle.run(["kb \(BashOracle.quoted(dir))", "kb \(BashOracle.quoted(dir + "/none"))"])
-        XCTAssertEqual(String(Size.kb(dir, shell: shell)), want[0])
-        XCTAssertEqual(String(Size.kb(dir + "/none", shell: shell)), want[1])
-        XCTAssertGreaterThanOrEqual(Size.kb(dir, shell: shell), 300)
+        XCTAssertEqual(Size.kb(dir, shell: shell), 300)
+        XCTAssertEqual(Size.kb(dir + "/none", shell: shell), 0)
     }
 }

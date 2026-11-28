@@ -1,66 +1,55 @@
 @testable import MacupCore
 import XCTest
 
-/// The text the checks read out of macOS tools: the same answer as the sed, awk and grep of checks.sh and report.sh.
+/// The text the checks read out of macOS tools: the same answer as the sed, awk and grep of 2.9's checks.sh and report.sh gave.
 final class ChecksTests: XCTestCase {
 
-    func testUptimeAsSed() throws {
+    func testUptimeAsSed() {
         let samples = ["10:00  up 3 days,  4:05, 2 users, load averages: 1.00 1.20 1.30", "16:35  up 20:31, 3 users, load averages: 2.81 3.07 2.53",
                        "9:01  up 5 mins, 1 user, load averages: 0.1 0.2 0.3", "9:01  up 1 day, 2 mins, 2 users, load averages: 1 1 1",
                        "9:01  up 12 days, 23:59, 1 user", "no uptime here", "", "a up b, c up 4 days, 1:02, x"]
-        let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | sed -E 's/.* up ([^,]+(, *[0-9]+:[0-9]+)?),.*/\\1/'" })
-        XCTAssertEqual(samples.map(Uptime.text), bash)
+        XCTAssertEqual(samples.map(Uptime.text), ["3 days,  4:05", "20:31", "5 mins", "1 day", "12 days, 23:59", "no uptime here", "", "4 days, 1:02"])
     }
 
-    func testSwapAsAwk() throws {
+    func testSwapAsAwk() {
         let samples = ["total = 2048.00M  used = 512.25M  free = 1535.75M  (encrypted)", "total = 8G used = 7.5G free = 0.5G", "used = x", "used =",
                        "nothing", "", "a\nused = 3.9M"]
-        let awk = #"awk '{for(i=1;i<=NF;i++) if($i=="used"){v=$(i+2); m=1; if(v~/G/)m=1024; gsub(/[MG]/,"",v); printf "%d", v*m; exit}}'"#
-        let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | \(awk)" })
-        XCTAssertEqual(samples.map { Checks.swapUsed($0 + "\n") }, bash)
+        XCTAssertEqual(samples.map { Checks.swapUsed($0 + "\n") }, ["512", "7680", "0", "0", "", "", "3"])
     }
 
-    func testMemoryAndBatteryFieldsAsAwk() throws {
+    func testMemoryAndBatteryFieldsAsAwk() {
         let samples = ["System-wide memory free percentage: 42%", "System-wide memory free percentage: 9.5%", "free percentage:x: 7%",
                        "free percentage", "a: free percentage: 3%\nfree percentage: 4%"]
-        let awk = #"awk -F': ' '/free percentage/{gsub(/%/,"",$2); print $2+0}'"#
-        let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | \(awk)" })
-        XCTAssertEqual(samples.map { Checks.fields($0, containing: "free percentage").map { Checks.awkNumber(Awk.number($0.replacingOccurrences(of: "%", with: ""))) }.joined(separator: "\n") }, bash)
+        XCTAssertEqual(samples.map { Checks.fields($0, containing: "free percentage").map { Checks.awkNumber(Awk.number($0.replacingOccurrences(of: "%", with: ""))) }.joined(separator: "\n") },
+                       ["42", "9.5", "7", "0", "0\n4"])
         let power = "Power:\n      Health Information:\n          Cycle Count: 612\n          Condition: Service Recommended\n          Maximum Capacity: 76%\n          Cycle Count: 9"
         let keys = ["Cycle Count", "Condition", "Maximum Capacity", "Missing"]
-        let fields = try BashOracle.run(keys.map { "echo \(BashOracle.quoted(power)) | awk -F': ' '/\($0)/{print $2; exit}'" })
-        XCTAssertEqual(keys.map { Checks.fields(power, containing: $0).first ?? "" }, fields)
+        XCTAssertEqual(keys.map { Checks.fields(power, containing: $0).first ?? "" }, ["612", "Service Recommended", "76%", ""])
         XCTAssertEqual(Checks.field("{ sec = 1795633455, usec = 34576 } Wed Nov 25", 2, separator: "sec = "), "1795633455, u")
     }
 
-    func testTopProcessesAsAwkPasteSed() throws {
+    func testTopProcessesAsAwkPasteSed() {
         let samples = [" 35.2 Xcode\n  4.0 Google  Chrome Helper\n  1.5 odd,name\n  0.1 later\n", "12.0 one\n", "", " 3.0\n"]
-        let cpu = #"head -3 | awk '{p=$1; $1=""; sub(/^ /,""); printf "%s%% %s\n", p, $0}' | paste -sd ',' - | sed 's/,/, /g'"#
-        let memory = #"head -3 | awk '{r=$1; $1=""; sub(/^ /,""); printf "%.1f GB %s\n", r/1048576, $0}' | paste -sd ',' - | sed 's/,/, /g'"#
-        let bash = try BashOracle.run(samples.flatMap { ["printf '%s' \(BashOracle.quoted($0)) | \(cpu)", "printf '%s' \(BashOracle.quoted($0)) | \(memory)"] })
         let swift = samples.flatMap { [Checks.top($0) { "\($0)% " }, Checks.top($0) { Awk.format("%.1f", Awk.number($0) / 1_048_576) + " GB " }] }
-        XCTAssertEqual(swift, bash)
+        XCTAssertEqual(swift, ["35.2% Xcode, 4.0% Google Chrome Helper, 1.5% odd, name", "0.0 GB Xcode, 0.0 GB Google Chrome Helper, 0.0 GB odd, name",
+                               "12.0% one", "0.0 GB one", "", "", "3.0% ", "0.0 GB "])
     }
 
-    func testLoadComparisonAsAwk() throws {
+    func testLoadComparisonAsAwk() {
         let samples = [("2.50", "8"), ("13.00", "8"), ("12", "8"), ("12.01", "8"), ("busy", "x"), ("", "8"), ("0", "0"), ("1e2", "64"), ("abc", "100")]
-        let bash = try BashOracle.run(samples.map { "awk -v l=\(BashOracle.quoted($0.0.isEmpty ? "0" : $0.0)) -v c=\(BashOracle.quoted($0.1)) 'BEGIN{print (l > c*1.5) ? 1 : 0}'" })
-        XCTAssertEqual(samples.map { Checks.loadIsHigh($0.0, cores: $0.1) ? "1" : "0" }, bash)
+        XCTAssertEqual(samples.map { Checks.loadIsHigh($0.0, cores: $0.1) }, [false, true, false, true, true, false, false, true, true])
     }
 
-    func testPercentAndBackupDateAsGrep() throws {
+    func testPercentAndBackupDateAsGrep() {
         let batteries = ["Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t83%; charging", "a%b 12%", "x\n55%% y", "no percent", "12a34% 5%"]
-        let charge = try BashOracle.run(batteries.map { "printf '%s\\n' \(BashOracle.quoted($0)) | grep -o '[0-9]*%' | head -1" })
-        XCTAssertEqual(batteries.map(Checks.firstPercent), charge)
+        XCTAssertEqual(batteries.map(Checks.firstPercent), ["83%", "%", "55%", "", "34%"])
         let backups = ["/Volumes/x/2026-11-01-101010.backup/2026-11-24-101010.backup", "Failed to mount backup destination", "2026-1-01 and 2026-10-01\n12345-06-078"]
-        let dates = try BashOracle.run(backups.map { "printf '%s\\n' \(BashOracle.quoted($0)) | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1" })
-        XCTAssertEqual(backups.map { Checks.latestBackup($0) ?? "" }, dates)
+        XCTAssertEqual(backups.map { Checks.latestBackup($0) ?? "" }, ["2026-11-24", "", "2345-06-07"])
     }
 
-    func testIntegerTestsAsBracket() throws {
+    func testIntegerTestsAsBracket() {
         let samples = ["9", " 76 ", "9.5", "", "+7", "-3", "7x", "1\n2", "75\r", "\n 7", "7\n", "7\t"]
-        let bash = try BashOracle.run(samples.map { "[ \(BashOracle.quoted($0)) -lt 15 ] 2>/dev/null && echo yes || echo no" })
-        XCTAssertEqual(samples.map { (Checks.integer($0).map { $0 < 15 } ?? false) ? "yes" : "no" }, bash)
+        XCTAssertEqual(samples.map { Checks.integer($0).map { $0 < 15 } == true }, [true, false, false, false, true, true, false, false, false, true, false, true])
     }
 
     func testDownloadBatchesAsXargs() {
@@ -79,20 +68,16 @@ final class ChecksTests: XCTestCase {
         XCTAssertEqual(Checks.isOn("FileVault is Off.", "is On"), false)
     }
 
-    func testReadSizeAndPath() throws {
+    func testReadSizeAndPath() {
         let samples = ["123\t/Users/me/Code", "  7   /path with  spaces  ", "42", "", "5\t\t/tab\\path"]
-        let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | { read -r size path; printf '%s|%s' \"$size\" \"$path\"; }" })
-        XCTAssertEqual(samples.map { Checks.sizeAndPath($0) }.map { "\($0.0)|\($0.1)" }, bash)
+        XCTAssertEqual(samples.map { Checks.sizeAndPath($0) }.map { "\($0.0)|\($0.1)" }, ["123|/Users/me/Code", "7|/path with  spaces", "42|", "|", "5|/tab\\path"])
     }
 
     /// The age counts from the day's midnight, as `date -j -f '%Y-%m-%d %H:%M:%S' "<day> 00:00:00"` reads it; a day strptime
     /// rejects is 0, as bash's `|| date +%s` makes it.
-    func testBackupAgeFromMidnightAsDate() throws {
+    func testBackupAgeFromMidnightAsDate() {
         let days = ["2026-10-20", "2026-03-08", "2026-11-01", "2026-02-31", "2026-13-01", "2026-00-10", "2026-11-18"]
-        let bash = try BashOracle.run(days.map { "/bin/date -j -f '%Y-%m-%d %H:%M:%S' \(BashOracle.quoted($0 + " 00:00:00")) +%s 2>/dev/null || echo none" })
-        let now = time_t(1_795_000_000)
-        for (day, then) in zip(days, bash) {
-            XCTAssertEqual(Checks.backupAge(day, now: now), then == "none" ? 0 : Int((now - time_t(then)!) / 86400), day)
-        }
+        // local midnights, half a day off `now`'s: the ages hold in every zone from UTC-10 to UTC+12
+        XCTAssertEqual(days.map { Checks.backupAge($0, now: 1_795_000_000) }, [29, 255, 17, 260, 0, 0, 0])
     }
 }

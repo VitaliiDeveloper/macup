@@ -73,3 +73,17 @@ enum BashOracle {
     /// A value as a single-quoted bash word.
     static func quoted(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }
+
+extension CleanupTests {
+    /// cleanup.sh from the build folder table to dev_prefixes (artifact_ok, ai_path, safe_path, in_cache_dir, project_roots),
+    /// in_projects, and the Electron cache names safe_path reads.
+    static var safePathFunctions: String {
+        let cleanup = BashOracle.read("src/cleanup.sh"), cleaners = BashOracle.read("src/cleaners.sh")
+        func slice(_ text: String, from start: String, upTo end: String) -> String {
+            let lower = text.range(of: start)!.lowerBound
+            return String(text[lower..<text.range(of: end, range: lower..<text.endIndex)!.lowerBound]) + "\n"
+        }
+        return slice(cleanup, from: "ARTIFACT_NAMES=", upTo: "\ndev_prefixes(){") + slice(cleanup, from: "in_projects(){", upTo: "\nkbl(){")
+            + slice(cleaners, from: "ELECTRON_CACHES=", upTo: "\n")
+    }
+}

@@ -257,13 +257,14 @@ Environment variables: `MACUP_LANG` (language), `NO_COLOR` (plain output), `XDG_
 
 ## Tech stack and architecture
 
-- **Bash**, compatible with the stock macOS bash 3.2. Small embedded Python 3 snippets read JSON.
-- **Single-file build:** the source lives in `src/*.sh`. `build.sh` joins the parts in a fixed order and embeds the translations from `src/i18n/translations.json`. The result is the one `macup` file users install, and `macup.sha256`, which `self-update` and the installer check the download against.
-- **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table in `src/core.sh`. `--skip`, `--only`, `skip` and `enable` all use these ids.
-- **Cleaners as data:** tables at the top of `src/cleaners.sh` (`CACHE_DIRS`, `TOOL_CACHES`, `ELECTRON_APPS`, `BROWSERS`). A new cache is usually one line.
+- **Swift, one universal binary** (arm64 and x86_64) for macOS 13 and later, with no dependencies beyond the system. It runs the tools it updates and measures (`brew`, `npm`, `du`, `find`, …) as programs, found through `PATH`.
+- **Swift package:** `Sources/macup` is the command line; `Sources/MacupCore` holds everything else, one folder per area (`Foundation`, `Run`, `Checks`, `Updates`, `Tools`, `Cleaners`, `Cleanup`, `Leftovers`, `Commands`). The translations live in `src/i18n/translations.json`; `build.sh` embeds them in the binary.
+- **Task registry:** every step has an id (`check.*`, `update.*`, `clean.*`) in one table, `Tasks.all` in `Foundation/Tasks.swift`. `--skip`, `--only`, `skip` and `enable` all use these ids.
+- **Cleaners as data:** cache folders are rows in `Cleanup/CacheTables.swift`. A new cache is usually one line.
 - **Two-phase cleanup:** cleaners first register candidates with a size and level, then the chosen ones run. Every path is checked against an allow-list again right before it is deleted.
-- **Tests:** `tests/run.sh` runs macup against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`). It checks that each level deletes exactly the expected files and that protected files survive.
-- **CI (GitHub Actions):** ShellCheck on Ubuntu; a bash 3.2 syntax check, the tests, an install and smoke runs on macOS 15 and 26, Apple silicon.
+- **The root `macup` is not the program.** It is the bash bootstrap that moves a 2.9 install onto the binary: 2.9's `self-update` reads it from `main` and checks it against `macup.sha256`. Both are committed; `install.sh` runs the bootstrap too, so the download and its checks live in one place.
+- **Tests:** `swift test` runs the unit tests. `tests/run.sh` runs the binary against throwaway fake home folders, with fake `pgrep`, `lsof`, `xcrun`, `mas`, `docker`, `security`, `curl`, `launchctl` and system tools (`softwareupdate`, `system_profiler`, `memory_pressure`); it checks that each level deletes exactly the expected files and that protected files survive. `tests/shipping.sh` (run by `tests/run.sh`) tests the release tools, the installer and the bootstrap against a fake GitHub release, including a 2.9.2 `self-update`.
+- **CI (GitHub Actions):** ShellCheck on Ubuntu; the build, XCTest and the release archive on macOS 26; the suite, an install from the checkout and smoke runs on macOS 15 and 26, Apple silicon.
 
 Development:
 
@@ -272,12 +273,16 @@ Development:
 ```
 
 ```bash
+swift test
+```
+
+```bash
 tests/run.sh
 ```
 
-Edit `src/`, run `./build.sh` to rebuild `macup`, then run `tests/run.sh` on macOS. `./build.sh --check` fails if `macup` is out of date.
+`./build.sh` builds the binary (`swift build`, after writing `Sources/macup/Generated/Translations.swift`); `./build.sh --check` also fails if `macup.sha256` does not match the committed `macup`. `tests/run.sh` runs the suite on `.build/debug/macup`, or on `MACUP_BIN`. The history of the port from bash is in [docs/swift-port-plan.md](docs/swift-port-plan.md), and release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-On the `swift/main` branch (the port to Swift, see [docs/swift-port-plan.md](docs/swift-port-plan.md)) `./build.sh` also builds the Swift package, whose binary runs everything itself; the bash build stays as the oracle `tests/diff.sh` compares it with, and neither `macup` nor the binary is committed there. `swift test` runs the unit tests, `MACUP_BUILD=swift tests/run.sh` runs the suite on the binary, and `tests/diff.sh` compares the two builds case by case. Release notes are in [CHANGELOG.md](CHANGELOG.md). After tagging a release and pushing the tag, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at it (tarball URL and SHA-256), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`. `tools/screenshots.sh` makes the screenshots in `docs/images` from the macup in the checkout, run against a made-up Mac (fake home, sizes and free space), so nothing of your own Mac shows up.
+Releases: `tools/release.sh OUTDIR [VERSION]` builds the universal binary, strips and ad hoc signs it, and packs `macup-<version>-macos-universal.tar.gz` with its SHA-256; CI runs it on every pull request, and `.github/workflows/release.yml` runs it on a `v*` tag and uploads the archive. After the release is published, `tools/bump-formula.sh X.Y.Z [TAP_DIR]` points the Homebrew tap's `Formula/macup.rb` at that archive (URL and SHA-256, once the asset exists), shows the diff and prints the commit and push commands; `--commit` commits in the tap, nothing is ever pushed. The tap defaults to `~/Documents/Work-Projects/homebrew-macup`. `tools/screenshots.sh` makes the screenshots in `docs/images` from the binary in the checkout, run against a made-up Mac (fake home, sizes and free space), so nothing of your own Mac shows up.
 
 ## License
 

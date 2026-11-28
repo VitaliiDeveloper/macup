@@ -20,7 +20,9 @@ extension Cleanup {
         case .empty:
             before = run.kbl(candidate.paths)
             for folder in paths where Run.isDirectory(folder) && !Run.isSymlink(folder) && run.safePaths.allows(folder) {
-                for name in (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? [] { _ = delete(run, "\(folder)/\(name)") }
+                // find … | while read -r: a name with a line break in it falls apart into paths that are not there or refused
+                let entries = run.shell.capture(["find", folder, "-mindepth", "1", "-maxdepth", "1"]).output
+                for entry in Bash.lines(entries) where !entry.isEmpty { _ = delete(run, entry) }
             }
             after = run.kbl(candidate.paths)
         case .rm, .trash:

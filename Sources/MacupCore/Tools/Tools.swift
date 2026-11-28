@@ -59,11 +59,8 @@ enum Tools {
         let out = run.out
         out.step("brew doctor")
         let doctor = capture(run.shell, 240, ["brew", "doctor"], stderr: .stdout)
-        let text = Bash.substitution(doctor.text), echoed = Bash.echo(text)
-        // the report keeps the bytes brew wrote, as bash's echo does
-        var bytes = doctor.data.filter { $0 != 0 }
-        while bytes.last == 0x0A { bytes.removeLast() }
-        appendRaw(run, echoed == text + "\n" ? bytes + [0x0A] : Data(echoed.utf8))
+        let text = Bash.substitution(doctor.text)
+        run.log.echo(doctor.data)
         let warnings = Bash.lines(text).filter { starts($0, "Warning:") }.count
         if doctor.status == 124 {
             out.warn("%s: no answer in %s seconds, skipped", "brew doctor", "240")
@@ -273,13 +270,6 @@ enum Tools {
     }
 
     /// `… >>"$RAW"` of bytes.
-    static func appendRaw(_ run: Run, _ data: Data) {
-        let descriptor = open(run.log.raw, O_WRONLY | O_CREAT | O_APPEND, 0o644)
-        guard descriptor >= 0 else { return }
-        _ = data.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
-        close(descriptor)
-    }
-
     /// `(cd "$HOME" && …)`, as Updates.inHome has it for a step, around any work: PWD and OLDPWD as cd leaves them.
     static func inHome<Result>(_ run: Run, orElse failed: Result, _ body: () -> Result) -> Result {
         let shell = run.shell, saved = (pwd: shell.vars["PWD"], oldpwd: shell.vars["OLDPWD"])

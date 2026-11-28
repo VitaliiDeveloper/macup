@@ -30,15 +30,15 @@ extension Cleaners {
     }
 
     /// `$(tool 2>&1)`: both streams on one pipe; 127 when the tool is not there.
-    static func outputAndErrors(_ run: Run, _ argv: [String]) -> (status: Int32, output: String) {
+    static func outputAndErrors(_ run: Run, _ argv: [String]) -> (status: Int32, output: Data) {
         var ends: [Int32] = [0, 0]
-        guard pipe(&ends) == 0 else { return (127, "") }
+        guard pipe(&ends) == 0 else { return (127, Data()) }
         guard let pid = run.shell.spawn(argv, stdin: .inherit, stdout: .fd(ends[1]), stderr: .stdout) else {
-            close(ends[0]); close(ends[1]); return (127, "")
+            close(ends[0]); close(ends[1]); return (127, Data())
         }
         close(ends[1])
         let data = FileHandle(fileDescriptor: ends[0], closeOnDealloc: true).readDataToEndOfFile()
-        return (Shell.wait(pid), String(decoding: data, as: UTF8.self))
+        return (Shell.wait(pid), data)
     }
 
     /// `IFS=<separator> read -r first … last`: a blank separator (a tab) also drops runs of itself at the ends and between

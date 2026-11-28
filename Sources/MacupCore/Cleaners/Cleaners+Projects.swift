@@ -50,7 +50,7 @@ extension Cleaners {
 
     /// Anything but "not a git repository" keeps the folder: tracked files, or a repository git refuses to read.
     static func tracked(_ run: Run, _ folder: String) -> Bool {
-        let output = outputAndErrors(run, ["git", "-C", folder, "ls-files", "."]).output
+        let output = String(decoding: outputAndErrors(run, ["git", "-C", folder, "ls-files", "."]).output, as: UTF8.self)
         guard !output.isEmpty else { return false }
         var lines = Bash.lines(output)
         if output.hasSuffix("\n") { lines.removeLast() }

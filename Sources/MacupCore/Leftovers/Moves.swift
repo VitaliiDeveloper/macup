@@ -7,7 +7,7 @@ extension Leftovers {
     /// `to_trash`: false when it was refused or did not move (the report says why).
     static func toTrash(_ run: Run, _ path: String, sudo: Bool = false) -> Bool {
         let home = run.env.home
-        if path.isEmpty || path.contains("/../") || path.hasSuffix("/..") {
+        if path.isEmpty || holds(path, "/../") || path.utf8.reversed().starts(with: "/..".utf8.reversed()) {
             run.log.append("macup refused to move: \(path)\n")
             return false
         }

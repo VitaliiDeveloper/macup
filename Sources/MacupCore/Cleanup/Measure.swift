@@ -69,9 +69,10 @@ public final class Measure {
         walks[index].pid = nil
     }
 
+    /// `${path%/*}`, by scalars: a combining mark after a slash stays a name of its own, as bash sees bytes.
     static func parent(_ path: String) -> String {
-        guard let slash = path.lastIndex(of: "/") else { return path }
-        return String(path[..<slash])
+        guard let slash = path.unicodeScalars.lastIndex(of: "/") else { return path }
+        return String(path.unicodeScalars[..<slash])
     }
 
     private static func lines(_ file: String) -> [String] {

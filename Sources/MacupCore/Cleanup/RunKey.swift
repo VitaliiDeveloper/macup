@@ -9,7 +9,7 @@ extension Cleanup {
         func plain(_ argv: [String]) -> KeyResult { (run.run(argv), nil) }
         // ${key#prefix} as an unquoted expansion splits it
         func words(_ prefix: String) -> [String] {
-            key.dropFirst(prefix.count).split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
+            key.unicodeScalars.dropFirst(prefix.count).split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map { String(String.UnicodeScalarView($0)) }
         }
         func eachSimulator(_ prefix: String, _ argv: (String) -> [String]) -> KeyResult {
             for id in words(prefix) where !Cleaners.simulatorID(run, id) || run.run(argv(id)) != 0 { return (1, nil) }
@@ -18,8 +18,8 @@ extension Cleanup {
         switch key {
         case "brew":
             let output = Cleaners.outputAndErrors(run, ["brew", "cleanup", "-s", "--prune=7"]).output
-            logged(run, output)
-            let amount = Cleaners.matches(brewFreed, in: Bash.echo(Bash.substitution(output))).last.map { Awk.field($0, 3) } ?? ""
+            run.log.echo(output)
+            let amount = Cleaners.matches(brewFreed, in: text(output)).last.map { Awk.field($0, 3) } ?? ""
             return (0, Int64(Size.tokb(amount)))
         case "npm": return plain(["npm", "cache", "verify"])
         case "pnpm": return plain(["pnpm", "store", "prune"])
@@ -31,7 +31,7 @@ extension Cleanup {
         case "quicklook": return plain(["qlmanage", "-r", "cache"])
         case "dockerct", "dockerimg":
             let result = Cleaners.outputAndErrors(run, key == "dockerct" ? ["docker", "container", "prune", "-f"] : ["docker", "image", "prune", "-a", "-f"])
-            logged(run, result.output)
+            run.log.echo(result.output)
             return (result.status == 0 ? 0 : 1, Int64(Size.tokb10(reclaimed(result.output).last ?? "")))
         case "docker":
             var result = Cleaners.outputAndErrors(run, ["docker", "builder", "prune", "-f"])
@@ -39,7 +39,7 @@ extension Cleanup {
                 let images = Cleaners.outputAndErrors(run, ["docker", "image", "prune", "-f"])
                 result = (images.status, result.output + images.output)
             }
-            logged(run, result.output)
+            run.log.echo(result.output)
             return (result.status == 0 ? 0 : 1, reclaimed(result.output).reduce(0) { $0 + (Int64(Size.tokb10($1)) ?? 0) })
         case _ where key.hasPrefix("sim:"):
             // the sets that have some: sim:[default] [tests]
@@ -64,15 +64,13 @@ extension Cleanup {
 
     private static let brewFreed = try! NSRegularExpression(pattern: "freed approximately [0-9.]*[KMGT]*B")
 
-    /// `echo "$out" >>"$RAW"`.
-    private static func logged(_ run: Run, _ output: String) {
-        run.log.append(Bash.echo(Bash.substitution(output)))
-    }
+    /// `echo "$out"`, as the next tool in the pipe reads it.
+    private static func text(_ output: Data) -> String { Bash.echo(Bash.substitution(String(decoding: output, as: UTF8.self))) }
 
     /// `echo "$out" | sed -n 's/^Total reclaimed space: *//p'`.
-    private static func reclaimed(_ output: String) -> [String] {
+    private static func reclaimed(_ output: Data) -> [String] {
         let marker = "Total reclaimed space:"
-        return Bash.lines(Bash.substitution(output)).compactMap { line in
+        return Bash.lines(text(output)).compactMap { line in
             guard line.unicodeScalars.starts(with: marker.unicodeScalars) else { return nil }
             return String(String.UnicodeScalarView(line.unicodeScalars.dropFirst(marker.unicodeScalars.count).drop { $0 == " " }))
         }

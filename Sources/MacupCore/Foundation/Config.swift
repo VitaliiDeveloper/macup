@@ -63,10 +63,12 @@ public struct Config {
     private static let unicodeBlanks: Set<UInt32> = [0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
                                                     0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000]
 
+    func isSpace(_ scalar: Unicode.Scalar) -> Bool { Self.isSpace(scalar, utf8: utf8) }
+
     /// [[:space:]]: the locale's blanks in UTF-8, the six ASCII ones otherwise.
-    func isSpace(_ scalar: Unicode.Scalar) -> Bool {
+    static func isSpace(_ scalar: Unicode.Scalar, utf8: Bool) -> Bool {
         if scalar.isASCII || !utf8 { return scalar == " " || scalar == "\t" || scalar == "\n" || scalar == "\u{0B}" || scalar == "\u{0C}" || scalar == "\r" }
-        return Self.unicodeBlanks.contains(scalar.value)
+        return unicodeBlanks.contains(scalar.value)
     }
 
     /// `write_default_conf`: the commented config a first `macup config`, `macup lang` or `conf_set` writes.

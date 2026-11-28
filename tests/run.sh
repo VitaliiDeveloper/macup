@@ -17,6 +17,10 @@ quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go
 fakes "$work/bin" pgrep lsof launchctl osascript
 ln -s "$PWD/tests/macup_run" "$work/bin/macup_run"
 export PATH="$work/bin:$PATH"
+# fake_first DIR TOOL VAR=VALUE…: with that environment macup runs DIR's fake TOOL; else the rest of the case file is not run,
+# so a real docker, brew, mas, npm or xcrun on this Mac is never reached (use as: fake_first … || return 1)
+fake_first(){ local dir=$1 tool=$2 found; shift 2; found=$(env "$@" MACUP_RUN_WHICH="$tool" macup_run)
+  [ "$found" = "$dir/$tool" ] && return 0; fail "$tool would be ${found:-none}, not the fake in $dir: the rest of this case file is not run"; return 1; }
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local home=$1; shift; tests/fixture.sh "$home"; (cd "$home" && find . \( -type f -o -type l \) | sort) >"$home.b"
   env HOME="$home" macup_run "$@" </dev/null >"$home.out" 2>&1

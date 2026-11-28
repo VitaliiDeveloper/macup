@@ -2,7 +2,7 @@
 # shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: static checks, commands, check and clean levels, AI tools, open apps.
 # --- static
-./build.sh --check >/dev/null 2>&1 && pass "the translations, macup.sha256 and the package are current" || fail "out of date: run ./build.sh --check"
+./build.sh --check >/dev/null 2>&1 && pass "the translations, macup.sha256 and the package are current" || fail "out of date: run ./build.sh"
 # the root macup is the bootstrap 2.9 copies update to: stock bash 3.2 must read it, as it must read the installer
 /bin/bash -n macup && /bin/bash -n install.sh && pass "bash 3.2 syntax of the bootstrap and the installer" || fail syntax
 if command -v shellcheck >/dev/null; then shellcheck -s bash -S warning macup install.sh && pass shellcheck || fail shellcheck; fi

@@ -31,7 +31,7 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 5. **Sequential where pieces depend on each other, parallel where they do not.** A parallel wave starts only after the work it builds on is merged into `swift/main`.
 6. **Foundation only:** Swift 5.9 tools, macOS 13 deployment target, no third-party packages.
 7. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each fix is merged into `swift/main` and adds a line to "Bash fixes to carry over". A unit that ports the touched code ticks its line. This list is a checklist item on every merge (see "Every pull request").
-8. **Code rules (owner, 2026-11-26).** KISS and DRY come first: the plainest code that does the job, no copy-paste, no layer added for later. Every file stays under 500 lines, test files included. No single-letter names, whether variables, loop indices, closure or function parameters, or struct fields; `$0` and `_` are fine. These rules cover everything written for the port: Swift, tests and the shell harness. `src/*.sh` is exempt because it is the oracle (rule 2) and is deleted in phase 4.
+8. **Code rules (owner, 2026-11-26).** KISS and DRY come first: the plainest code that does the job, no copy-paste, no layer added for later. Every file stays under 500 lines, test files included. No single-letter names, whether variables, loop indices, closure or function parameters, or struct fields; `$0` and `_` are fine. These rules cover everything written for the port: Swift, tests and the shell harness. `src/*.sh` is exempt because it is the oracle (rule 2) and is deleted in phase 5.
 
 ## Routing
 
@@ -126,11 +126,11 @@ Sources/MacupCore/
   Checks/ Updates/ Tools/ Cleaners/ Leftovers/ Commands/
 Sources/macup/Generated/        Translations.swift (written by build.sh, not committed)
 Tests/MacupCoreTests/           XCTest
-tests/run.sh                    black-box suite (tests/shipping.sh: the release tools, the installer, the bootstrap)
+tests/run.sh                    black-box suite (tests/shipping.sh: the formula bump, the installer, the bootstrap)
 macup, macup.sha256             the bootstrap 2.9 copies update to (committed)
 ```
 
-**Built files are not committed on `swift/main`.** Until phase 5, `macup` and `macup.sha256` were untracked there and built in CI, so parallel pull requests do not conflict on a 300 KB generated file. When `main` is merged in, a change to them on `main` is resolved by keeping them deleted, and the `src/` change comes in as usual. Phase 5 puts the root `macup` back as the bootstrap, committed with its `macup.sha256`; `build.sh --check` compares the two.
+**Built files are not committed on `swift/main`.** Until phase 5, `macup` and `macup.sha256` were untracked there and built in CI, so parallel pull requests do not conflict on a 300 KB generated file. Until phase 5, a change to them on `main` was resolved by keeping them deleted, and the `src/` change came in as usual. From phase 5 on, a merge of `main` resolves `macup` and `macup.sha256` to `swift/main`'s bootstrap, and a fix to `src/*.sh` on `main` is ported to Swift by hand. Phase 5 puts the root `macup` back as the bootstrap, committed with its `macup.sha256`; `build.sh --check` compares the two.
 
 ## Foundation (phase 0)
 
@@ -288,7 +288,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 3. The suite runs.
 4. One pull request goes from `swift/main` into `main`.
 
-Merging it and tagging 3.0.0 happen only when the owner says so.
+Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap, which then says "not published yet" and exits 1 on every run, scheduled checks included, until the asset exists (`tests/shipping.sh` covers it; the copy recovers by itself).
 
 ## Every pull request into `swift/main`
 

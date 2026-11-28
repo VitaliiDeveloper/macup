@@ -79,6 +79,7 @@ case "$*" in
 esac
 FAKE
 chmod +x "$home/.local/bin/docker"
+fake_first "$home/.local/bin" docker HOME="$home" || return 1
 dk(){ rm -f "$home/docker.log"; env HOME="$home" macup_run "$@" --only "$DK" --no-color </dev/null >"$work/dk.out" 2>&1; }
 dk check
 grep -q 'Docker: Images 2.4GB, 1.2GB (50%) reclaimable; Containers 12.3MB, 12.3MB (100%) reclaimable; Local Volumes 3.2GB, 3.2GB (100%) reclaimable; Build Cache 1.5GB, 1.5GB reclaimable' "$work/dk.out" \
@@ -93,6 +94,9 @@ for spec in "clean.docker:builder prune -f|image prune -f:Docker build cache.*fr
   [ $rc = 0 ] && [ "$(grep prune "$home/docker.log")" = "$(printf '%s' "$cmds" | tr '|' '\n')" ] && grep -q "$re" "$work/dk.out" && ! grep -q 'volume prune\|system prune\|--volumes' "$home/docker.log" \
     && pass "Docker: --pick $id runs only: $cmds" || { fail "Docker --pick $id (rc=$rc)"; cat "$home/docker.log" "$work/dk.out"; }
 done
+rm -f "$home/docker.log"; env HOME="$home" macup_run clean --level aggressive --only "$DK" --no-color </dev/null >"$work/dk.out" 2>&1
+[ "$(grep prune "$home/docker.log")" = "$(printf 'builder prune -f\nimage prune -f')" ] && pass "Docker: clean takes the build cache and dangling images only, even at --level aggressive" \
+  || { fail "Docker clean at aggressive"; cat "$home/docker.log"; }
 for mode in "clean --level aggressive --enable clean.docker_images,clean.docker_containers" "clean --level aggressive" "all --level aggressive"; do
   rm -f "$home/docker.log"; env HOME="$home" macup_run $mode --only "$DK" --no-color </dev/null >"$work/dk.out" 2>&1
   ! grep -q 'volume prune\|system prune\|--volumes' "$home/docker.log" && grep -q prune "$home/docker.log" && pass "Docker: no volume prune with: $mode" || { fail "Docker volumes touched with: $mode"; cat "$home/docker.log"; }

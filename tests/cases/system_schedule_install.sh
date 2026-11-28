@@ -40,6 +40,7 @@ echo "brew $* NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE:-}" >>"$BREWLOG"
 exit 0
 FAKE
 chmod +x "$BB/brew"; mkdir -p "$work/brewrepo/.git"; : >"$work/brewrepo/.git/FETCH_HEAD"; touch -t 202001010000 "$work/brewrepo/.git/FETCH_HEAD"
+fake_first "$BB" brew MACUP_PATH=keep HOME="$home" PATH="$BB:$SB:$PATH" || return 1
 env MACUP_PATH=keep HOME="$home" PATH="$BB:$SB:$PATH" BREWLOG="$work/brew.log" BREWREPO="$work/brewrepo" macup_run check --only update.brew --no-color </dev/null >"$work/brewchk.out" 2>&1
 grep -q 'brew outdated' "$work/brew.log" && ! grep -q '^brew update' "$work/brew.log" && ! grep 'brew outdated' "$work/brew.log" | grep -qv 'NO_AUTO_UPDATE=1$' \
   && grep -q 'package list is from 2020-01-01' "$work/brewchk.out" && pass "check never runs brew update, calls brew with HOMEBREW_NO_AUTO_UPDATE=1 and says how old the list is" || { fail "check leaves Homebrew alone"; cat "$work/brew.log" "$work/brewchk.out"; }
@@ -79,8 +80,10 @@ install_home="$work/i"; mkdir -p "$install_home/.npm-global/bin"; printf '#!/bin
 lim(){ local secs=$1 pid watcher rc; shift; "$@" & pid=$!
   ( sleep "$secs"; echo "TIMEOUT after ${secs}s: $*"; ps -axo pid,ppid,etime,command | grep -v 'ps -axo' | tail -25; kill $pid 2>/dev/null ) & watcher=$!
   wait $pid; rc=$?; kill $watcher 2>/dev/null; wait $watcher 2>/dev/null; return $rc; }
+# install.sh takes the binary built last of .build/release and .build/debug
+built=.build/release/macup; [ .build/debug/macup -nt "$built" ] && built=.build/debug/macup
 lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$work/in" 2>&1; rc=$?
-[ $rc = 0 ] && [ ! -e "$install_home/.npm-global/bin/macup" ] && [ -e "$install_home/.npm-global/bin/other" ] && [ -x "$work/bin/macup" ] && grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" \
+[ $rc = 0 ] && [ ! -e "$install_home/.npm-global/bin/macup" ] && [ -e "$install_home/.npm-global/bin/other" ] && cmp -s "$work/bin/macup" "$built" && grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" \
   && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; cat "$work/in"; }
 lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
 grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" && grep -q '^language = uk' "$install_home/.config/macup/config" && [ "$(grep -c '# macup' "$install_home/.zshrc")" = 1 ] \

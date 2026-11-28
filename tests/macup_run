@@ -2,10 +2,20 @@
 # The macup binary under test, run with the arguments given (tests/run.sh, tests/leftovers.sh):
 #   MACUP_BIN=<path>   that binary, else .build/debug/macup
 #   MACUP_AT=<path>    the copy installed at that path instead
-# Both are taken out of the environment before macup starts. exec: macup keeps this pid, so a test can signal it.
+#   MACUP_RUN_WHICH=<tool>   print the tool macup would run with this environment, and run nothing
+# The first two are taken out of the environment before macup starts. exec: macup keeps this pid, so a test can signal it.
+# macup keeps the PATH it is given (MACUP_PATH=keep) instead of putting the real /opt/homebrew/bin and /usr/local/bin first,
+# where a real docker, brew or npm would win over a test's fake. The home's own bin folders come first, where macup puts
+# them. A test that sets MACUP_PATH itself keeps its choice.
 self=$0   # the suites link this file into their fake bin folder: find the checkout through the link
 while [ -L "$self" ]; do target=$(readlink "$self"); case "$target" in /*) self=$target ;; *) self=$(dirname "$self")/$target ;; esac; done
 here=$(cd "$(dirname "$self")/.." && pwd)
 at=${MACUP_AT:-} bin=${MACUP_BIN:-$here/.build/debug/macup}
 unset MACUP_AT MACUP_BIN
+if [ -z "${MACUP_PATH+set}" ]; then
+  export MACUP_PATH=keep
+  for dir in "$HOME/.cargo/bin" "$HOME/.npm-global/bin" "$HOME/.local/bin"; do [ -d "$dir" ] && PATH="$dir:$PATH"; done
+  export PATH
+fi
+[ -n "${MACUP_RUN_WHICH:-}" ] && { command -v "$MACUP_RUN_WHICH"; exit; }
 exec "${at:-$bin}" "$@"

@@ -1,6 +1,5 @@
 /// The environment macup runs in: the top of core.sh.
-/// Reading it changes nothing; `apply()` makes the changes core.sh makes to the process (PATH, LC_CTYPE).
-/// A run handed to the bash build must not be applied first: bash prepends to PATH itself and keeps the PATH it got as USER_PATH.
+/// Reading it changes nothing; `apply()` makes the changes core.sh made to the process (PATH, LC_CTYPE).
 public struct Env {
     /// How install.sh and uninstall, 2.9 copies included, tell a macup from another file: a line "# macup" and a line that
     /// starts with MACUP_VERSION=, as in every bash copy. One literal, so the binary keeps it as is; tools/release.sh checks.

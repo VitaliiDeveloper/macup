@@ -105,4 +105,16 @@ final class CommandsTests: XCTestCase {
         try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
         XCTAssertEqual(Router.route([], env: environment, ported: ["menu"]), .swift(try Arguments.parse([])), "09 is 9 minutes, no longer bash's arithmetic error")
     }
+
+    /// bash's awk h() set the global b, which was also the bold colour: its trend line began with the last FREED in bytes.
+    func testHistoryTrendLineStartsWithItsLabel() throws {
+        let home = NSTemporaryDirectory() + "macup-history-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        let context = OneOff.Context(try Arguments.parse(["history"]), env: try Env(["HOME": home]), translations: "{}")
+        try FileManager.default.createDirectory(atPath: (context.env.history as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try "2026-11-01 10:00,check,1000000,2000000,50,0,10,90,0,5120,0\n2026-11-02 10:00,clean,3000000,2000000,50,0,10,90,0,5120,0\n"
+            .write(toFile: context.env.history, atomically: true, encoding: .utf8)
+        let trend = History.text(context).components(separatedBy: "\n").dropLast().last
+        XCTAssertEqual(trend, "\(context.colors.bold)Free space trend:\(context.colors.reset) ▁█  (1.0 GB … 3.1 GB)")
+    }
 }

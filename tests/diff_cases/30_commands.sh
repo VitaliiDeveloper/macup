@@ -7,6 +7,15 @@ printf '#!/bin/bash\necho "open $*" >>"$HOME/open.log"\n' >"$work/bin/open"; pri
 # main's macup as the version check fetches it: $HOME/.fake/remote-macup, a failed download without it; other URLs are real
 printf '#!/bin/bash\nfor url; do :; done\ncase "$url" in */main/macup) ;; *) exec /usr/bin/curl "$@" ;; esac\necho "curl $url" >>"$HOME/curl.log"\ncat "$HOME/.fake/remote-macup" 2>/dev/null || exit 22\n' >"$work/bin/curl"
 chmod +x "$work/bin/open" "$work/bin/editor" "$work/bin/curl"; fakes "$work/bin" launchctl
+# history's trend line is bold, with nothing before its label: bash's awk h() set the global b, the bold colour, to the last
+# freed value in bytes
+known_trend(){ perl -pe '/(?:▁|▂|▃|▄|▅|▆|▇|█)+  \(.* … .*\)\r*$/ and (s/^[-+.0-9a-z]+(?=.*\e\[0m )/\e[1m/ or s/^[-+.0-9a-z]+//)'; }
+known_cmd_history(){ known_trend; }
+known_cmd_history_no_color(){ known_trend; }
+known_cmd_history_long(){ known_trend; }
+known_cmd_history_odd(){ known_trend; }
+known_cmd_history_flat(){ known_trend; }
+known_cmd_menu_history(){ known_trend; }
 CASES="$CASES"'
 cmd-history-none|||history
 cmd-history|cmd_history||history
@@ -70,7 +79,7 @@ cmd-menu-all|brew|ANSWERS=2 FAKE_SUDO_RC=0|--only check.disk,update.brew
 cmd-menu-update|brew|ANSWERS=3|--only update.brew
 cmd-menu-clean|dd|ANSWERS=4|--only clean.derived_data --lang ru
 cmd-menu-deep|cmd_history|ANSWERS=5|--only check.disk
-cmd-menu-history|cmd_history|ANSWERS=6|
+cmd-menu-history|cmd_history|ANSWERS=6||tty
 cmd-menu-last|cmd_reports|ANSWERS=7|--no-color
 cmd-menu-tasks|config|ANSWERS=8/n|
 cmd-menu-tasks-config|config|ANSWERS=8/y EDITOR=editor|

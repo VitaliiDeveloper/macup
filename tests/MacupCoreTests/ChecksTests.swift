@@ -94,4 +94,15 @@ final class ChecksTests: XCTestCase {
         let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | { read -r size path; printf '%s|%s' \"$size\" \"$path\"; }" })
         XCTAssertEqual(samples.map { Checks.sizeAndPath($0) }.map { "\($0.0)|\($0.1)" }, bash)
     }
+
+    /// The age counts from the day's midnight, as `date -j -f '%Y-%m-%d %H:%M:%S' "<day> 00:00:00"` reads it; a day strptime
+    /// rejects is 0, as bash's `|| date +%s` makes it.
+    func testBackupAgeFromMidnightAsDate() throws {
+        let days = ["2026-10-20", "2026-03-08", "2026-11-01", "2026-02-31", "2026-13-01", "2026-00-10", "2026-11-18"]
+        let bash = try BashOracle.run(days.map { "/bin/date -j -f '%Y-%m-%d %H:%M:%S' \(BashOracle.quoted($0 + " 00:00:00")) +%s 2>/dev/null || echo none" })
+        let now = time_t(1_795_000_000)
+        for (day, then) in zip(days, bash) {
+            XCTAssertEqual(Checks.backupAge(day, now: now), then == "none" ? 0 : Int((now - time_t(then)!) / 86400), day)
+        }
+    }
 }

@@ -31,11 +31,8 @@ enum History {
             let level = flat ? 4 : Awk.int((Awk.number(value) - Awk.number(low)) / (Awk.number(high) - Awk.number(low)) * 7) &+ 1
             return (1...8).contains(level) ? bars[Int(level) - 1] : ""
         }.joined()
-        // awk's h() sets a global b, the same name the bold colour came in as: the line starts with the last FREED in bytes
-        let freed = shown[shown.count - 1][9]
-        let clobbered = awkString((Awk.lessThanZero(freed) ? 0 - Awk.number(freed) : Awk.number(freed)) * 1024)
         let trend = Awk.unescape(i18n.translate("Free space trend:"))
-        out += "\n\(clobbered)\(trend)\(colors.reset) \(line)  (\(hum(low)) … \(hum(high)))\n"
+        out += "\n\(colors.bold)\(trend)\(colors.reset) \(line)  (\(hum(low)) … \(hum(high)))\n"
         return out
     }
 

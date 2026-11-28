@@ -258,7 +258,7 @@ tick()    { # label cmd… — run; on a terminal the step line counts the time 
             label=${label:0:$w}   # a wrapped line would be left behind on every redraw
             ( t0=$SECONDS
               while kill -0 $$ 2>/dev/null; do
-                ph=$(tail -n +"$from" "$RAW" | sed -n 's/^==> \([A-Za-z]*\).*/\1/p' | tail -1); s=$((SECONDS - t0))
+                ph=$(tail -n +"$from" "$RAW" 2>/dev/null | sed -n 's/^==> \([A-Za-z]*\).*/\1/p' | tail -1); s=$((SECONDS - t0))
                 printf '%s  %s… %s%s · %d:%02d%s' "$CL" "$D" "$label" "${ph:+ · $(_ "$ph")}" $((s / 60)) $((s % 60)) "$N"
                 sleep 1
               done ) & TICK=$!

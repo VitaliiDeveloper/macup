@@ -2,7 +2,7 @@
 @testable import macup
 import XCTest
 
-final class RoutingTests: XCTestCase {
+final class ArgumentsTests: XCTestCase {
     func env(_ extra: [String: String] = [:]) throws -> Env {
         var vars = ["HOME": NSTemporaryDirectory() + "macup-none-\(UUID().uuidString)", "PATH": "/usr/bin:/bin"]
         for (key, value) in extra { vars[key] = value }
@@ -44,41 +44,30 @@ final class RoutingTests: XCTestCase {
         XCTAssertFalse(try Arguments.parse(["update", "--deep"]).dry)
     }
 
-    func testRoutes() throws {
-        let environment = try env()
-        func route(_ line: String) -> String {
-            switch Router.route(line.split(separator: " ").map(String.init), env: environment) {
-            case .bash: return "bash"
-            case .rejected: return "rejected"
-            case .swift(let arguments): return arguments.command?.rawValue ?? "run"
-            }
+    /// What each command line asks for: a one-off command, a run, or arguments.sh's rejection.
+    func testCommandLines() throws {
+        func asked(_ line: String) -> String {
+            do {
+                let arguments = try Arguments.parse(line.split(separator: " ").map(String.init))
+                return arguments.command?.rawValue ?? (arguments.action ?? (arguments.deep ? "deep" : "menu"))
+            } catch { return "rejected" }
         }
-        XCTAssertEqual(route("help"), "help")
-        XCTAssertEqual(route("help --lang ru --no-color"), "help")
-        XCTAssertEqual(route("version"), "version")
-        XCTAssertEqual(route("-v"), "version")
-        XCTAssertEqual(route("tasks --json"), "tasks")
-        XCTAssertEqual(route("check tasks"), "tasks", "a one-off command runs before the check")
-        XCTAssertEqual(route("self-update"), "self_update")
-        XCTAssertEqual(route("schedule weekly"), "schedule")
-        XCTAssertEqual(route("check --only check.disk"), "run")
-        XCTAssertEqual(route("check --only check.self_update"), "run")
+        XCTAssertEqual(asked("help --lang ru --no-color"), "help")
+        XCTAssertEqual(asked("-v"), "version")
+        XCTAssertEqual(asked("tasks --json"), "tasks")
+        XCTAssertEqual(asked("check tasks"), "tasks", "a one-off command runs before the check")
+        XCTAssertEqual(asked("self-update"), "self_update")
+        XCTAssertEqual(asked("schedule weekly"), "schedule")
         for command in ["last", "history --json", "reports", "config", "lang uk", "uninstall --yes"] {
-            XCTAssertEqual(route(command), String(command.split(separator: " ")[0]), "'\(command)' runs in Swift")
+            XCTAssertEqual(asked(command), String(command.split(separator: " ")[0]))
         }
-        XCTAssertEqual(route(""), "run", "the menu, or the help without a terminal")
-        XCTAssertEqual(route("all --only check.disk,update.brew,clean.derived_data --json"), "run")
-        XCTAssertEqual(route("check"), "run", "every check, update, cleaner and leftover is ported")
-        XCTAssertEqual(route("all"), "run")
-        XCTAssertEqual(route("clean --level aggressive"), "run")
-        XCTAssertEqual(Router.route(["clean"], env: environment, terminal: true), .swift(try Arguments.parse(["clean"])), "a clean on a terminal picks nothing")
-        XCTAssertEqual(route("--deep"), "run")
-        XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .swift(try Arguments.parse(["check"])), "on a terminal a check ends with the pick")
-        XCTAssertEqual(route("clean --pick clean.derived_data:1"), "run")
-        for line in ["help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
-            XCTAssertEqual(route(line), "rejected", "'\(line)' gets arguments.sh's message")
-        }
-        XCTAssertEqual(route("check --only chek.disk"), "run", "an unknown id: the run says so")
+        XCTAssertEqual(asked(""), "menu", "the menu, or the help without a terminal")
+        XCTAssertEqual(asked("all --only check.disk,update.brew,clean.derived_data --json"), "all")
+        XCTAssertEqual(asked("--deep"), "deep")
+        XCTAssertEqual(asked("clean --pick clean.derived_data:1"), "clean")
+        XCTAssertEqual(asked("check --pick clean.derived_data:1"), "clean", "--pick cleans and checks nothing")
+        for line in ["help bogus", "--lang xx help", "--level huge tasks", "bogus"] { XCTAssertEqual(asked(line), "rejected", line) }
+        XCTAssertEqual(asked("check --only chek.disk"), "check", "an unknown id: the run says so")
     }
 
     /// step_timeout_minutes with leading zeros is decimal: bash read 010 as octal 8 and gave up on 09 (intended difference).
@@ -88,46 +77,9 @@ final class RoutingTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: environment.home) }
         for (text, seconds) in [("09", 540), ("010", 600), ("0008", 480), ("10", 600), ("0", 3600), ("x9", 3600)] {
             try "step_timeout_minutes = \(text)\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
-            for line in [["tasks"], ["check"], []] { XCTAssertNotEqual(Router.route(line, env: environment, terminal: false), .bash, "\(text) \(line)") }
             let settings = Settings(config: Config(env: environment), env: environment, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
             XCTAssertEqual(settings.stepSeconds, seconds, text)
         }
-    }
-
-    func testRunsRouteOnlyWhenEveryTaskIsPorted() throws {
-        let environment = try env()
-        let ported: Set<String> = ["run", "help"]
-        func route(_ argv: [String], _ tasks: Set<String>) -> Bool {
-            if case .swift = Router.route(argv, env: environment, ported: ported, portedTasks: tasks) { return true }
-            return false
-        }
-        XCTAssertTrue(route(["check", "--only", "check.disk"], ["check.disk"]))
-        XCTAssertFalse(route(["check", "--only", "check.disk,check.memory"], ["check.disk"]))
-        XCTAssertTrue(route(["check", "--only", "chek.disk"], ["check.disk"]), "an unknown id: the Swift run says so")
-        XCTAssertFalse(route(["check"], ["check.disk"]))
-        XCTAssertFalse(route(["check"], Set(Tasks.all.filter(\.on).map(\.id))), "opt-in tasks register what they find too")
-        XCTAssertTrue(route(["check"], Set(Tasks.all.map(\.id))), "a full check once every task is ported")
-        XCTAssertFalse(route([], Set(Tasks.all.map(\.id))), "no command: the menu or the help, still bash")
-    }
-
-    func testRunsThatReachUnportedCodeGoToBash() throws {
-        let environment = try env()
-        let ported: Set<String> = ["run"], tasks: Set<String> = ["check.disk", "clean.derived_data"]
-        func swift(_ line: String, terminal: Bool = false, commands: Set<String> = ported) -> Bool {
-            let route = Router.route(line.split(separator: " ").map(String.init), env: environment, ported: commands, portedTasks: tasks, terminal: terminal)
-            if case .swift = route { return true }
-            return false
-        }
-        XCTAssertFalse(swift("check --only clean.derived_data,clean.trash"), "an opt-in task off by default still registers what it finds")
-        XCTAssertTrue(swift("check --only clean.derived_data"))
-        XCTAssertFalse(swift("check --only clean.derived_data", terminal: true), "the pick at the end of a check")
-        XCTAssertTrue(swift("check --only clean.derived_data --quiet", terminal: true))
-        XCTAssertTrue(swift("check --only check.disk", terminal: true), "no cleanup, no pick")
-        XCTAssertTrue(swift("clean --only clean.derived_data", terminal: true))
-        XCTAssertTrue(swift("check --only clean.derived_data", terminal: true, commands: ["run", "pick"]))
-        XCTAssertFalse(swift("--deep --only check.disk"))
-        XCTAssertTrue(swift("--deep --only check.disk", commands: ["run", "deep"]))
-        XCTAssertFalse(swift("clean --pick clean.derived_data:1 --only clean.derived_data"))
     }
 
     func testEnvironment() throws {
@@ -166,9 +118,8 @@ final class RoutingTests: XCTestCase {
         XCTAssertTrue(BashOracle.read("src/core.sh").contains("\nMACUP_VERSION=\"\(Env.version)\"\n"))
     }
 
-    /// The binary carries exactly the bash build next to it and the translations.
+    /// The binary carries the translations; it carries no bash build.
     func testGeneratedSourcesAreCurrent() {
-        XCTAssertEqual(LegacyScript.text, BashOracle.read("macup"), "run ./build.sh")
         XCTAssertEqual(Translations.json, BashOracle.read("src/i18n/translations.json"), "run ./build.sh")
     }
 }

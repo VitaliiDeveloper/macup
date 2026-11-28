@@ -39,7 +39,7 @@ public enum OneOff {
         return true
     }
 
-    /// Runs a routed command; returns the exit status. `translations` is src/i18n/translations.json.
+    /// Runs a one-off command; returns the exit status. `translations` is src/i18n/translations.json.
     public static func run(_ arguments: Arguments, env: Env, translations: String) -> Int32 {
         env.apply()
         let context = Context(arguments, env: env, translations: translations)
@@ -68,9 +68,8 @@ public enum OneOff {
             return SelfUpdate.run(context)
         case .schedule?:
             return Schedule.run(context)
-        default:
-            out.write("macup: \(arguments.command?.rawValue ?? "run") is not ported\n")
-            return 70
+        case nil:
+            preconditionFailure("a run is MainPass's")
         }
         return 0
     }

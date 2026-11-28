@@ -7,7 +7,7 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "MacupCore", path: "Sources/MacupCore"),
-        // Sources/macup/Generated is written by build.sh: the bash build and the translations
+        // Sources/macup/Generated is written by build.sh: the translations
         .executableTarget(name: "macup", dependencies: ["MacupCore"], path: "Sources/macup"),
         .testTarget(name: "MacupCoreTests", dependencies: ["MacupCore", "macup"], path: "tests/MacupCoreTests"),   // tests/, not Tests/: one folder on a case-insensitive disk
     ]

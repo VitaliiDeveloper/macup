@@ -146,20 +146,6 @@ final class LeftoversTests: XCTestCase {
         XCTAssertTrue(Leftovers.locked(file))
     }
 
-    func testRoutes() throws {
-        let environment = try Env(["HOME": home, "PATH": "/usr/bin:/bin"])
-        func swift(_ line: String, terminal: Bool = false) -> Bool {
-            if case .swift = Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: terminal) { return true }
-            return false
-        }
-        XCTAssertTrue(swift("check --only check.startup,clean.orphan_agents,clean.orphan_data"))
-        XCTAssertTrue(swift("check --only check.startup", terminal: true), "no clean task: no pick")
-        XCTAssertTrue(swift("check --only clean.orphan_agents", terminal: true), "the pick")
-        XCTAssertTrue(swift("clean --only clean.orphan_agents,clean.orphan_data", terminal: true), "only ever cleaned when picked")
-        XCTAssertTrue(swift("check --only clean.dev_containers"), "nothing to scan without a terminal")
-        XCTAssertTrue(swift("clean --only clean.dev_containers", terminal: true), "scanned, and only ever cleaned when picked")
-    }
-
     /// strcoll ties дім and дом at the same length: bash's `sort -u` kept one of them, and the other app's data could look orphaned.
     func testTakenKeepsNamesStrcollTies() throws {
         let run = try makeRun()

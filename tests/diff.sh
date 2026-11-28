@@ -28,8 +28,8 @@ for cases in tests/diff_cases/*.sh; do
 done
 
 # what may differ between two runs: dates and times, durations, report names, temporary paths, pids; on a terminal the
-# transient step and tick lines, and the extra \r a terminal adds to a newline when a long write fills it; the script's name
-# in bash's own diagnostics (the Swift build runs it as /dev/fd/N)
+# transient step and tick lines, and the extra \r a terminal adds to a newline when a long write fills it; the script's path
+# in bash's own diagnostics
 norm(){ # file home
   perl -pe '
     s/\r\e\[K  \e\[2m… [^\r\n]*(?=\r)//g;
@@ -40,7 +40,7 @@ norm(){ # file home
     s/macup_DATE(?:_\d+)?\.md/macup_DATE.md/g;
     s{\Q'"${TMPDIR:-/tmp}"'\E/?macup[.-][A-Za-z0-9.]+}{TMP}g;
     s/\bpid \d+/pid N/g;
-    s{^(?:/dev/fd/\d+|\S*macup): line (\d+): }{macup: line $1: }mg;
+    s{^\S*macup: line (\d+): }{macup: line $1: }mg;
   ' "$1" | sed "s|$2|HOME|g"
 }
 

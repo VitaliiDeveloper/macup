@@ -12,6 +12,7 @@ do {
     exit(1)
 }
 Names.setLocale(env)
+Schedule.repair(env)
 switch Router.route(argv, env: env) {
 case .bash:
     BashExec.run()

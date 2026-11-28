@@ -1,7 +1,8 @@
 #!/bin/bash
-# Shipping: tools/bump-formula.sh, install.sh and the 2.9 bootstrap against a fake GitHub release. Nothing reaches the
-# network: a fake curl serves $FAKE_REMOTE/raw/<ref>/<file> for raw.githubusercontent.com and
-# $FAKE_REMOTE/releases/<tag>/<file> for release assets, and writes every URL it was asked for to $FAKE_REMOTE/curl.log. tests/run.sh calls it; it also runs on its own.
+# Shipping: tools/bump-formula.sh, install.sh, the 2.9 bootstrap and the Swift self-update against a fake GitHub release.
+# Nothing reaches the network: a fake curl serves $FAKE_REMOTE/raw/<ref>/<file> for raw.githubusercontent.com and
+# $FAKE_REMOTE/releases/<tag>/<file> for release assets, and writes every URL it was asked for to $FAKE_REMOTE/curl.log.
+# tests/run.sh calls it; it also runs on its own.
 cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-shipping.XXXXXX"); trap 'rm -rf "$work"' EXIT
 failed=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; failed=1; }
@@ -88,6 +89,8 @@ FAKE
 cat >"$work/bin/launchctl" <<'FAKE'
 #!/bin/bash
 echo "$*" >>"$HOME/launchctl.log"
+[ "$1" = print ] && [ -n "${FAKE_PROGRAM:-}" ] && printf '\tprogram = %s\n' "$FAKE_PROGRAM"
+exit 0
 FAKE
 chmod +x "$work/bin/sw_vers" "$work/bin/launchctl"
 fake_binary(){ # VERSION PATH: stands in for the release binary; says its version, writes down every other run
@@ -213,5 +216,63 @@ if [ -f "$newest" ] && [ -f "$older" ] && ! cmp -s "$newest" "$older"; then
   [ $rc = 0 ] && cmp -s "$lhome/.local/bin/macup" "$newest" && env HOME="$lhome" "$lhome/.local/bin/macup" version >/dev/null && [ "$(ls -A "$lhome/.local/bin")" = macup ] \
     && pass "install.sh from a checkout: the binary built last, over one that ran" || { fail "install.sh local ($rc)"; cat "$work/local.out"; }
 else echo "SKIP install.sh from a checkout: needs two different builds in .build/release and .build/debug"; fi
+
+# --- the Swift build's self-update and its repair of a 2.9 schedule, on the real binary
+if [ -f "$real" ]; then
+  current=$("$real" version | sed -n 's/^macup //p')
+  shome="$work/swift"; sbin="$shome/bin"; splist="$shome/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; asset_name=macup-9.9.9-macos-universal.tar.gz
+  mkdir -p "$shome/.config/macup" "${splist%/*}" "$shome/links"; printf 'language = en\n' >"$shome/.config/macup/config"; ln -sf "$sbin/macup" "$shome/links/macup"
+  sfresh(){ chmod 755 "$sbin" 2>/dev/null; rm -rf "$sbin" "$splist" "$shome/launchctl.log"; mkdir -p "$sbin"; cp "$real" "$sbin/macup"; : >"$FAKE_REMOTE/curl.log"; }
+  srun(){ env HOME="$shome" MACUP_PATH=keep "$@" </dev/null 2>&1; }
+  update(){ sfresh; srun "${1:-$sbin/macup}" self-update --no-color; }
+  kept(){ cmp -s "$sbin/macup" "$real" && [ "$(ls -A "$sbin")" = macup ] && [ ! -e "$shome/launchctl.log" ]; }
+  publish "$work/bootstrap" main; rm -rf "$FAKE_REMOTE/releases/v9.9.9"
+  out=$(update); rc=$?
+  [ $rc = 1 ] && [ "$out" = "Download failed: https://github.com/VitaliiDeveloper/macup/releases/download/v9.9.9/$asset_name" ] && kept \
+    && pass "self-update (Swift): no release asset yet, nothing changed" || fail "self-update (Swift) before the asset ($rc): $out"
+  release_asset 9.9.9 "$work/asset/macup"
+  out=$(update); rc=$?
+  [ $rc = 0 ] && [ "$out" = "macup updated: $current → 9.9.9" ] && cmp -s "$sbin/macup" "$work/asset/macup" && [ "$(ls -A "$sbin")" = macup ] \
+    && [ "$(urls)" = "main/macup v9.9.9/$asset_name.sha256 v9.9.9/$asset_name" ] && pass "self-update (Swift): the release asset, checked, renamed over the binary" || { fail "self-update (Swift) ($rc): $out"; urls; }
+  out=$(update "$shome/links/macup"); rc=$?
+  [ $rc = 0 ] && cmp -s "$sbin/macup" "$work/asset/macup" && [ -L "$shome/links/macup" ] && pass "self-update (Swift) through a symlink: the file it points at is replaced" || fail "self-update (Swift) through a symlink ($rc): $out"
+  printf '#!/bin/bash\nMACUP_VERSION="%s"\n' "$current" >"$work/main-current"; publish "$work/main-current" main
+  out=$(update); rc=$?; publish "$work/bootstrap" main
+  [ $rc = 0 ] && [ "$out" = "macup $current is already the latest." ] && kept && [ "$(urls)" = main/macup ] && pass "self-update (Swift): already the latest, no download" || fail "self-update (Swift), latest ($rc): $out"
+  srefused(){ # what it says, then the asset's files
+    local what=$1; shift; release_asset 9.9.9 "$@"; out=$(update); rc=$?
+    [ $rc = 1 ] && [ "$out" = "$what" ] && kept && [ "$(grep -c 'macos-universal.tar.gz$' "$FAKE_REMOTE/curl.log")" = 1 ]; }
+  srefused 'The downloaded file looks broken; nothing changed.' "$work/wrong/macup" && pass "self-update (Swift): a binary that is not this version is refused" || fail "self-update (Swift): wrong version ($rc): $out"
+  srefused 'The downloaded file looks broken; nothing changed.' "$work/loop/macup" && pass "self-update (Swift): a bootstrap as the asset is never run" || fail "self-update (Swift): bootstrap as the asset ($rc): $out"
+  release_asset 9.9.9 "$work/asset/macup"; echo "$(printf '%064d' 3)  x" >"$FAKE_REMOTE/releases/v9.9.9/$asset_name.sha256"
+  out=$(update); rc=$?
+  [ $rc = 1 ] && [ "$out" = 'The downloaded file does not match its published checksum; nothing changed.' ] && kept && pass "self-update (Swift): a checksum mismatch changes nothing" || fail "self-update (Swift): checksum ($rc): $out"
+  release_asset 9.9.9 "$work/asset/macup"
+  sfresh; chmod 555 "$sbin"; out=$(srun "$sbin/macup" self-update --no-color); rc=$?; chmod 755 "$sbin"
+  [ $rc = 1 ] && [ "$out" = "Couldn't write $(cd "$sbin" && pwd -P)/macup" ] && kept && [ "$(urls)" = main/macup ] && pass "self-update (Swift): a folder it cannot write is said" || fail "self-update (Swift): read-only folder ($rc): $out"
+  scellar="$shome/brew/Cellar/macup/9.9.9/bin"; mkdir -p "$scellar" "$shome/brew/bin"; cp "$real" "$scellar/macup"; ln -sf ../Cellar/macup/9.9.9/bin/macup "$shome/brew/bin/macup"
+  out=$(update "$shome/brew/bin/macup"); rc=$?
+  [ $rc = 0 ] && [ "$out" = 'macup was installed with Homebrew. Update it with: brew upgrade macup' ] && cmp -s "$scellar/macup" "$real" && [ ! -s "$FAKE_REMOTE/curl.log" ] \
+    && pass "self-update (Swift) in a Homebrew Cellar: brew upgrade macup, no download" || fail "self-update (Swift) under Homebrew ($rc): $out"
+
+  # the first run of the binary: a 2.9 schedule that names it loses /bin/bash and is loaded again, from a terminal only
+  schedule29(){ printf '<plist version="1.0">\n<dict>\n  <key>ProgramArguments</key>\n  <array><string>/bin/bash</string><string>%s</string><string>check</string></array>\n</dict>\n</plist>\n' "$1" >"$splist"; }
+  reloaded="bootout gui/$(id -u)/com.vitaliideveloper.macup"$'\n'"bootstrap gui/$(id -u) $splist"
+  for named in "$sbin/macup" "$shome/links/macup"; do
+    sfresh; schedule29 "$named"; out=$(srun "$sbin/macup" version); rc=$?
+    [ $rc = 0 ] && [ "$out" = "macup $current" ] && grep -qF "<array><string>$named</string><string>check</string></array>" "$splist" && [ "$(cat "$shome/launchctl.log")" = "$reloaded" ] \
+      && pass "first run (Swift): the 2.9 schedule of $(basename "$(dirname "$named")")/macup runs the binary, loaded again" || { fail "first run (Swift), 2.9 schedule of $named ($rc): $out"; cat "$splist" "$shome/launchctl.log"; }
+  done
+  sfresh; schedule29 "$sbin/macup"; out=$(srun env XPC_SERVICE_NAME=com.vitaliideveloper.macup "$sbin/macup" version); rc=$?
+  [ $rc = 0 ] && grep -qF '<string>/bin/bash</string>' "$splist" && [ ! -e "$shome/launchctl.log" ] && pass "first run (Swift) started by launchd: the schedule is left alone" || fail "first run (Swift) from launchd ($rc): $out"
+  sfresh; cp "$real" "$shome/other"; schedule29 "$shome/other"; out=$(srun "$sbin/macup" version); rc=$?
+  [ $rc = 0 ] && grep -qF '<string>/bin/bash</string>' "$splist" && [ ! -e "$shome/launchctl.log" ] && pass "first run (Swift): a schedule of another file is left alone" || fail "first run (Swift), other file ($rc): $out"
+  sfresh; schedule29 "$sbin/macup"; sed -i '' 's|<string>/bin/bash</string>||' "$splist"; cp "$splist" "$work/splist"
+  out=$(srun env FAKE_PROGRAM=/bin/bash "$sbin/macup" version); rc=$?
+  [ $rc = 0 ] && cmp -s "$splist" "$work/splist" && [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup"$'\n'"$reloaded" ] \
+    && pass "first run (Swift): a loaded job that still runs /bin/bash is loaded again" || { fail "first run (Swift), loaded job ($rc): $out"; cat "$shome/launchctl.log"; }
+  rm -f "$shome/launchctl.log"; out=$(srun env FAKE_PROGRAM="$sbin/macup" "$sbin/macup" version); rc=$?
+  [ $rc = 0 ] && [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a right schedule is only looked at" || fail "first run (Swift), right schedule ($rc): $(cat "$shome/launchctl.log")"
+else echo "SKIP self-update and the schedule repair of the Swift build: no binary at $real"; fi
 
 echo; [ $failed = 0 ] && echo "shipping: ALL PASS" || { echo "shipping: SOME FAILED"; exit 1; }

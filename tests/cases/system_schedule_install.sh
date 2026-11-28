@@ -49,20 +49,15 @@ sys --only check.memory | grep -q '! Memory: .* 9% free, .* memory is tight' && 
 # --- the schedule is optional: nothing until asked, a LaunchAgent that only runs a check, off removes it
 home="$work/sch"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; cp "$build_path" "$home/.local/bin/macup"
 SP="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; sch(){ env HOME="$home" MACUP_AT="$home/.local/bin/macup" macup_run schedule "$@" --no-color </dev/null 2>&1; }
-if bash_only "schedule"; then
-  sch | grep -q 'No schedule' && [ ! -e "$SP" ] && pass "schedule: none by default" || fail "schedule: default"
-  sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<string>$home/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
-    && grep -q "^bootstrap gui/.* $SP" "$home/launchctl.log" && grep -q "<key>PATH</key><string>.*$work/bin" "$SP" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$home/launchctl.log"; }
-  { ! command -v plutil >/dev/null || plutil -lint "$SP" >/dev/null; } && pass "schedule: the plist is valid" || fail "schedule: plist"
-  sch daily | grep -q 'every day at 10:00' && ! grep -q Weekday "$SP" && pass "schedule daily" || fail "schedule daily"
-  sch off | grep -q 'Schedule removed' && [ ! -e "$SP" ] && grep -q "^bootout gui/.*/com.vitaliideveloper.macup" "$home/launchctl.log" && pass "schedule off removes it" || fail "schedule off"
-  sch hourly >/dev/null; [ $? = 2 ] && [ ! -e "$SP" ] && pass "schedule: unknown word" || fail "schedule: unknown word"
-else   # the bash schedule would write /bin/bash <binary> into the LaunchAgent
-  out=$(sch weekly); rc=$?
-  [ $rc = 1 ] && [ "$out" = "macup schedule: not available in this build" ] && [ ! -e "$SP" ] && [ ! -e "$home/launchctl.log" ] && pass "schedule: not available in the Swift build, nothing written" || fail "schedule on the Swift build (rc=$rc): $out"
-  out=$(env HOME="$home" MACUP_AT="$home/.local/bin/macup" macup_run self-update </dev/null 2>&1); rc=$?
-  [ $rc = 1 ] && [ "$out" = "macup self-update: not available in this build" ] && cmp -s "$build_path" "$home/.local/bin/macup" && pass "self-update: not available in the Swift build, nothing replaced" || fail "self-update on the Swift build (rc=$rc): $out"
-fi
+# the bash build runs its script through /bin/bash, the Swift build names itself: launchd cannot run a binary through bash
+first=$([ "$MACUP_BUILD" = bash ] && echo "<string>/bin/bash</string>")
+sch | grep -q 'No schedule' && [ ! -e "$SP" ] && pass "schedule: none by default" || fail "schedule: default"
+sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<array>$first<string>$home/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
+  && grep -q "^bootstrap gui/.* $SP" "$home/launchctl.log" && grep -q "<key>PATH</key><string>.*$work/bin" "$SP" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$home/launchctl.log"; }
+{ ! command -v plutil >/dev/null || plutil -lint "$SP" >/dev/null; } && pass "schedule: the plist is valid" || fail "schedule: plist"
+sch daily | grep -q 'every day at 10:00' && ! grep -q Weekday "$SP" && pass "schedule daily" || fail "schedule daily"
+sch off | grep -q 'Schedule removed' && [ ! -e "$SP" ] && grep -q "^bootout gui/.*/com.vitaliideveloper.macup" "$home/launchctl.log" && pass "schedule off removes it" || fail "schedule off"
+sch hourly >/dev/null; [ $? = 2 ] && [ ! -e "$SP" ] && pass "schedule: unknown word" || fail "schedule: unknown word"
 # --notify: a notification only when something needs a look
 env HOME="$home" macup_run check --only check.sizes --quiet --notify </dev/null >/dev/null 2>&1
 [ ! -e "$home/osascript.log" ] && pass "--notify: silent when all is well" || { fail "--notify without a reason"; cat "$home/osascript.log"; }
@@ -70,8 +65,9 @@ mkdir -p "$home/Library/Developer/Xcode"; ln -s "$home/gone" "$home/.local/bin/d
 env HOME="$home" macup_run check --only check.commands --quiet --notify </dev/null >/dev/null 2>&1
 grep -q 'display notification "Needs attention: [0-9]' "$home/osascript.log" 2>/dev/null && pass "--notify: says what needs attention" || { fail "--notify"; cat "$home/osascript.log" 2>/dev/null; }
 
-# --- self-update: the file comes from the version's tag and must match its published SHA-256; a fake curl serves $FAKE_REMOTE
-if bash_only "self-update"; then
+# --- self-update: the file comes from the version's tag and must match its published SHA-256; a fake curl serves $FAKE_REMOTE.
+# The Swift build installs the release asset instead: tests/shipping.sh, against a fake release.
+if [ "$MACUP_BUILD" = bash ]; then
   mkdir -p "$work/cbin"; cat >"$work/cbin/curl" <<'FAKE'
 #!/bin/bash
 out=""; url=""

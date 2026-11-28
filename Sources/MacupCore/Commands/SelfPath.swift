@@ -6,16 +6,29 @@ public enum SelfPath {
     /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at). Not resolved to the real file.
     /// A binary in a checkout's .build is the build output, like ./macup there: it is named as ./macup, so uninstall leaves it.
     public static func current() -> String {
-        var size: UInt32 = 0
-        _NSGetExecutablePath(nil, &size)
-        var buf = [CChar](repeating: 0, count: Int(size) + 1)
-        guard _NSGetExecutablePath(&buf, &size) == 0 else { return CommandLine.arguments[0] }
-        let path = String(cString: buf)
+        let path = launchPath()
         if let range = path.range(of: "/.build/", options: .backwards) {
             let checkout = String(path[..<range.lowerBound])
             if isCheckout(checkout) { return checkout + "/macup" }
         }
         return path
+    }
+
+    /// The file this binary runs from, symlinks resolved: what self-update replaces, and what a schedule that names this
+    /// binary resolves to.
+    static func executable() -> String {
+        let path = launchPath()
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    private static func launchPath() -> String {
+        var size: UInt32 = 0
+        _NSGetExecutablePath(nil, &size)
+        var buf = [CChar](repeating: 0, count: Int(size) + 1)
+        guard _NSGetExecutablePath(&buf, &size) == 0 else { return CommandLine.arguments[0] }
+        return String(cString: buf)
     }
 
     static func isCheckout(_ dir: String) -> Bool {

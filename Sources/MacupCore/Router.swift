@@ -11,17 +11,12 @@ public enum Router {
         case rejected(Arguments.Failure)
     }
 
-    /// Commands the Swift build answers with "not available in this build" instead of handing them to bash:
-    /// the bash self-update would write a script over the binary, the bash schedule would run the binary with /bin/bash.
-    public static let unavailable: Set<Arguments.Command> = [.selfUpdate, .schedule]
-
     /// `terminal`: stdin and stdout are a terminal, where a check ends with the pick.
     public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks,
                              terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
         let arguments: Arguments
         do { arguments = try Arguments.parse(argv) } catch let failure as Arguments.Failure { return .rejected(failure) } catch { return .bash }
         if let command = arguments.command {
-            if unavailable.contains(command) { return .swift(arguments) }
             guard ported.contains(command.rawValue) else { return .bash }
             return .swift(arguments)
         }

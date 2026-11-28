@@ -15,7 +15,7 @@ case "$MACUP_BUILD" in
 esac
 [ -f "$build_path" ] || { echo "no $MACUP_BUILD build at $build_path: run ./build.sh"; exit 1; }
 echo "testing the $MACUP_BUILD build: $build_path"
-# tests that only make sense for the script (its syntax, its own self-update, the installer, the schedule until phase 4)
+# tests that only make sense for the script (its syntax, the installer)
 bash_only(){ [ "$MACUP_BUILD" = bash ] && return 0; echo "SKIP $* (bash build only)"; return 1; }
 # shellcheck disable=SC2034  # read by tests/cases/*.sh
 quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.go_mod,clean.sim_unavailable,clean.quicklook,clean.docker,clean.docker_images,clean.docker_containers,clean.brew_autoremove,check.*'

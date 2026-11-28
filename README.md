@@ -129,7 +129,7 @@ macup uninstall
 
 - downloads the 3.0 binary, checks its SHA-256 and that it runs, replaces itself with it and runs the command you typed;
 - points a schedule from `macup schedule` at the binary. A scheduled check that comes first still runs, from a temporary copy, and its log says to run macup once in Terminal to finish;
-- in the minutes between a release and its upload, or when the download fails, says so, runs nothing and changes nothing: run macup again a few minutes later;
+- until the release's binary is uploaded (a release is tagged before its binary is attached), or when the download fails, runs the command you typed with 2.9.2 from a temporary copy, says so and replaces nothing; the next run tries again. `self-update`, `schedule` and `uninstall` act on macup's own file, so they wait for the binary: they say so and change nothing;
 - on macOS 12 or older, installs 2.9.2 instead.
 
 With Homebrew, the first time you run macup 3.0 in Terminal, it moves the schedule onto the binary.

@@ -47,6 +47,11 @@ public enum SelfPath {
         return String(cString: resolved)
     }
 
+    /// Started through Homebrew's link or from its Cellar, also behind another link of the user's.
+    static func isHomebrew() -> Bool {
+        !brewPrefix(current()).isEmpty || !brewPrefix(executable()).isEmpty
+    }
+
     static func dirname(_ path: String) -> String {
         guard let slash = path.lastIndex(of: "/") else { return "." }
         return slash == path.startIndex ? "/" : String(path[..<slash])

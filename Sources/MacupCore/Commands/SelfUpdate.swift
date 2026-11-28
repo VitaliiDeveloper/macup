@@ -11,7 +11,7 @@ enum SelfUpdate {
         if env.repo.hasPrefix("__") { say(i18n.translate("This copy has no GitHub repo configured.")); return 1 }
         let target = SelfPath.executable()
         // Homebrew owns that file, and the next brew upgrade would put its own version back
-        if !SelfPath.brewPrefix(SelfPath.current()).isEmpty || !SelfPath.brewPrefix(target).isEmpty {
+        if SelfPath.isHomebrew() {
             say(i18n.translate("macup was installed with Homebrew. Update it with: brew upgrade macup"))
             return 0
         }
@@ -23,13 +23,14 @@ enum SelfUpdate {
             return 1
         }
         guard Version.isNewer(version, than: Env.version) else { say(i18n.format("macup %s is already the latest.", Env.version)); return 0 }
+        // a download cut short would stay hidden next to the binary
+        var work = ""
+        Interrupt.install({ if !work.isEmpty { try? FileManager.default.removeItem(atPath: work) }; exit(1) }, shell: context.shell)
         // next to the file it replaces, so the swap is a rename
         var template = Array("\(SelfPath.dirname(target))/.macup-update.XXXXXX".utf8CString)
         guard mkdtemp(&template) != nil else { say(i18n.format("Couldn't write %s", target)); return 1 }
-        let work = String(cString: template)
+        work = String(cString: template)
         defer { try? FileManager.default.removeItem(atPath: work) }
-        // a download cut short would stay hidden next to the binary
-        Interrupt.install({ try? FileManager.default.removeItem(atPath: work); exit(1) }, shell: context.shell)
         switch Release.fetch(version, repo: env.repo, into: work, shell: context.shell) {
         case .download(let url)?: say(i18n.format("Download failed: %s", url)); return 1
         case .checksum?: say(i18n.translate("The downloaded file does not match its published checksum; nothing changed.")); return 1

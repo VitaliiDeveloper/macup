@@ -178,9 +178,4 @@ enum Updates {
     static func homeBin(_ run: Run, _ name: String) -> Bool {
         run.shell.which(name)?.hasPrefix(run.env.home + "/") ?? false
     }
-
-    /// Python's sort of str keys: by code point.
-    static func codePointOrder(_ left: String, _ right: String) -> Bool {
-        left.unicodeScalars.lexicographicallyPrecedes(right.unicodeScalars)
-    }
 }

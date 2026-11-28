@@ -66,10 +66,13 @@ final class RoutingTests: XCTestCase {
         }
         XCTAssertEqual(route(""), "run", "the menu, or the help without a terminal")
         XCTAssertEqual(route("all --only check.disk,update.brew,clean.derived_data --json"), "run")
-        XCTAssertEqual(route("check"), "run", "every check, update, cleaner and leftover is ported for a dry run")
+        XCTAssertEqual(route("check"), "run", "every check, update, cleaner and leftover is ported")
+        XCTAssertEqual(route("all"), "run")
+        XCTAssertEqual(route("clean --level aggressive"), "run")
+        XCTAssertEqual(Router.route(["clean"], env: environment, terminal: true), .swift(try Arguments.parse(["clean"])), "a clean on a terminal picks nothing")
         XCTAssertEqual(route("--deep"), "run")
         XCTAssertEqual(Router.route(["check"], env: environment, terminal: true), .bash, "on a terminal a check ends with the pick")
-        for line in ["all --only clean.npm", "clean --deep --only clean.npm", "clean --pick clean.derived_data:1",
+        for line in ["clean --pick clean.derived_data:1",
                   "help bogus", "--lang xx help", "--level huge tasks", "bogus"] {
             XCTAssertEqual(route(line), "bash", "'\(line)' goes to the bash build")
         }
@@ -105,9 +108,8 @@ final class RoutingTests: XCTestCase {
     func testRunsThatReachUnportedCodeGoToBash() throws {
         let environment = try env()
         let ported: Set<String> = ["run"], tasks: Set<String> = ["check.disk", "clean.derived_data"]
-        func swift(_ line: String, terminal: Bool = false, commands: Set<String> = ported, dryTasks: Set<String> = []) -> Bool {
-            let route = Router.route(line.split(separator: " ").map(String.init), env: environment, ported: commands, portedTasks: tasks,
-                                     dryTasks: dryTasks, terminal: terminal)
+        func swift(_ line: String, terminal: Bool = false, commands: Set<String> = ported) -> Bool {
+            let route = Router.route(line.split(separator: " ").map(String.init), env: environment, ported: commands, portedTasks: tasks, terminal: terminal)
             if case .swift = route { return true }
             return false
         }
@@ -121,8 +123,6 @@ final class RoutingTests: XCTestCase {
         XCTAssertFalse(swift("--deep --only check.disk"))
         XCTAssertTrue(swift("--deep --only check.disk", commands: ["run", "deep"]))
         XCTAssertFalse(swift("clean --pick clean.derived_data:1 --only clean.derived_data"))
-        XCTAssertTrue(swift("check --only clean.spm", dryTasks: ["clean.spm"]), "registered in Swift, listed by a check")
-        XCTAssertFalse(swift("clean --only clean.spm", dryTasks: ["clean.spm"]), "but not cleaned by it yet")
     }
 
     func testEnvironment() throws {

@@ -51,7 +51,7 @@ extension Updates {
     static func plugins(_ path: String) -> String {
         guard isFile(path), let root = JSONValue.parse(file: path), case .object = root, case .object(let all) = root["plugins"] ?? root else { return "" }
         var lines: [String] = []
-        for (name, value) in all.sorted(by: { codePointOrder($0.key, $1.key) }) {
+        for (name, value) in all.sorted(by: { Names.codePointOrder($0.key, $1.key) }) {
             var entries = [value]
             if case .array(let items) = value { entries = items }
             let user = entries.first { entry in
@@ -148,7 +148,7 @@ extension Updates {
     static func skillHashes(_ path: String) -> String {
         guard let root = JSONValue.parse(file: path), case .object = root, case .object(let skills) = root["skills"] ?? .object([]) else { return "" }
         var lines: [String] = []
-        for (name, value) in skills.sorted(by: { codePointOrder($0.key, $1.key) }) {
+        for (name, value) in skills.sorted(by: { Names.codePointOrder($0.key, $1.key) }) {
             guard case .object = value else { break }
             guard let hash = (value["skillFolderHash"] ?? .string("")).string else { break }
             lines.append("\(name) \(String(String.UnicodeScalarView(hash.unicodeScalars.prefix(7))))")
@@ -186,6 +186,6 @@ extension Updates {
         func key(_ text: String) -> String { text.split(separator: "@", maxSplits: 1).dropFirst().first.map(String.init) ?? "" }
         let leftKey = key(left), rightKey = key(right)
         if leftKey != rightKey { return leftKey.compare(rightKey, options: .numeric) == .orderedAscending }
-        return codePointOrder(left, right)
+        return Names.codePointOrder(left, right)
     }
 }

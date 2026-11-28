@@ -8,7 +8,7 @@
 # report, the files in the fake home. The system tools a run asks (df, diskutil, tmutil, date, brew, sudo, pgrep, osascript)
 # are fakes (tests/fakes.sh), first in PATH and kept there (MACUP_PATH=keep).
 cd "$(dirname "$0")/.." || exit 1
-work=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'rm -rf "$work"' EXIT
+work=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'chmod -R u+rwx "$work" 2>/dev/null; rm -rf "$work"' EXIT
 export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}
 [ -f macup ] && [ -x "$MACUP_BIN" ] || { echo "build both first: ./build.sh"; exit 1; }
 failed=0; runs=0
@@ -68,7 +68,8 @@ type_answers(){ # a/b output-file done-file
 
 run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,files}
   local build=$1 lang=$2 tty=$3 fix=$4 envs=$5 home="$work/home" out="$work/$1"; shift 5
-  rm -rf "$home"; mkdir -p "$home"; [ -n "$fix" ] && "fix_$fix" "$home"
+  # a case may leave a folder macup cannot write or read
+  [ -d "$home" ] && chmod -R u+rwx "$home"; rm -rf "$home"; mkdir -p "$home"; [ -n "$fix" ] && "fix_$fix" "$home"
   # bash runs python3, which on some Macs (Xcode's 3.9) leaves its bytecode in the fake home's Library/Caches/com.apple.python
   local vars=(HOME="$home" MACUP_LANG="$lang" MACUP_BUILD="$build" PATH="$PATH" MACUP_PATH=keep PYTHONDONTWRITEBYTECODE=1)
   local answers=""
@@ -86,7 +87,7 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
   norm "$out.out" "$home" >"$out.norm"; mv "$out.norm" "$out.out"
   # the history's lines start with the date and time of the run
   local history="$home/Library/Application Support/macup/history.csv"
-  { (cd "$home" && { find . ! -path './Library/Logs/macup/*' ! -path './Library/Application Support/macup/history.csv' -type f -exec cksum {} +
+  { (cd "$home" && { find . ! -path './Library/Logs/macup/*' ! -path './Library/Application Support/macup/history.csv' -type f -exec cksum {} + 2>/dev/null
       find . -type l -exec sh -c 'for link; do echo "link $link -> $(readlink "$link")"; done' sh {} +; } | LC_ALL=C sort -k3)
     [ -f "$history" ] && norm "$history" "$home" | cksum; } >"$out.files"
 }

@@ -33,6 +33,8 @@ extension Leftovers {
         var apps: [App] = []
         var teamsRead = false
         var scanned = false
+        /// LO_RESCANNED: the apps are looked at again once, before the first picked agent is judged again.
+        var rescanned = false
         public internal(set) var orphans: [Orphan] = []
         public internal(set) var data: [AppData] = []
         /// O_ALLOW: the only paths a picked leftover may move to the Trash.

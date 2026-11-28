@@ -5,7 +5,36 @@ extension Leftovers {
     /// The cleaners call it where cleaners.sh registers dev containers, before the Gradle caches.
     static func registerDevContainers(_ run: Run) {
         guard run.taskAllowed("clean.dev_containers"), state(run).interactive, !devPrefixes(run).isEmpty else { return }
-        preconditionFailure("the dev container scan comes with the pick")
+        let out = run.out
+        out.step("Looking for containers of dev builds")
+        guard spotlightFinds(run, "kMDItemCFBundleIdentifier == 'com.apple.finder'") else {
+            out.info("Dev containers: Spotlight does not answer, so macup cannot tell which apps are gone; nothing offered")
+            return
+        }
+        let files = Cleanup.openFiles(run.shell)
+        for container in Names.glob(run.env.home + "/Library/Containers", "*") {
+            let name = basename(container)
+            guard Run.isDirectory(container), !Run.isSymlink(container), devContainer(run, container), !appFor(run, name) else { continue }
+            // lsof that cannot tell: in use, without asking it again
+            if files.map({ Cleanup.openIn(run.shell, container, snapshot: $0) }) ?? true {
+                out.info("%s: %s — skipped while the app is open", name, Size.hum(run.kb(container)))
+                continue
+            }
+            guard (try? FileManager.default.contentsOfDirectory(atPath: container)) != nil else {
+                out.info("%s: cannot be read — give your terminal Full Disk Access (System Settings → Privacy & Security)", name)
+                continue
+            }
+            let items = Bash.substitution(run.shell.capture(["find", container, "-mindepth", "1", "-maxdepth", "1", "!", "-name", containerMarker]).output)
+            guard !items.isEmpty else { continue }   // emptied before: only the marker macOS keeps is left
+            run.register(task: "clean.dev_containers", level: 3,
+                         label: out.i18n.format("Container of a dev build whose app is gone: %s (changed %s)", args: [name, newest(run, container)]),
+                         kb: run.kbl(items), kind: .cmd, paths: "devc:\(container)", open: container, manual: true)
+        }
+    }
+
+    /// `[ -n "$(mdfind "$query" | head -1)" ]`
+    static func spotlightFinds(_ run: Run, _ query: String) -> Bool {
+        !(Bash.lines(run.shell.capture(["mdfind", query]).output).first ?? "").isEmpty
     }
 
     /// `app_for`: Spotlight does not index extensions and helpers inside an app, so a container stays while any parent id
@@ -13,7 +42,7 @@ extension Leftovers {
     static func appFor(_ run: Run, _ id: String) -> Bool {
         var id = id
         while true {
-            if !(Bash.lines(run.shell.capture(["mdfind", "kMDItemCFBundleIdentifier == '\(id)'c"]).output).first ?? "").isEmpty { return true }
+            if spotlightFinds(run, "kMDItemCFBundleIdentifier == '\(id)'c") { return true }
             guard let cut = id.unicodeScalars.lastIndex(where: { $0 == "." || $0 == "-" }) else { return false }
             let up = String(id.unicodeScalars[..<cut])
             guard up.contains(".") else { return false }
@@ -23,7 +52,7 @@ extension Leftovers {
 
     /// `newest`: the date of the container's newest file; the folder's own date and macOS's marker say when it was made.
     static func newest(_ run: Run, _ container: String) -> String {
-        let times = run.shell.capture(["find", container, "-type", "f", "!", "-name", ".com.apple.containermanagerd.metadata.plist", "-exec", "stat", "-f", "%m", "{}", "+"])
+        let times = run.shell.capture(["find", container, "-type", "f", "!", "-name", containerMarker, "-exec", "stat", "-f", "%m", "{}", "+"])
         var newest = Bash.lines(times.output).compactMap { Int(Awk.firstField($0)) }.max()
         if newest == nil {
             var info = stat()

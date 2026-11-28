@@ -148,7 +148,7 @@ extension Updates {
         }
         var checked = 0, behind: [String] = []
         for folder in ["/Applications", run.env.home + "/Applications"] where Run.isDirectory(folder) {
-            guard let names = (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted(by: codePointOrder) else { return nil }
+            guard let names = (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted(by: Names.codePointOrder) else { return nil }
             for name in names {
                 let path = folder + "/" + name
                 guard let new = latest[Array(name.unicodeScalars)], !Run.isDirectory(path + "/Contents/_MASReceipt") else { continue }

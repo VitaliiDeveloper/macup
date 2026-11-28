@@ -75,7 +75,7 @@ extension Cleaners {
 
     /// Python's `sorted(os.listdir(folder))`: by code point.
     static func sortedNames(_ folder: String) -> [String]? {
-        (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted(by: Updates.codePointOrder)
+        (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted(by: Names.codePointOrder)
     }
 
     /// `os.path.isfile`: a regular file, through a link.

@@ -15,7 +15,7 @@ public enum Router {
 
     /// `terminal`: stdin and stdout are a terminal, where a check ends with the pick.
     public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks,
-                             dryTasks: Set<String> = Ported.dryTasks, terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
+                             terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
         guard let arguments = try? Arguments.parse(argv) else { return .bash }
         func settings() -> Settings {
             var config = Config(env: env)
@@ -41,7 +41,6 @@ public enum Router {
         // allowed, not only on: a cleaner registers what it finds for an opt-in task too, to be picked
         let allowed = Tasks.all.map(\.id).filter(Selection(settings).allowed)
         if arguments.dry, terminal, !arguments.quiet, !ported.contains("pick"), allowed.contains(where: { $0.hasPrefix("clean.") }) { return .bash }
-        let runnable = arguments.dry ? portedTasks.union(dryTasks) : portedTasks
-        return allowed.allSatisfy(runnable.contains) ? .swift(arguments) : .bash
+        return allowed.allSatisfy(portedTasks.contains) ? .swift(arguments) : .bash
     }
 }

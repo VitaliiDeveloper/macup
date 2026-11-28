@@ -20,6 +20,22 @@ public struct RunLog {
         Shell.writeText(text, to: fd)
         close(fd)
     }
+
+    func append(_ data: Data) {
+        let fd = open(raw, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        guard fd >= 0 else { return }
+        _ = data.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        close(fd)
+    }
+
+    /// `echo "$out" >>"$RAW"` after `out=$(tool)`: the bytes the tool wrote (bytes that are not UTF-8 included), its NULs and
+    /// trailing newlines gone, one newline added; what echo prints instead when the output is one of its options (-n).
+    func echo(_ data: Data) {
+        var bytes = data.filter { $0 != 0 }
+        while bytes.last == 0x0A { bytes.removeLast() }
+        let text = String(decoding: bytes, as: UTF8.self), echoed = Bash.echo(text)
+        append(echoed == text + "\n" ? bytes + [0x0A] : Data(echoed.utf8))
+    }
 }
 
 public extension Shell {

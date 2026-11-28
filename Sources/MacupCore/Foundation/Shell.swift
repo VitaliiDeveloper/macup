@@ -128,8 +128,8 @@ public final class Shell {
 
     /// `tl`: runs a tool and stops it after `seconds` (macOS has no `timeout`); 124 when it was stopped.
     /// It stays in the foreground process group, so Ctrl-C and sudo prompts still reach it. When time is up, it and
-    /// everything it started (found through `ps`) get SIGTERM; whatever is still there 5 seconds later gets SIGKILL,
-    /// unless the tool has ended by then. 127 when the tool is not there.
+    /// everything it started (found through `ps`) get SIGTERM, and whatever of them is still there 5 seconds later gets
+    /// SIGKILL, before this returns. 127 when the tool is not there.
     public func tl(_ seconds: Int, _ argv: [String], stdin: Input = .inherit, stdout: Out = .inherit, stderr: Out = .inherit) -> Int32 {
         let result = timed(seconds, argv, stdin: stdin, stdout: stdout, stderr: stderr)
         return result.stopped ? 124 : result.status
@@ -144,21 +144,40 @@ public final class Shell {
             let ended = Shell.waitForSignal(pid)
             return (ended.status, ended.signal, false)
         }
-        let ended = DispatchSemaphore(value: 0)
+        let ended = DispatchSemaphore(value: 0), watched = DispatchSemaphore(value: 0)
         let stopped = ManagedFlag()
-        let watchdog = Thread { [self] in
+        Thread { [self] in
+            defer { watched.signal() }
             guard ended.wait(timeout: .now() + .seconds(seconds)) == .timedOut else { return }
             stopped.set()
-            let all = descendants(of: pid)
-            all.forEach { kill($0, SIGTERM) }
-            guard ended.wait(timeout: .now() + .seconds(5)) == .timedOut else { return }
-            all.forEach { kill($0, SIGKILL) }
-        }
-        watchdog.start()
+            stop(descendants(of: pid))
+        }.start()
         let result = Shell.waitForSignal(pid)
         ended.signal()
-        ended.signal()
+        // a child that ignores SIGTERM outlives the tool: it would keep a capture's pipe open, and macup's exit would spare it
+        watched.wait()
         return (result.status, result.signal, stopped.isSet)
+    }
+
+    /// SIGTERM, then SIGKILL for those still there after `grace` seconds. A process counts as still there while its pid has
+    /// the start time it had: a pid that ended and was given to another process by then is left alone.
+    func stop(_ pids: [pid_t], grace: TimeInterval = 5) {
+        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }
+        alive.forEach { kill($0.pid, SIGTERM) }
+        let deadline = Date() + grace
+        while !alive.isEmpty, Date() < deadline {
+            usleep(50_000)
+            alive = alive.filter { Shell.startTime($0.pid) == $0.start }
+        }
+        alive.forEach { kill($0.pid, SIGKILL) }
+    }
+
+    /// When the process started, in microseconds; nil when there is none that macup may look at.
+    static func startTime(_ pid: pid_t) -> UInt64? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
     }
 
     /// The process and every process below it, from `ps -Ao pid=,ppid=` (as core.sh's tl finds them).

@@ -230,32 +230,12 @@ enum Tools {
 
     // MARK: helpers
 
-    /// `$(tl seconds tool… 2>…)`: its status (124 when it was stopped, 127 when it is not there), what it printed as `$(…)`
-    /// has it before the trailing newlines go (NUL bytes dropped) and the bytes themselves; `input`, when given, is what it reads.
+    /// `$(tl seconds tool… 2>…)`: its status, what it printed as `$(…)` has it before the trailing newlines go (NUL bytes
+    /// dropped) and the bytes themselves.
     static func capture(_ shell: Shell, _ seconds: Int, _ argv: [String], stdin: Shell.Input = .inherit, stderr: Shell.Out = .null,
                         input: String? = nil) -> (status: Int32, text: String, data: Data) {
-        var output: [Int32] = [0, 0], feed: [Int32] = [-1, -1]
-        guard pipe(&output) == 0 else { return (127, "", Data()) }
-        var source = stdin
-        if let input {
-            guard pipe(&feed) == 0 else { close(output[0]); close(output[1]); return (127, "", Data()) }
-            source = .fd(feed[0])
-            _ = fcntl(feed[1], F_SETNOSIGPIPE, 1)   // a tool that ends without reading all of it must not take macup along
-            let writer = feed[1]
-            Thread { Shell.writeText(input, to: writer); close(writer) }.start()
-        }
-        var data = Data()
-        let drained = DispatchSemaphore(value: 0)
-        // read while the tool runs: a full pipe would stop it before it ends
-        Thread {
-            data = FileHandle(fileDescriptor: output[0], closeOnDealloc: true).readDataToEndOfFile()
-            drained.signal()
-        }.start()
-        let status = shell.tl(seconds, argv, stdin: source, stdout: .fd(output[1]), stderr: stderr)
-        close(output[1])
-        if feed[0] >= 0 { close(feed[0]) }
-        drained.wait()
-        return (status, String(decoding: data.filter { $0 != 0 }, as: UTF8.self), data)
+        let answer = shell.timedCapture(seconds, argv, stdin: stdin, stderr: stderr, input: input)
+        return (answer.status, String(decoding: answer.data.filter { $0 != 0 }, as: UTF8.self), answer.data)
     }
 
     /// Where the first line that is not UTF-8 starts.

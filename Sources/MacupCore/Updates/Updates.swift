@@ -85,20 +85,8 @@ enum Updates {
     /// `$(tl seconds tool… 2>/dev/null)`, or `2>&1` with `errors`: what the tool printed before it ended or was stopped,
     /// and its status (124 when stopped).
     static func timedOutput(_ run: Run, _ seconds: Int, _ argv: [String], errors: Bool = false) -> (status: Int32, text: String) {
-        var fds: [Int32] = [0, 0]
-        guard pipe(&fds) == 0 else { return (127, "") }
-        var data = Data()
-        let drained = DispatchSemaphore(value: 0)
-        // read while the tool runs: a full pipe would stop it before it ends
-        Thread {
-            data = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true).readDataToEndOfFile()
-            drained.signal()
-        }.start()
-        // .fd rather than .stdout: a missing tool's "command not found" goes into the capture, as with 2>&1
-        let status = run.shell.tl(seconds, argv, stdout: .fd(fds[1]), stderr: errors ? .fd(fds[1]) : .null)
-        close(fds[1])
-        drained.wait()
-        return (status, Bash.substitution(String(decoding: data.filter { $0 != 0 }, as: UTF8.self)))   // bash 3.2's $() drops NUL bytes
+        let answer = run.shell.timedCapture(seconds, argv, errorsToo: errors)
+        return (answer.status, Bash.substitution(String(decoding: answer.data.filter { $0 != 0 }, as: UTF8.self)))   // bash 3.2's $() drops NUL bytes
     }
 
     /// `$(tool 2>/dev/null | awk '{print $N}')`.

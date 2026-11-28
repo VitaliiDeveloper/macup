@@ -26,6 +26,7 @@ pick-leftovers|lo|$pick_lo ANSWERS=1,2,3,4,5,6,7,8,9,10/y|check --only $lo_tasks
 pick-leftovers-range|lo|$pick_lo ANSWERS=1-30/y|check --only $lo_tasks|tty
 pick-leftovers-no|lo|$pick_lo ANSWERS=1,2,3/n|check --only $lo_tasks|tty
 pick-sudo-refused|lo|$pick_lo FAKE_SUDO_ASK_RC=1 ANSWERS=1,2,3,4,5,6,7,8,9,10/y|check --only $lo_tasks|tty
+pick-leftovers-busy|lo|$pick_lo FAKE_RUNNING=/Applications/Gone.app/Contents/MacOS/Gone FAKE_OPEN=@H/Library/Perplexity/x ANSWERS=1,2,3,4,5,6,7,8,9,10/y|check --only $lo_tasks|tty
 pick-leftovers-back|loapp|$pick_lo ANSWERS=1,2,3,4,5,6,7,8/y|check --only clean.orphan_agents,clean.orphan_data|tty
 pick-dev|lo|$pick_lo ANSWERS=1/y|check --only clean.dev_containers|tty
 pick-dev-open|lo|$pick_lo FAKE_OPEN=@H/Library/Containers/com.teamed.dev.App/x ANSWERS=1/y|check --only clean.dev_containers|tty

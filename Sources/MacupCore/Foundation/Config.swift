@@ -152,18 +152,44 @@ public struct Config {
             raws[index] = Data(Paths.sedReplacement("\(key) = \(value)", match: line).utf8)
             found = true
         }
-        let out: Data
-        if found {
-            let link = (try? fm.destinationOfSymbolicLink(atPath: path)) != nil
-            if link || conf.sedFails { return }
-            out = Data(raws.joined(separator: [0x0A]))
-        } else {
-            out = data + Data("\(key) = \(value)\n".utf8)
+        guard found else {
+            // appended, through a symlink too: what is there stays whatever happens to the write
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("\(key) = \(value)\n".utf8))
+            return
         }
-        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
-        defer { try? handle.close() }
-        try handle.truncate(atOffset: 0)
-        try handle.write(contentsOf: out)
+        let link = (try? fm.destinationOfSymbolicLink(atPath: path)) != nil
+        if link || conf.sedFails { return }
+        try replace(path, with: Data(raws.joined(separator: [0x0A])))
+    }
+
+    /// A new file next to it with its permissions, renamed over it: a write cut short leaves the config as it was (2.9's
+    /// sed -i did the same). In place when the folder takes no new file.
+    private static func replace(_ path: String, with data: Data) throws {
+        var info = stat()
+        var template = Array("\(path).XXXXXX".utf8CString)
+        let descriptor = mkstemp(&template)
+        guard descriptor >= 0, stat(path, &info) == 0 else {
+            if descriptor >= 0 { close(descriptor); unlink(template) }
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: data)
+            return
+        }
+        let temporary = String(cString: template)
+        do {
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+            try handle.write(contentsOf: data)
+            fchmod(descriptor, info.st_mode & 0o7777)
+            try handle.close()
+            guard rename(temporary, path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        } catch {
+            unlink(temporary)
+            throw error
+        }
     }
 
     /// grep -qE "^[[:space:]]*key[[:space:]]*="

@@ -103,6 +103,12 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
   - config numbers with leading zeros are decimal: `step_timeout_minutes = 09` is 9 minutes where bash's arithmetic failed and abandoned `load_conf` (no level, empty `project_dirs`, `macup tasks` printed the help and exited 2), and `010` is 10 minutes where bash read octal 8;
   - `simulator_days`, `device_support_days` and `stale_project_days` written with leading zeros show without them in the cleaners' labels;
   - a task id that is not UTF-8 (`--skip $'nope\xe9'`) is reported as unknown; bash's `tr` failed on the byte and the run went on.
+- Found in phase 4, self-update and schedule (PR #27):
+  - `schedule` writes the binary as the LaunchAgent's program, without `/bin/bash`;
+  - `self-update` installs the release asset (checked by its SHA-256, the bootstrap guard and `version`, not `bash -n`), downloads it only after `main/macup` names a newer version, and replaces the binary by `rename(2)` from a folder next to it: a folder it cannot write is reported before the download, and through a symlink the file is replaced and the link kept;
+  - the first run rewrites a 2.9 schedule (`/bin/bash <path>`) that names this binary and reloads it, and says so when launchd refuses the reload;
+  - a `MACUP_REPO` fork that publishes no release asset can no longer self-update ("Download failed: <asset URL>").
+- Fixed in phase 4 (PR #28): the three bash bugs listed below (history's trend line, the Time Machine age, the strcoll ties in installed names).
 
 ## Layout
 
@@ -354,8 +360,9 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 3 | the pick, confirmations, `--pick` | `swift/pick` | #25 | merged (442f900) |
 | 4 | the last bash routes: rejected command lines, unknown task ids, leading zeros | `swift/no-bash` | #26 | merged (7e098f9) |
 | 4 | the bash exec and embedded script removed | | | in progress |
-| 4 | `self-update` and `schedule` for the binary, the first-run LaunchAgent check | | | in progress |
-| 4 | the three reproduced bash bugs fixed | | | in progress |
+| 4 | `self-update` and `schedule` for the binary, the first-run LaunchAgent check | `swift/self-update-schedule` | #27 | merged (ba9cbf2) |
+| 4 | the three reproduced bash bugs fixed | `swift/bash-bugs` | #28 | merged (fc9937c) |
+| 4 | `diff.sh` in four CI jobs (`DIFF_SHARD`) | `swift/diff-shards` | #29 | merged (1006a3f) |
 | 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | merged (84f4222) |
 | 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | merged (4f16158) |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

@@ -45,7 +45,7 @@ public enum Version {
 
     /// `update_cmd`.
     static func updateCommand(_ run: Run) -> String {
-        SelfPath.brewPrefix(SelfPath.current()).isEmpty ? "macup self-update" : "brew upgrade macup"
+        SelfPath.isHomebrew() ? "brew upgrade macup" : "macup self-update"
     }
 }
 

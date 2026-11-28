@@ -60,6 +60,15 @@ else
     && [ ! -e "$home/Library/Application Support/macup" ] && [ "$(cat "$home/.zshrc")" = "$(printf 'alias ll=ls\nexport EDITOR=vim')" ] \
     && [ "$(ls "$tmp_dir")" = other.txt ] && pass "uninstall --yes removes macup, older copies, settings, history, reports, the schedule, the PATH line, temp files" \
     || { fail "uninstall --yes"; cat "$work/un.out"; cat "$home/.zshrc"; ls -la "$tmp_dir"; }
+  # a bootstrap 2.9 installed, and the schedule in either form: 2.9's runs it through /bin/bash, 3.0's runs the binary
+  for first in "<string>/bin/bash</string>" ""; do
+    home="$work/unb"; rm -rf "$home"; mkdir -p "$home/.local/bin" "$home/Library/LaunchAgents"; cp tools/bootstrap.sh "$home/.local/bin/macup"
+    SP="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"
+    printf '<plist version="1.0">\n<dict>\n  <key>ProgramArguments</key>\n  <array>%s<string>%s</string><string>check</string></array>\n</dict>\n</plist>\n' "$first" "$home/.local/bin/macup" >"$SP"
+    env HOME="$home" TMPDIR="$home/" macup_run uninstall --yes --no-color </dev/null >"$work/unb.out" 2>&1
+    [ ! -e "$home/.local/bin/macup" ] && [ ! -e "$SP" ] && grep -q "^bootout gui/.*/com.vitaliideveloper.macup" "$home/launchctl.log" \
+      && pass "uninstall removes a bootstrap and the schedule${first:+ of 2.9}" || { fail "uninstall: bootstrap, schedule ${first:-3.0}"; cat "$work/unb.out"; }
+  done
   home="$work/un2"; mkdir -p "$home/.local/bin" "$home/brew/Cellar/macup/9.9.9/bin" "$home/brew/bin"; cp "$build_path" "$home/.local/bin/macup"; cp /usr/bin/true "$home/.local/bin/claude"
   printf '\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\n' >"$home/.zshrc"
   env HOME="$home" TMPDIR="$home/" MACUP_AT="$home/.local/bin/macup" macup_run uninstall --yes --no-color </dev/null >"$work/un2.out" 2>&1
@@ -67,9 +76,9 @@ else
     && pass "uninstall keeps the PATH line when other programs live in that folder" || { fail "uninstall: PATH line kept"; cat "$work/un2.out"; }
   cp "$build_path" "$home/brew/Cellar/macup/9.9.9/bin/macup"; ln -s ../Cellar/macup/9.9.9/bin/macup "$home/brew/bin/macup"
   printf '#!/bin/bash\necho "brew $*" >>"%s/brew.log"\n' "$home" >"$home/brew/bin/brew"; chmod +x "$home/brew/bin/brew"
-  : >"$work/un3.out"; [ "$MACUP_BUILD" = bash ] && env HOME="$home" MACUP_AT="$home/brew/bin/macup" macup_run self-update --no-color </dev/null >"$work/un3.out" 2>&1   # the Swift build has no self-update until phase 4
+  env HOME="$home" MACUP_AT="$home/brew/bin/macup" macup_run self-update --no-color </dev/null >"$work/un3.out" 2>&1
   env HOME="$home" TMPDIR="$home/" MACUP_AT="$home/brew/bin/macup" macup_run uninstall --yes --no-color </dev/null >>"$work/un3.out" 2>&1
-  { [ "$MACUP_BUILD" = swift ] || grep -q 'installed with Homebrew. Update it with: brew upgrade macup' "$work/un3.out"; } && grep -qx 'brew uninstall macup' "$home/brew.log" \
+  grep -q 'installed with Homebrew. Update it with: brew upgrade macup' "$work/un3.out" && grep -qx 'brew uninstall macup' "$home/brew.log" \
     && pass "a Homebrew install: self-update points to brew upgrade, uninstall runs brew uninstall" || { fail "uninstall: Homebrew"; cat "$work/un3.out" "$home/brew.log"; }
 fi
 

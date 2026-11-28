@@ -64,9 +64,10 @@ public enum OneOff {
             return ConfigLang.choose(context)
         case .uninstall?:
             Uninstall.run(context, selfPath: SelfPath.current())
-        case let command? where Router.unavailable.contains(command):
-            out.write("macup \(command == .selfUpdate ? "self-update" : command.rawValue): not available in this build\n")
-            return 1
+        case .selfUpdate?:
+            return SelfUpdate.run(context)
+        case .schedule?:
+            return Schedule.run(context)
         default:
             out.write("macup: \(arguments.command?.rawValue ?? "run") is not ported\n")
             return 70

@@ -64,11 +64,17 @@ extension Checks {
             out.info("Time Machine: configured (last backup date needs Full Disk Access for Terminal)")
             return
         }
-        let now = Int64(time(nil))
-        // BSD date keeps the time of day of now for a date without one
-        let then = Int64(Bash.substitution(run.shell.capture(["date", "-j", "-f", "%Y-%m-%d", latest, "+%s"], stdin: .inherit).output)) ?? now
-        let age = (now - then) / 86400
+        let age = backupAge(latest, now: time(nil))
         if age > 7 { out.warn("Time Machine: last backup %s (%s days ago)", latest, String(age)) } else { out.ok("Time Machine: last backup %s", latest) }
+    }
+
+    /// Whole days since that day's local midnight; 0 for a date strptime rejects. bash's `date -j -f %Y-%m-%d` gave the day the
+    /// time of day of its own call, so a second that ticked after `date +%s` made the age a day short.
+    static func backupAge(_ day: String, now: time_t) -> Int {
+        var midnight = tm()
+        guard strptime(day, "%Y-%m-%d", &midnight) != nil else { return 0 }
+        midnight.tm_isdst = -1
+        return Int((now - mktime(&midnight)) / 86400)
     }
 
     /// `grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1`.

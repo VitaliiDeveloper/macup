@@ -94,4 +94,43 @@ final class ChecksTests: XCTestCase {
         let bash = try BashOracle.run(samples.map { "printf '%s\\n' \(BashOracle.quoted($0)) | { read -r size path; printf '%s|%s' \"$size\" \"$path\"; }" })
         XCTAssertEqual(samples.map { Checks.sizeAndPath($0) }.map { "\($0.0)|\($0.1)" }, bash)
     }
+
+    /// The age counts from the day's midnight, as `date -j -f '%Y-%m-%d %H:%M:%S' "<day> 00:00:00"` reads it; a day strptime
+    /// rejects is 0, as bash's `|| date +%s` makes it.
+    func testBackupAgeFromMidnightAsDate() throws {
+        let days = ["2026-10-20", "2026-03-08", "2026-11-01", "2026-02-31", "2026-13-01", "2026-00-10", "2026-11-18"]
+        let bash = try BashOracle.run(days.map { "/bin/date -j -f '%Y-%m-%d %H:%M:%S' \(BashOracle.quoted($0 + " 00:00:00")) +%s 2>/dev/null || echo none" })
+        let now = time_t(1_795_000_000)
+        for (day, then) in zip(days, bash) {
+            XCTAssertEqual(Checks.backupAge(day, now: now), then == "none" ? 0 : Int((now - time_t(then)!) / 86400), day)
+        }
+    }
+
+    /// No `date` is asked, so its answer cannot move the age; bash's came a second late now and then, and the age a day short.
+    func testBackupAgeAsksNoDate() throws {
+        let home = NSTemporaryDirectory() + "macup-tm-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        try FileManager.default.createDirectory(atPath: home + "/bin", withIntermediateDirectories: true)
+        let day = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -10, to: Date()))
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let latest = formatter.string(from: day)
+        let tools = ["tmutil": "[ \"$1\" = latestbackup ] && echo /Volumes/Disk/\(latest)-101010.backup || echo 'Name : Disk'",
+                     "date": "echo $(( $(/bin/date +%s) + 86400 ))"]
+        for (tool, body) in tools {
+            FileManager.default.createFile(atPath: "\(home)/bin/\(tool)", contents: Data("#!/bin/bash\n\(body)\n".utf8), attributes: [.posixPermissions: 0o755])
+        }
+        let env = try Env(["HOME": home, "PATH": "\(home)/bin:/usr/bin:/bin", "MACUP_PATH": "keep"])
+        let arguments = try Arguments.parse(["check"])
+        let settings = Settings(config: Config(env: env), env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
+        let output = open(home + "/out", O_WRONLY | O_CREAT, 0o644)
+        let out = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: output)
+        Checks.timeMachine(Run(env: env, arguments: arguments, settings: settings, shell: Shell(env: env), out: out, report: Report(path: home + "/report.md", body: home + "/body"),
+                               lock: RunLock(dir: home + "/lock", held: false), started: Date(), previous: ""))
+        close(output)
+        let age = Checks.backupAge(latest, now: time(nil))
+        XCTAssertGreaterThanOrEqual(age, 9)
+        XCTAssertTrue(try String(contentsOfFile: home + "/out", encoding: .utf8).contains("last backup \(latest) (\(age) days ago)"))
+    }
 }

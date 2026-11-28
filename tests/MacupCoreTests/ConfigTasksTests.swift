@@ -110,8 +110,11 @@ final class ConfigTasksTests: XCTestCase {
                 let got = try BashOracle.run(calls, home: dir, prelude: prelude)
                 for (index, task) in Tasks.all.enumerated() { XCTAssertEqual(sel.runs(task.id) ? "1" : "0", got[index], "task \(task.id) with \(cli) in \(text.debugDescription)") }
                 // leading zeros are decimal (intended difference): bash read 010 as octal 8 minutes and gave up on 09 halfway through load_conf
-                if text.contains("step_timeout_minutes = 0") { XCTAssertEqual(settings.stepSeconds, text.contains("= 09") ? 540 : 600, text); continue }
-                XCTAssertEqual("\(settings.skip)|\(settings.enable)|\(settings.only)|\(settings.level)|\(settings.keepReports)|\(settings.stepSeconds)|\(settings.simulatorDays)", got.last, "load_conf")
+                if text.contains("step_timeout_minutes = 09") { XCTAssertEqual(settings.stepSeconds, 540); continue }
+                var fields = (got.last ?? "").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+                if text.contains("step_timeout_minutes = 010") { XCTAssertEqual(fields[5], "480", "bash's octal"); fields[5] = "600" }
+                XCTAssertEqual("\(settings.skip)|\(settings.enable)|\(settings.only)|\(settings.level)|\(settings.keepReports)|\(settings.stepSeconds)|\(settings.simulatorDays)",
+                               fields.joined(separator: "|"), "load_conf")
             }
         }
     }

@@ -1,8 +1,8 @@
 import Darwin
 
 /// Which build runs an invocation (the plan's "Routing"). Whole runs are routed, never split: the Swift build runs a
-/// command itself only when it is ported and, for a run, every task it would do is ported. Anything else, a command line
-/// arguments.sh would reject included, goes whole to the bash build, which then says what it always says.
+/// command itself only when it is ported and, for a run, every task it would do is ported; anything else goes whole to the
+/// bash build. A command line arguments.sh rejects gets its message from Swift.
 public enum Router {
     public enum Route: Equatable {
         case bash
@@ -19,12 +19,7 @@ public enum Router {
     public static func route(_ argv: [String], env: Env, ported: Set<String> = Ported.commands, portedTasks: Set<String> = Ported.tasks,
                              terminal: Bool = isatty(0) == 1 && isatty(1) == 1) -> Route {
         let arguments: Arguments
-        do { arguments = try Arguments.parse(argv) } catch { return .rejected(error as! Arguments.Failure) }
-        func settings() -> Settings {
-            var config = Config(env: env)
-            config.reportsErrors = false   // bash says it, once it has the run
-            return Settings(config: config, env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
-        }
+        do { arguments = try Arguments.parse(argv) } catch let failure as Arguments.Failure { return .rejected(failure) } catch { return .bash }
         if let command = arguments.command {
             if unavailable.contains(command) { return .swift(arguments) }
             guard ported.contains(command.rawValue) else { return .bash }
@@ -37,7 +32,9 @@ public enum Router {
         // the deep scan is no task; --pick and the pick at the end of a check on a terminal come with phase 3
         if arguments.deep, !ported.contains("deep") { return .bash }
         if !arguments.pick.isEmpty, !ported.contains("pick") { return .bash }
-        let settings = settings()
+        var config = Config(env: env)
+        config.reportsErrors = false   // the run says it
+        let settings = Settings(config: config, env: env, cliSkip: arguments.cliSkip, cliOnly: arguments.cliOnly, cliEnable: arguments.cliEnable, cliLevel: arguments.level)
         // allowed, not only on: a cleaner registers what it finds for an opt-in task too, to be picked
         let allowed = Tasks.all.map(\.id).filter(Selection(settings).allowed)
         if arguments.dry, terminal, !arguments.quiet, !ported.contains("pick"), allowed.contains(where: { $0.hasPrefix("clean.") }) { return .bash }

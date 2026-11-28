@@ -29,7 +29,8 @@ final class CleanersTests: XCTestCase {
         let environment = try Env(["HOME": home + "/none", "PATH": "/usr/bin:/bin"])
         func route(_ line: String) -> String {
             switch Router.route(line.split(separator: " ").map(String.init), env: environment, terminal: false) {
-            case .bash, .rejected: return "bash"
+            case .bash: return "bash"
+            case .rejected: return "rejected"
             case .swift: return "swift"
             }
         }

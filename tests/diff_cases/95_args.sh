@@ -17,7 +17,8 @@ arg-lang-bad|||--lang xx help
 arg-lang-equals|||help --lang=de
 arg-lang-missing|||check --lang
 arg-lang-ua|||--lang ua bogus
-arg-bad-config|arg_bad_config||bogus
+arg-bad-config|arg_bad_config|MACUP_LANG=|bogus
+arg-bad-config-ids|arg_bad_config|MACUP_LANG=|check --only chek.disk
 arg-only-unknown|||check --only chek.disk,check.cpu,update.*
 arg-skip-unknown|||all --skip=check.disk,,nope,clean.*
 arg-enable-unknown|||clean --enable clean.nope --enable=x.y
@@ -40,5 +41,5 @@ fix_zeros_010(){ zeros_config "$1" 'step_timeout_minutes = 010'; }
 fix_zeros_xcode(){ fix_cln_xcode "$1"; zeros_config "$1" "$(printf 'simulator_days = 030\ndevice_support_days = 090')"; }
 fix_zeros_projects(){ fix_cln_projects "$1"; zeros_config "$1" 'stale_project_days = 090'; }
 known_zeros_09(){ grep -v ': 09: value too great for base (error token is "09")'; }
-known_zeros_days_xcode(){ perl -pe 's/(?<=[ (])0+(?=[1-9]\d*[+ ])//g'; }
-known_zeros_days_projects(){ perl -pe 's/(?<=[ (])0+(?=[1-9]\d*[+ ])//g'; }
+known_zeros_days_xcode(){ perl -pe 's/(?<=[ (])0(?=[39]0[+ ])//g'; }
+known_zeros_days_projects(){ perl -pe 's/(?<=[ (])0(?=90 )//g'; }

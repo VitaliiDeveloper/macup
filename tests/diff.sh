@@ -103,18 +103,22 @@ while IFS='|' read -r name fix envs args modes <&3; do
       # shellcheck disable=SC2086
       run swift "$lang" "$tty" "$fix" "$envs" $args
       # an intended difference (docs/swift-port-plan.md): the case's known_<name> turns bash's output and report into Swift's
-      known="known_${name//-/_}"; note=""
+      # a filter that changes nothing any more is stale: the case then fails
+      known="known_${name//-/_}"; note=""; bad=""
       if type "$known" >/dev/null 2>&1; then
-        for kind in out report; do "$known" <"$work/bash.$kind" >"$work/bash.$kind.known"; mv "$work/bash.$kind.known" "$work/bash.$kind"; done
-        note=" (known difference)"
+        note=" (known difference)"; bad=" known-unused"
+        for kind in out report; do
+          "$known" <"$work/bash.$kind" >"$work/bash.$kind.known"
+          cmp -s "$work/bash.$kind" "$work/bash.$kind.known" || bad=""
+          mv "$work/bash.$kind.known" "$work/bash.$kind"
+        done
       fi
-      bad=""
       for kind in out rc report files; do cmp -s "$work/bash.$kind" "$work/swift.$kind" || bad="$bad $kind"; done
       for side in bash swift; do error=$(harness_error "$work/$side.out"); [ -z "$error" ] || bad="$bad harness:$side"; done
       if [ -z "$bad" ]; then echo "SAME $name $lang $tty$note"
       else failed=1; echo "DIFF $name $lang $tty:$bad"
         for kind in $bad; do
-          case "$kind" in harness:*) harness_error "$work/${kind#harness:}.out" ;; *) diff "$work/bash.$kind" "$work/swift.$kind" | head -10 ;; esac | sed 's/^/    /'
+          case "$kind" in harness:*) harness_error "$work/${kind#harness:}.out" ;; known-unused) echo "$known changes nothing" ;; *) diff "$work/bash.$kind" "$work/swift.$kind" | head -10 ;; esac | sed 's/^/    /'
         done
       fi
     done

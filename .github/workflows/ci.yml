@@ -27,7 +27,7 @@ jobs:
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
           # every tracked script, so a file that goes away leaves no stale name here; the root macup is the 2.9 bootstrap
-          git ls-files -z '*.sh' ':!src/' tests/macup_run macup | xargs -0 shellcheck -s bash -S warning
+          git ls-files -z '*.sh' tests/macup_run macup | xargs -0 shellcheck -s bash -S warning
 
   swift:
     runs-on: macos-26

@@ -35,7 +35,7 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
 
 ## Routing
 
-Done with in phase 4: the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
+Historical: done with in phase 4, the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
 
 From phase 0 on, the Swift binary is the `macup` entry point. It carries the built bash script.
 
@@ -369,4 +369,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 4 | `diff.sh` in four CI jobs (`DIFF_SHARD`) | `swift/diff-shards` | #29 | merged (1006a3f) |
 | 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | merged (84f4222) |
 | 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | merged (4f16158) |
+| 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
+| 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
+| 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | C/3 | open |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

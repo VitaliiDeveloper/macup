@@ -95,6 +95,14 @@ final class LeftoversTests: XCTestCase {
         for (path, answer) in paths { XCTAssertEqual(Leftovers.devContainer(run, path), answer, path) }
     }
 
+    /// Noon of that day in the local zone: newest prints a local date, the same one in every zone.
+    private func localNoon(_ day: String) -> Date {
+        var noon = tm()
+        _ = strptime(day + " 12:00", "%Y-%m-%d %H:%M", &noon)
+        noon.tm_isdst = -1
+        return Date(timeIntervalSince1970: TimeInterval(mktime(&noon)))
+    }
+
     func testAppForAndNewestAreBash() throws {
         let fm = FileManager.default
         try fm.createDirectory(atPath: home + "/bin", withIntermediateDirectories: true)
@@ -107,9 +115,9 @@ final class LeftoversTests: XCTestCase {
         let containers: KeyValuePairs = ["\(home)/c/full": "2023-11-14", "\(home)/c/empty": "2022-04-15", "\(home)/c/marker": "2022-04-15"]
         for (container, _) in containers { try fm.createDirectory(atPath: container + "/sub", withIntermediateDirectories: true) }
         fm.createFile(atPath: home + "/c/full/sub/old", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_600_000_000)])
-        fm.createFile(atPath: home + "/c/full/new", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)])
+        fm.createFile(atPath: home + "/c/full/new", contents: nil, attributes: [.modificationDate: localNoon("2023-11-14")])
         fm.createFile(atPath: home + "/c/marker/.com.apple.containermanagerd.metadata.plist", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_750_000_000)])
-        for (container, _) in containers { try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_650_000_000)], ofItemAtPath: container) }
+        for (container, _) in containers { try fm.setAttributes([.modificationDate: localNoon("2022-04-15")], ofItemAtPath: container) }
         let run = try makeRun()
         run.shell.vars["PATH"] = "\(home)/bin:/usr/bin:/bin"
         for (id, answer) in ids { XCTAssertEqual(Leftovers.appFor(run, id), answer, id) }

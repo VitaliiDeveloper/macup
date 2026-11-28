@@ -18,6 +18,15 @@ final class OutputShellTests: XCTestCase {
     }
 
     /// Calls through Output give the terminal lines, report and --json items core.sh's output functions of 2.9 gave.
+    /// The escapes 2.9's core.sh used: the expected texts below are built from Colors.on, so its bytes are pinned here.
+    func testColorEscapes() {
+        let on = Colors.on
+        XCTAssertEqual([on.bold, on.green, on.yellow, on.red, on.cyan, on.dim, on.reset, on.cl],
+                       ["\u{1B}[1m", "\u{1B}[32m", "\u{1B}[33m", "\u{1B}[31m", "\u{1B}[36m", "\u{1B}[2m", "\u{1B}[0m", "\r\u{1B}[K"])
+        let off = Colors.off
+        XCTAssertEqual([off.bold, off.green, off.yellow, off.red, off.cyan, off.dim, off.reset, off.cl], ["", "", "", "", "", "", "", ""])
+    }
+
     func testLinesReportAndItems() throws {
         let script: [(String, [String])] = [
             ("section", ["System"]), ("ok", ["Disk: %s free of %s (%s%%)", "10 GB", "100 GB", "10"]), ("sub", ["a line under it"]),

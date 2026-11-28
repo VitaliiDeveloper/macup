@@ -21,7 +21,7 @@ final class NamesTests: XCTestCase {
 
     static let orders = try! JSONDecoder().decode(Orders.self, from: Data(Checkout.fixture("NamesTests-orders.json").utf8))
 
-    /// The locales bash and Swift start in. The test environment has LC_CTYPE=en_US.UTF-8; "" unsets it for core.sh.
+    /// The locales macup starts in. The test environment has LC_CTYPE=en_US.UTF-8; "" unsets it, as for a run started without one.
     /// bogus, en_DK.UTF-8 and the Linux spelling en_US.utf8 are locales macOS lacks: bash and its tools fall back differently.
     static let locales: [(vars: [String: String], collate: Order, glob: Order)] = [
         (["LANG": "en_US.UTF-8", "LC_CTYPE": ""], .utf8, .utf8), (["LANG": "C", "LC_CTYPE": ""], .c, .c), (["LANG": "uk_UA.UTF-8"], .uk, .uk),

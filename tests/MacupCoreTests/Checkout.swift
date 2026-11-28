@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 /// Files of this checkout a test reads: the translations, the bootstrap, and expected values kept in Fixtures/.
 enum Checkout {
@@ -9,5 +10,9 @@ enum Checkout {
     }
 
     /// tests/MacupCoreTests/Fixtures/`name`.
-    static func fixture(_ name: String) -> String { read("tests/MacupCoreTests/Fixtures/\(name)") }
+    static func fixture(_ name: String) -> String {
+        let text = read("tests/MacupCoreTests/Fixtures/\(name)")
+        if text.isEmpty { XCTFail("no fixture tests/MacupCoreTests/Fixtures/\(name)") }
+        return text
+    }
 }

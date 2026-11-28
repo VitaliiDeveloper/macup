@@ -1,6 +1,6 @@
 # Porting macup to Swift
 
-Status: plan, not started. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
+Status: in progress. Phases 0 to 2 are merged; phase 3 and the phase 5 parts that do not wait for phase 4 are under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
 
 ## Why
 
@@ -312,20 +312,21 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 Not worth a release from `main`: the Swift port copies them so `diff.sh` stays exact, and phase 4 fixes them in Swift, each with a test and a line in the 3.0.0 CHANGELOG.
 
 - [ ] `show_history`: awk's `h()` assigns the global `b`, which is also the bold colour (`-v b="$B"`), so "Free space trend:" starts with the last freed value in bytes and is never bold (found by the commands unit, PR #13).
-- [ ] Time Machine's backup age (`src/checks.sh` and `Security.timeMachine`): `date -j -f %Y-%m-%d` gives the backup's date the current time of day, so when a second ticks between `date +%s` and that call the age comes out a day short, and an 8-day-old backup passes the 7-day check. Phase 4 parses the date in Swift. Until then `diff.sh`'s fake `date` reads that date as its midnight, since the two builds hit the race on different runs (found on #16's CI, run 45897078448).
+- [ ] Time Machine's backup age (`src/checks.sh` and `Security.timeMachine`): `date -j -f %Y-%m-%d` gives the backup's date the current time of day, so when a second ticks between `date +%s` and that call the age comes out a day short, and an 8-day-old backup passes the 7-day check. Phase 4 parses the date in Swift. Until then `diff.sh`'s fake `date` reads that date as its midnight, since the two builds hit the race on different runs (found on #16's CI, run 45897078448). That pin never matched until `swift/date-pin`: it tested 4 arguments, and the call has 5 (#20's pull_request run).
 - [ ] `app_names` / `apple_names` (leftovers): bash merges installed names with `sort -u`, which drops names that strcoll ties at the same length (Cyrillic or CJK id parts), so such an app's leftovers can be reported as orphaned. Found by the leftovers unit (#15).
 
 ## Follow-ups queued
 
 - [x] After wave A (#19): move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Also set LC_CTYPE with LC_COLLATE (from `Env.lcCtype`'s decision): with LC_CTYPE "C" strcoll orders `a é b B e` where bash's glob and `sort` give `a b B e é` (found by the leftovers unit). Owner: the commands unit's session; it blocks the leftovers unit's non-ASCII sort test.
 - [ ] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs.
-- [ ] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations.
+- [x] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations (#20).
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
 - [x] `check.macos_updates`: owned by the updates unit, a small PR after #12 (#14).
 - [x] Terminal runs in `diff.sh` were vacuous on macOS 27: `script` refused a fifo on stdin, both builds printed the same error and compared SAME (found by the commands and leftovers units). #13 feeds a pipe instead. After #13 merges: run the full `diff.sh` locally and check that CI's macOS 26 run is real too; any tty difference in the merged checks and updates units goes back to them. Add a guard so a run whose output is only a harness error fails instead of counting as SAME. Done: #13's pipe and #19's guard; swift/main CI on 2b04ae9 passed with real tty runs.
-- [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR.
-- [ ] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it.
-- [ ] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other.
+- [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR. The pin only took effect with `swift/date-pin` (it tested 4 arguments; the call has 5).
+- [x] `diff.sh` flake: the `tmutil` fake wrote `destinationinfo` with `printf` in pieces, and bash's `grep -q` under pipefail closed the pipe between them in about 1% of runs ("no backup destination" in bash only). The fake writes once, as the real `tmutil` does (#18). Fakes that a `grep -q` reads should write in one piece.
+- [x] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it (#20).
+- [ ] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other. Owner: the phase 3 session, after #18.
 
 ## Progress
 
@@ -340,5 +341,10 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 2A | names in the locale's order, `diff.sh` split | `swift/sorted-glob` | #19 | merged (78835fe) |
 | 2B | tools | `swift/tools` | #17 | merged (a7a08b1) |
 | 2B | busy folders (`lsof_snap`, `open_in`) | `swift/lsof-busy` | #16 | merged (3e1703c) |
-| 2B | cleaners (registration) | `swift/cleaners` | #18 | in progress |
+| 2B | cleaners (registration) | `swift/cleaners` | #18 | merged (b8193f9) |
 | 2B | leftovers (registration, startup) | `swift/leftovers` | #15 | merged (85dc350) |
+| 3 | Foundation moves for the pick (`Terminal`, `Config.isSpace`) | `swift/foundation-followups` | #20 | merged (d5fb784) |
+| 3 | exec kinds, `run_key`, the pick, confirmations, `--pick` | `swift/exec-pick` | | in progress |
+| 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | in review |
+| 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | in review |
+| - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | | in review |

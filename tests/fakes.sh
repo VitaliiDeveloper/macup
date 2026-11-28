@@ -52,7 +52,7 @@ FAKE
       # makes an N-day-old backup N-1 days old in one build only. That date reads as its midnight; every other call is /bin/date
       date) cat <<'FAKE' ;;
 #!/bin/bash
-[ $# = 4 ] && [ "$1 $2 $4" = "-j -f %Y-%m-%d +%s" ] && exec /bin/date -j -f '%Y-%m-%d %H:%M:%S' "$3 00:00:00" +%s
+[ $# = 5 ] && [ "$1 $2 $3 $5" = "-j -f %Y-%m-%d +%s" ] && exec /bin/date -j -f '%Y-%m-%d %H:%M:%S' "$4 00:00:00" +%s
 exec /bin/date "$@"
 FAKE
       # Homebrew: every call is logged in the home; outdated and list answer from $HOME/.fake/brew-{formulae,casks,greedy,list},

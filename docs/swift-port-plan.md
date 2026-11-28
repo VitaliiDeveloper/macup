@@ -246,6 +246,8 @@ So the repository root keeps a bash `macup` with that exact version line, and it
 - on a macOS older than the deployment target, installs the last 2.9.x instead of a binary that cannot start;
 - rewrites an existing LaunchAgent. 2.9.x wrote `/bin/bash <path> check --quiet --notify`, and with a binary at that path launchd would fail with exit 126 silently forever. The 3.0 binary also checks and rewrites it on its first run, which covers Homebrew installs.
 
+It lives in `tools/bootstrap.sh` until the cleanup moves it to the root. Started by the LaunchAgent itself (`PPID` 1 or `XPC_SERVICE_NAME`), it runs that check from the download and changes nothing: `launchctl bootout` from inside the job would stop it before it could load the job again, so the swap and the reload wait for a run from a terminal. `install.sh` installs the bootstrap and runs it, so the download, the checks and the macOS 13 rule live in one place.
+
 The suite gets tests for each of these, including a 2.9.2 `self-update` against a fake release.
 
 **Recognising macup.**
@@ -261,6 +263,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 - `src/*.sh`, `src/py`, `tests/test_helpers.py` and `tests/diff.sh` are deleted.
 - `tests/run.sh` stays, minus the bash-only tests.
 - `install.sh` and the bootstrap stay bash.
+- The swap: `git mv tools/bootstrap.sh macup` with `MACUP_VERSION` set to the release, `macup.sha256` written for it and both committed; `/macup` and `/macup.sha256` leave `.gitignore`; `build.sh` stops writing them and `--check` compares `macup.sha256` with the committed `macup`; `tests/shipping.sh` reads the bootstrap from `macup` and takes 2.9.2 from the `v2.9.2` tag (CI then needs tags). `tools/release.sh` already checks the committed root `macup`.
 
 **Docs.** README requirements and install options (curl and Homebrew only; see "Decisions"), CHANGELOG 3.0.0 with the intended differences.
 

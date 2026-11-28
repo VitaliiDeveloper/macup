@@ -351,7 +351,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - Untimed captures: `simctl runtime list`, `xcodebuild -version`, `security` and `openssl` have no time limit.
 - The `orph:N` and `odata:N` pick keys are indexes, not names.
 - Trashed leftovers are counted as "freed".
-- CHANGELOG: the `## 3.0.0 — unreleased` heading gets its date with the tag.
+- [x] CHANGELOG: the 3.0.0 heading is dated (2026-11-28).
 - `tests/fixture.sh` still has one-letter loop names (`a`, `v`, `s`), against ground rule 8.
 
 ## Progress

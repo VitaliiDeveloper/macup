@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0 — unreleased
+## 3.0.0 — 2026-11-28
 
 **macup is now one universal binary, written in Swift, instead of a bash script.** Commands, options, the config file, reports, history, `--json` and exit statuses stay the same, and so does what each run prints, in all three languages, apart from the changes below. It needs macOS 13 Ventura or later, on Apple silicon or Intel.
 

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154,SC2088  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh; SC2088: a literal ~ as users type it
-# Sourced by tests/run.sh: system checks, schedule, --notify, self-update, config file, installer, task ids.
+# Sourced by tests/run.sh: system checks, schedule, --notify, config file, installer, task ids.
 # --- system checks read the output of macOS tools: fakes with real samples, so a format change shows up here
 SB="$work/sbin"; mkdir -p "$SB"; home="$work/sys"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"
 sys(){ env HOME="$home" PATH="$SB:$PATH" macup_run check --no-color "$@" </dev/null 2>&1; }
@@ -49,10 +49,8 @@ sys --only check.memory | grep -q '! Memory: .* 9% free, .* memory is tight' && 
 # --- the schedule is optional: nothing until asked, a LaunchAgent that only runs a check, off removes it
 home="$work/sch"; mkdir -p "$home/.local/bin" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; cp "$build_path" "$home/.local/bin/macup"
 SP="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; sch(){ env HOME="$home" MACUP_AT="$home/.local/bin/macup" macup_run schedule "$@" --no-color </dev/null 2>&1; }
-# the bash build runs its script through /bin/bash, the Swift build names itself: launchd cannot run a binary through bash
-first=$([ "$MACUP_BUILD" = bash ] && echo "<string>/bin/bash</string>")
 sch | grep -q 'No schedule' && [ ! -e "$SP" ] && pass "schedule: none by default" || fail "schedule: default"
-sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<array>$first<string>$home/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
+sch weekly | grep -q 'every Monday at 10:00' && grep -q '<key>Weekday</key><integer>1</integer>' "$SP" && grep -qF "<array><string>$home/.local/bin/macup</string><string>check</string><string>--quiet</string><string>--notify</string>" "$SP" \
   && grep -q "^bootstrap gui/.* $SP" "$home/launchctl.log" && grep -q "<key>PATH</key><string>.*$work/bin" "$SP" && sch | grep -q 'every Monday' && pass "schedule weekly: a LaunchAgent that runs macup check" || { fail "schedule weekly"; cat "$SP" "$home/launchctl.log"; }
 { ! command -v plutil >/dev/null || plutil -lint "$SP" >/dev/null; } && pass "schedule: the plist is valid" || fail "schedule: plist"
 sch daily | grep -q 'every day at 10:00' && ! grep -q Weekday "$SP" && pass "schedule daily" || fail "schedule daily"
@@ -65,31 +63,7 @@ mkdir -p "$home/Library/Developer/Xcode"; ln -s "$home/gone" "$home/.local/bin/d
 env HOME="$home" macup_run check --only check.commands --quiet --notify </dev/null >/dev/null 2>&1
 grep -q 'display notification "Needs attention: [0-9]' "$home/osascript.log" 2>/dev/null && pass "--notify: says what needs attention" || { fail "--notify"; cat "$home/osascript.log" 2>/dev/null; }
 
-# --- self-update: the file comes from the version's tag and must match its published SHA-256; a fake curl serves $FAKE_REMOTE.
-# The Swift build installs the release asset instead: tests/shipping.sh, against a fake release.
-if [ "$MACUP_BUILD" = bash ]; then
-  mkdir -p "$work/cbin"; cat >"$work/cbin/curl" <<'FAKE'
-#!/bin/bash
-out=""; url=""
-while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift ;; --max-time|-z) shift ;; http*) url=$1 ;; esac; shift; done
-file="$FAKE_REMOTE/$(printf '%s' "$url" | sed -E 's|https://raw.githubusercontent.com/[^/]+/[^/]+/||')"
-[ -f "$file" ] || exit 22
-if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
-FAKE
-  chmod +x "$work/cbin/curl"
-  sum(){ if command -v shasum >/dev/null; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
-  home="$work/su"; remote="$work/remote"; mkdir -p "$home/.local/bin" "$home/.config/macup" "$remote/main" "$remote/v9.9.9"; printf 'language = en\n' >"$home/.config/macup/config"
-  sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' macup >"$remote/main/macup"; { cat "$remote/main/macup"; echo '# work in progress on main'; } >"$remote/main/macup.wip"; mv "$remote/main/macup.wip" "$remote/main/macup"
-  sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' macup >"$remote/v9.9.9/macup"
-  echo "$(sum "$remote/main/macup")  macup" >"$remote/main/macup.sha256"; echo "$(sum "$remote/v9.9.9/macup")  macup" >"$remote/v9.9.9/macup.sha256"
-  old(){ sed 's/^MACUP_VERSION=.*/MACUP_VERSION="0.0.1"/' macup >"$home/.local/bin/macup"; }
-  su(){ env HOME="$home" PATH="$work/cbin:$PATH" FAKE_REMOTE="$remote" MACUP_AT="$home/.local/bin/macup" macup_run self-update --no-color </dev/null 2>&1; }
-  old; su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$home/.local/bin/macup" "$remote/v9.9.9/macup" && pass "self-update installs the tagged release, not main" || { fail "self-update from the tag"; su; }
-  old; echo "0000  macup" >"$remote/v9.9.9/macup.sha256"
-  su | grep -q 'does not match its published checksum' && grep -q '^MACUP_VERSION="0.0.1"' "$home/.local/bin/macup" && pass "self-update refuses a file that does not match its checksum" || { fail "self-update checksum"; su; }
-  rm -rf "$remote/v9.9.9"; old
-  su | grep -q 'macup updated: 0.0.1 → 9.9.9' && cmp -s "$home/.local/bin/macup" "$remote/main/macup" && pass "self-update falls back to main before a version is tagged" || { fail "self-update fallback"; su; }
-fi
+# --- self-update: tests/shipping.sh, against a fake release
 
 # --- creating the config file runs nothing: its template used to run `macup clean` and `macup all` (backticks in a heredoc)
 home="$work/cf"; mkdir -p "$home" "$work/mbin"; printf '#!/bin/bash\necho "$*" >>"$HOME/ran.log"\n' >"$work/mbin/macup"; chmod +x "$work/mbin/macup"
@@ -99,21 +73,19 @@ env HOME="$home" PATH="$work/mbin:$PATH" macup_run config </dev/null >/dev/null 
 rm -rf "$home"; env HOME="$home" PATH="$work/mbin:$PATH" macup_run lang uk </dev/null >/dev/null 2>&1
 [ ! -e "$home/ran.log" ] && grep -q '^language = uk' "$home/.config/macup/config" && pass "macup lang on a fresh home runs no command" || fail "macup lang ran: $(cat "$home/ran.log" 2>/dev/null | tr '\n' ' ')"
 
-# --- installer
-if bash_only "installer"; then
-  install_home="$work/i"; mkdir -p "$install_home/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$install_home/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$install_home/.npm-global/bin/other"
-  # no test may hang the suite: after the limit it says what was running and stops the command
-  lim(){ local secs=$1 pid watcher rc; shift; "$@" & pid=$!
-    ( sleep "$secs"; echo "TIMEOUT after ${secs}s: $*"; ps -axo pid,ppid,etime,command | grep -v 'ps -axo' | tail -25; kill $pid 2>/dev/null ) & watcher=$!
-    wait $pid; rc=$?; kill $watcher 2>/dev/null; wait $watcher 2>/dev/null; return $rc; }
-  lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$work/in" 2>&1; rc=$?
-  [ $rc = 0 ] && [ ! -e "$install_home/.npm-global/bin/macup" ] && [ -e "$install_home/.npm-global/bin/other" ] && [ -x "$work/bin/macup" ] && grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" \
-    && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; cat "$work/in"; }
-  lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
-  grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" && grep -q '^language = uk' "$install_home/.config/macup/config" && [ "$(grep -c '# macup' "$install_home/.zshrc")" = 1 ] \
-    && pass "reinstall keeps settings" || fail "reinstall"
-  /bin/bash ./install.sh --bogus >/dev/null 2>&1; [ $? = 2 ] && pass "installer rejects unknown options" || fail "installer options"
-fi
+# --- installer, from this checkout: it installs the binary built here
+install_home="$work/i"; mkdir -p "$install_home/.npm-global/bin"; printf '#!/bin/bash\n# macup — old\nMACUP_VERSION="1.1"\n' >"$install_home/.npm-global/bin/macup"; printf '#!/bin/bash\n# macup notes\n' >"$install_home/.npm-global/bin/other"
+# no test may hang the suite: after the limit it says what was running and stops the command
+lim(){ local secs=$1 pid watcher rc; shift; "$@" & pid=$!
+  ( sleep "$secs"; echo "TIMEOUT after ${secs}s: $*"; ps -axo pid,ppid,etime,command | grep -v 'ps -axo' | tail -25; kill $pid 2>/dev/null ) & watcher=$!
+  wait $pid; rc=$?; kill $watcher 2>/dev/null; wait $watcher 2>/dev/null; return $rc; }
+lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes --lang uk --projects "~/Code, ~/Work" </dev/null >"$work/in" 2>&1; rc=$?
+[ $rc = 0 ] && [ ! -e "$install_home/.npm-global/bin/macup" ] && [ -e "$install_home/.npm-global/bin/other" ] && [ -x "$work/bin/macup" ] && grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" \
+  && pass "install replaces an old copy, keeps unrelated files" || { fail "install (rc=$rc)"; cat "$work/in"; }
+lim 120 env HOME="$install_home" MACUP_PREFIX="$work/bin" /bin/bash ./install.sh --yes </dev/null >/dev/null 2>&1
+grep -q '^project_dirs = ~/Code, ~/Work' "$install_home/.config/macup/config" && grep -q '^language = uk' "$install_home/.config/macup/config" && [ "$(grep -c '# macup' "$install_home/.zshrc")" = 1 ] \
+  && pass "reinstall keeps settings" || fail "reinstall"
+/bin/bash ./install.sh --bogus >/dev/null 2>&1; [ $? = 2 ] && pass "installer rejects unknown options" || fail "installer options"
 
 # --- a mistyped task id is said, not silently matched to nothing; no HOME, no run
 home="$work/ids"; mkdir -p "$home/.config/macup"; printf 'language = en\nskip = check.tyme_machine\nenable = clean.trash\n' >"$home/.config/macup/config"

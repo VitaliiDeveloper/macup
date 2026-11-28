@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import MacupCore
 
-/// The schedule and self-update pieces that need no launchd and no network (commands.sh `schedule`, tools/bootstrap.sh).
+/// The schedule and self-update pieces that need no launchd and no network (commands.sh `schedule`, the bootstrap in the root macup).
 final class ScheduleTests: XCTestCase {
     private let folder = NSTemporaryDirectory() + "macup-schedule-\(UUID().uuidString)"
 
@@ -48,7 +48,7 @@ final class ScheduleTests: XCTestCase {
     func testReleaseAssetAndTheBootstrapLine() throws {
         XCTAssertEqual(Release.assetURL(repo: "VitaliiDeveloper/macup", version: "3.0.0"),
                        "https://github.com/VitaliiDeveloper/macup/releases/download/v3.0.0/macup-3.0.0-macos-universal.tar.gz")
-        let bootstrap = Checkout.root + "/tools/bootstrap.sh"
+        let bootstrap = Checkout.root + "/macup"
         XCTAssertTrue(Release.isBootstrap(bootstrap))
         XCTAssertFalse(Release.isBootstrap(write("#!/bin/bash\n# LEGACY_VERSION=1\nMACUP_VERSION=\"3.0.0\"\n")))
         XCTAssertTrue(Release.isBootstrap(write("LEGACY_VERSION=\"2.9.2\"\n")))

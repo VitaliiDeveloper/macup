@@ -93,17 +93,17 @@ grep -q 'updates not installed: 2 — they need your Mac password' "$work/mas.ou
   || { fail "App Store without a password"; grep 'App Store' "$work/mas.out"; }
 
 # --- intended differences of the Swift build (docs/swift-port-plan.md): each build is held to its own behaviour
-# without python3 (here: no Command Line Tools, so /usr/bin/python3 does not count) bash skips npm globals; Swift reads npm's JSON itself
+# without python3 (here: no Command Line Tools, so /usr/bin/python3 does not count) npm globals still run: macup reads npm's JSON itself
 home="$work/nopy"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; answering "$home/bin" npm node xcode-select
 answer "$home" xcode-select -p /nonexistent; answer "$home" npm outdated '{"aaa":{"current":"1.0.0","latest":"2.0.0"}}'
 env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" macup_run check --only update.npm --no-color </dev/null >"$work/nopy.out" 2>&1; rc=$?
-[ $rc = 0 ] && grep -q 'Summary' "$work/nopy.out" && if [ "$MACUP_BUILD" = swift ]; then grep -q 'npm globals: 1 outdated' "$work/nopy.out"; else ! grep -q 'npm globals' "$work/nopy.out"; fi \
-  && pass "no python3: npm globals as the $MACUP_BUILD build does it" || { fail "no python3 ($MACUP_BUILD)"; cat "$work/nopy.out"; }
-# a step run from the home folder that is stopped: bash runs it in a subshell and loses its warning from the summary and --json
+[ $rc = 0 ] && grep -q 'Summary' "$work/nopy.out" && grep -q 'npm globals: 1 outdated' "$work/nopy.out" \
+  && pass "no python3: npm globals still run" || { fail "no python3"; cat "$work/nopy.out"; }
+# a step run from the home folder that is stopped: its warning counts in the summary and --json (2.9 lost it in a subshell)
 home="$work/skillslow"; mkdir -p "$home/.config/macup" "$home/.agents"; printf 'language = en\n' >"$home/.config/macup/config"; echo '{"skills":{}}' >"$home/.agents/.skill-lock.json"
 answering "$home/bin" npx node; mkdir -p "$home/.fake/npx"; echo 30 >"$home/.fake/npx/-y.sleep"
 env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" MACUP_STEP_SECS=2 macup_run update --only update.skills --json </dev/null >"$work/skillslow.json" 2>/dev/null
 stopped=$(jq "$work/skillslow.json" 'print(sum("stopped after" in line for line in data["needs_attention"]))' 2>/dev/null)
-[ "$stopped" = "$([ "$MACUP_BUILD" = swift ] && echo 1 || echo 0)" ] && pass "a stopped step run from the home folder: its warning as the $MACUP_BUILD build counts it" \
-  || { fail "stopped step from the home folder ($MACUP_BUILD: $stopped)"; cat "$work/skillslow.json"; }
+[ "$stopped" = 1 ] && pass "a stopped step run from the home folder: its warning counts" \
+  || { fail "stopped step from the home folder ($stopped)"; cat "$work/skillslow.json"; }
 

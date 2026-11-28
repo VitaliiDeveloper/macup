@@ -22,35 +22,29 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Build the bash script
-        run: MACUP_NO_SWIFT=1 ./build.sh
       - name: ShellCheck
         run: |
           command -v shellcheck >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q shellcheck; }
           shellcheck --version | sed -n 2p
-          # every tracked script, so a file that goes away leaves no stale name here; src/*.sh are parts of macup
-          git ls-files -z '*.sh' ':!src/' tests/macup_run | xargs -0 shellcheck -s bash -S warning macup
-      - name: Python helpers
-        run: |
-          [ ! -f tests/test_helpers.py ] || python3 tests/test_helpers.py
-          py=$(git ls-files 'src/*.py' 'tests/*.py')   # tools/ stays out, as before
-          [ -z "$py" ] || pipx run ruff check --select F $py
+          # every tracked script, so a file that goes away leaves no stale name here; the root macup is the 2.9 bootstrap
+          git ls-files -z '*.sh' ':!src/' tests/macup_run macup | xargs -0 shellcheck -s bash -S warning
 
   swift:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Build (the bash script, then the Swift package)
+      - name: Build
         run: |
           swift --version
           ./build.sh
+          ./build.sh --check   # also: macup.sha256 matches the committed bootstrap
       - name: XCTest
         run: swift test
       - name: The release archive, as a tag would build it (universal, stripped, signed, packed, checked; not uploaded)
         run: tools/release.sh "$RUNNER_TEMP/dist"
 
-  suite-bash:
+  suite:
     strategy:
       fail-fast: false
       matrix:
@@ -59,15 +53,14 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # tests/shipping.sh updates the 2.9.2 of the v2.9.2 tag
       - name: Build
-        run: ./build.sh
-      - name: Syntax check with the stock macOS bash 3.2
         run: |
-          /bin/bash --version | head -1
-          /bin/bash -n macup
-          /bin/bash -n install.sh
-      - name: Tests on the bash build (fake home folders only)
-        run: tests/run.sh
+          ./build.sh
+          swift build -c release
+      - name: Tests (fake home folders only)
+        run: MACUP_BIN="$(swift build -c release --show-bin-path)/macup" tests/run.sh
       - name: Install from the checkout
         run: /bin/bash ./install.sh --yes --lang en --projects "~/work"
       - name: Help, tasks, version
@@ -96,40 +89,3 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           for l in uk ru en; do macup lang $l; macup tasks --no-color | head -4; macup help | head -3; done
           MACUP_LANG=uk macup check --no-color --only check.system,check.disk,check.memory
-
-  suite-swift:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-26, macos-15]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build
-        run: |
-          ./build.sh
-          swift build -c release
-      - name: Tests on the Swift build (fake home folders only)
-        run: MACUP_BUILD=swift MACUP_BIN="$(swift build -c release --show-bin-path)/macup" tests/run.sh
-      - name: A dry run through the binary
-        run: |
-          b="$(swift build -c release --show-bin-path)/macup"
-          "$b" version
-          "$b" check --no-color --skip check.macos_updates,update.skills
-          "$b" history
-
-  diff:
-    runs-on: macos-26
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]   # about 2,000 runs passed the one job's 60 minutes
-    name: diff (${{ matrix.shard }}/4)
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build
-        run: ./build.sh
-      - name: The bash and the Swift build give the same results
-        run: DIFF_SHARD=${{ matrix.shard }}/4 tests/diff.sh

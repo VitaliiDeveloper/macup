@@ -4,7 +4,7 @@
 public struct Env {
     /// How install.sh and uninstall, 2.9 copies included, tell a macup from another file: a line "# macup" and a line that
     /// starts with MACUP_VERSION=, as in every bash copy. One literal, so the binary keeps it as is; tools/release.sh checks.
-    public static let marker = "\n# macup\nMACUP_VERSION=\"2.9.2\"\n"
+    public static let marker = "\n# macup\nMACUP_VERSION=\"3.0.0\"\n"
     public static let version = String(marker.split(separator: "\"")[1])
     public static let schedLabel = "com.vitaliideveloper.macup"
 

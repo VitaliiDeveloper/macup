@@ -17,8 +17,17 @@ final class OutputShellTests: XCTestCase {
         return try Env(vars)
     }
 
-    /// The same calls through core.sh's output functions and through Output: terminal lines, report and --json items.
-    func testLinesReportAndItemsAgainstBash() throws {
+    /// Calls through Output give the terminal lines, report and --json items core.sh's output functions of 2.9 gave.
+    /// The escapes 2.9's core.sh used: the expected texts below are built from Colors.on, so its bytes are pinned here.
+    func testColorEscapes() {
+        let on = Colors.on
+        XCTAssertEqual([on.bold, on.green, on.yellow, on.red, on.cyan, on.dim, on.reset, on.cl],
+                       ["\u{1B}[1m", "\u{1B}[32m", "\u{1B}[33m", "\u{1B}[31m", "\u{1B}[36m", "\u{1B}[2m", "\u{1B}[0m", "\r\u{1B}[K"])
+        let off = Colors.off
+        XCTAssertEqual([off.bold, off.green, off.yellow, off.red, off.cyan, off.dim, off.reset, off.cl], ["", "", "", "", "", "", "", ""])
+    }
+
+    func testLinesReportAndItems() throws {
         let script: [(String, [String])] = [
             ("section", ["System"]), ("ok", ["Disk: %s free of %s (%s%%)", "10 GB", "100 GB", "10"]), ("sub", ["a line under it"]),
             ("section", ["Empty section"]), ("section", ["Updates"]), ("warn", ["%s: stopped after %s minutes", "brew", "60"]),
@@ -48,16 +57,47 @@ final class OutputShellTests: XCTestCase {
             let swiftOut = try String(contentsOfFile: outFile, encoding: .utf8), swiftBody = try String(contentsOfFile: body, encoding: .utf8)
             let items = output.items.enumerated().map { "\($0.element.section)|\($0.element.kind)|\($0.element.text)|\($0.element.details.joined(separator: "^"))" }
 
-            let colorPrelude = colors == .on ? "B=$'\\033[1m'; G=$'\\033[32m'; Y=$'\\033[33m'; R=$'\\033[31m'; C=$'\\033[36m'; D=$'\\033[2m'; N=$'\\033[0m'; CL=$'\\r\\033[K'" : "B=; G=; Y=; R=; C=; D=; N=; CL="
-            let calls = script.map { call, arguments in "\(call)" + arguments.map { " " + BashOracle.quoted($0) }.joined() }.joined(separator: "; ")
-            let prelude = "\(colorPrelude); JSON=1; BODY=\(BashOracle.quoted(dir + "/bbody")); : >\"$BODY\"; rm -f \"$BODY.det\""
-            let dump = "for ((i=0; i<IT_N; i++)); do printf '%s|%s|%s|%s\\n' \"${IT_SEC[i]}\" \"${IT_KIND[i]}\" \"${IT_MSG[i]}\" \"$(awk -F'\\t' -v n=$i '$1==n{print $2}' \"$BODY.det\" 2>/dev/null | paste -sd^ -)\"; done; printf '%s|%s' \"${#WARN[@]}\" \"$ERRS\""
-            let got = try BashOracle.run(["{ \(calls); } 2>&1; printf x", "cat \"$BODY\"; printf x", dump], prelude: prelude)
-            // the first call's $(…) runs in a subshell: run the lines again for the state
-            let state = try BashOracle.run([dump], prelude: prelude + "; { \(calls); } >/dev/null")
-            XCTAssertEqual(swiftOut + "x", got[0], "terminal lines, colours \(colors == .on)")
-            XCTAssertEqual(swiftBody + "x", got[1], "report")
-            XCTAssertEqual(items.joined(separator: "\n") + "\n\(output.warnings.count)|\(output.errors)", state[0], "--json items, warnings, errors")
+            let (bold, green, yellow, red, cyan, dim, reset, cl) = (colors.bold, colors.green, colors.yellow, colors.red, colors.cyan, colors.dim, colors.reset, colors.cl)
+            let terminal = """
+                \(cl)
+                \(bold)\(cyan)▸ System\(reset)
+                \(cl)  \(green)✓\(reset) Disk: 10 GB free of 100 GB (10%)
+                      \(dim)a line under it\(reset)
+                \(cl)
+                \(bold)\(cyan)▸ Updates\(reset)
+                \(cl)  \(yellow)!\(reset) brew: stopped after 60 minutes
+                \(cl)  \(dim)·\(reset) plain text
+                \(cl)  \(red)✗\(reset) failed 3
+                \(cl)  \(red)✗\(reset) no args
+
+                """
+            let report = """
+
+                ## System
+
+                - ✅ Disk: 10 GB free of 100 GB (10%)
+                    - a line under it
+
+                ## Updates
+
+                - ⚠️ brew: stopped after 60 minutes
+                    - only in the report
+                - plain text
+                - ❌ failed 3
+                - ❌ no args
+
+                """
+            let state = """
+                System|ok|Disk: 10 GB free of 100 GB (10%)|a line under it
+                Updates|warn|brew: stopped after 60 minutes|only in the report
+                Updates|info|plain text|
+                Updates|fail|failed 3|
+                Updates|fail|no args|
+                3|1
+                """
+            XCTAssertEqual(swiftOut, terminal, "terminal lines, colours \(colors == .on)")
+            XCTAssertEqual(swiftBody, report, "report")
+            XCTAssertEqual(items.joined(separator: "\n") + "\n\(output.warnings.count)|\(output.errors)", state, "--json items, warnings, errors")
         }
     }
 

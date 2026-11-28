@@ -1,0 +1,95 @@
+check.system|on|macOS version, model, uptime (warns after 14 days without restart)
+check.disk|on|Free space, disk health (SMART), local Time Machine snapshots
+check.memory|on|Memory pressure and swap usage
+check.cpu|on|Load average, top CPU and memory processes, thermal throttling
+check.battery|on|Charge, cycle count, maximum capacity, condition
+check.security|on|FileVault, Firewall, SIP, Gatekeeper, automatic updates
+check.time_machine|on|Time Machine: last backup date (part of check.security)
+check.startup|on|Third-party launch agents/daemons, orphaned ones pointing at deleted apps
+check.mcp|on|Claude Code MCP servers that fail to connect
+check.brew_doctor|on|brew doctor warnings
+check.macos_updates|on|Pending macOS updates (never installed automatically)
+check.xcode|on|Xcode, command line tools, simulator runtimes
+check.devtools|on|Versions of Swift, CocoaPods, Flutter, Node, Ruby, Python, Codex
+check.commands|on|Commands that cannot start: a missing interpreter (node, python) or a broken link
+check.docker|on|Docker disk usage (if Docker is running)
+check.gh|on|GitHub CLI: a saved login that no longer works
+check.certs|on|Code signing certificates that expire within 30 days
+check.crashes|on|Apps that crashed several times in the last 7 days
+check.sizes|on|Sizes of things macup never deletes: Archives, Trash, caches, pub-cache
+check.creative|on|Render and preview caches of Final Cut, Premiere, DaVinci, Lightroom, Camera Raw (measured only)
+check.trends|on|Compare with the previous run: free space, swap, battery capacity
+check.self_update|on|Tell when a newer macup is on GitHub (once a week)
+update.claude|on|Claude Code CLI, plugin marketplaces, plugins
+update.npm|on|Global npm packages (Codex, Playwright, ...)
+update.skills|on|Agent skills in ~/.agents (npx skills update -g)
+update.brew|on|Homebrew formulae and casks
+update.mas|on|App Store apps (needs mas)
+update.pipx|on|pipx-installed tools
+update.uv|on|uv-installed tools
+update.rustup|on|Rust toolchains
+update.omz|on|Oh My Zsh
+update.gh_ext|on|GitHub CLI extensions
+update.pnpm|on|Global pnpm packages
+update.bun|on|Bun (bun upgrade; a Homebrew install is left to Homebrew)
+update.deno|on|Deno (deno upgrade; a Homebrew install is left to Homebrew)
+update.cargo|on|Programs installed with cargo install (needs cargo-update)
+update.mise|on|Tools managed by mise
+update.asdf|on|asdf plugins
+update.editor_ext|on|VS Code, Cursor, Windsurf and VSCodium extensions
+update.gcloud|on|Google Cloud SDK components (its own install; a Homebrew install is left to Homebrew)
+update.dotnet|on|.NET global tools (needs .NET 9 or later)
+update.composer|on|Composer global packages
+update.gem|off|Ruby gems (opt-in; never the system Ruby)
+update.grok|on|Grok CLI (grok update)
+update.agy|on|Antigravity CLI (agy update)
+update.apps|on|Apps outside Homebrew and the App Store that update themselves (only reported)
+clean.derived_data|on|Xcode DerivedData (skipped while Xcode is open)
+clean.xcode_previews|on|SwiftUI previews cache (skipped while Xcode is open)
+clean.device_support|on|iOS/watchOS DeviceSupport folders older than device_support_days
+clean.device_logs|on|iOS device logs older than 90 days
+clean.sim_unavailable|on|Simulators whose runtime is gone
+clean.sim_runtimes|off|Simulator runtimes you no longer need (only when you pick them; Xcode downloads them again)
+clean.sim_erase|off|Erase the apps and data of a simulator (only when you pick it)
+clean.sim_unused|off|Simulators unused for simulator_days (only when you pick them)
+clean.sim_caches|on|CoreSimulator caches
+clean.spm|on|SwiftPM cache
+clean.cocoapods|on|CocoaPods cache
+clean.carthage|on|Carthage cache
+clean.brew|on|Old Homebrew versions and downloads
+clean.npm|on|npm cache garbage (npm cache verify)
+clean.yarn|on|Yarn cache
+clean.pnpm|on|pnpm store: unreferenced packages
+clean.pip|on|pip cache
+clean.poetry|on|Poetry cache and downloads; its virtualenvs stay
+clean.uv|on|uv cache: unused entries
+clean.go|on|Go build cache
+clean.go_mod|on|Go module cache (standard); go downloads the modules again
+clean.bun|on|Bun install cache
+clean.deno|on|Deno cache; localStorage and Deno KV data stay
+clean.logs|on|Logs and crash reports older than 30 days, also npm and Gradle daemon logs
+clean.quicklook|on|Quick Look thumbnail cache
+clean.reports|on|Old macup reports (keep_reports_days, keep_reports), on every run; its history and leftover temp files are trimmed too
+clean.gradle|on|Gradle caches and old Gradle wrappers (standard)
+clean.android|on|Android and Android Studio caches (standard); SDK, emulators and keys stay
+clean.maven|on|Maven repository ~/.m2/repository (standard); settings.xml stays
+clean.cargo|on|Cargo registry and git downloads (standard, skipped while cargo runs)
+clean.jetbrains|on|JetBrains IDE caches (standard, skipped while open)
+clean.docker|on|Docker build cache and dangling images (standard); never volumes
+clean.docker_images|off|Docker images no container uses (only when you pick them)
+clean.docker_containers|off|Stopped Docker containers (only when you pick them)
+clean.old_versions|on|Older patch versions in nvm, fnm, Volta, rbenv, pyenv, mise, asdf (standard); pinned ones stay
+clean.playwright|on|Old Playwright, Puppeteer and Cypress builds (standard); the newest of each stays
+clean.profiles|on|Expired provisioning profiles
+clean.ai_tools|on|Leftovers of AI coding tools: Codex temporary files, backups and unfinished downloads, old Grok and Antigravity CLI versions, edit backups of deleted Claude Code sessions; chat history is never touched
+clean.editor_workspaces|on|Data VS Code, Cursor and similar editors keep for a workspace whose folder is gone, AI chats included (only when you pick it, to the Trash)
+clean.editors|on|Caches of Electron apps: VS Code, Cursor, Claude, Slack, Discord and any other found by its folder layout (skipped while open)
+clean.browsers|on|Browser caches: Chrome, Arc, Edge, Brave, Firefox and any other Chromium or Firefox-based browser (aggressive, skipped while open)
+clean.app_caches|off|Other big folders in ~/Library/Caches (aggressive, only when you pick them)
+clean.stale_node_modules|off|node_modules in projects untouched for stale_project_days (opt-in)
+clean.stale_artifacts|off|Build folders in projects untouched for stale_project_days: Pods, .build, .dart_tool, .next, target, build (opt-in)
+clean.brew_autoremove|off|Homebrew packages installed only as dependencies that nothing needs any more (only when you pick them)
+clean.trash|off|Empty the Trash (opt-in)
+clean.orphan_agents|off|Background programs of deleted apps and their folders (only when you pick them)
+clean.orphan_data|off|Data of deleted apps: settings, history, saved passwords (only when you pick them)
+clean.dev_containers|off|Containers in ~/Library/Containers named by dev_container_prefixes whose app is gone (only when you pick them)

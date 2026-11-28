@@ -25,34 +25,43 @@ final class CleanersTests: XCTestCase {
         try? FileManager.default.createSymbolicLink(atPath: "\(home)/\(relative)", withDestinationPath: target)
     }
 
+    /// Each line split on "|" and on a tab into three fields, as bash's `IFS=… read -r one two three` does.
     func testReadIsBashRead() throws {
-        let lines = ["x|y|z|", "x|y|z|w|", "x|y|", "|y| z ", "x|y|z||", "", "a", "a||b", "\tx\t\ty\tz\t", "x\ty", "\t\t", " a\tb c \t", "a\t\tb\t\tc\t\td\t"]
-        for separator in ["|", "\t"] {
-            let calls = lines.map { "IFS=\(BashOracle.quoted(separator)) read -r one two three <<< \(BashOracle.quoted($0)); printf '%s/%s/%s' \"$one\" \"$two\" \"$three\"" }
-            for (line, answer) in zip(lines, try BashOracle.run(calls)) {
-                XCTAssertEqual(Cleaners.read(line, separator.unicodeScalars.first!, 3).joined(separator: "/"), answer, "\(separator.debugDescription) \(line.debugDescription)")
-            }
+        let cases = [
+            ("x|y|z|", "x/y/z", "x|y|z|//"), ("x|y|z|w|", "x/y/z|w|", "x|y|z|w|//"), ("x|y|", "x/y/", "x|y|//"), ("|y| z ", "/y/ z ", "|y| z //"),
+            ("x|y|z||", "x/y/z||", "x|y|z||//"), ("", "//", "//"), ("a", "a//", "a//"), ("a||b", "a//b", "a||b//"),
+            ("\tx\t\ty\tz\t", "\tx\t\ty\tz\t//", "x/y/z"), ("x\ty", "x\ty//", "x/y/"), ("\t\t", "\t\t//", "//"), (" a\tb c \t", " a\tb c \t//", " a/b c /"),
+            ("a\t\tb\t\tc\t\td\t", "a\t\tb\t\tc\t\td\t//", "a/b/c\t\td"),
+        ]
+        for (line, pipe, tab) in cases {
+            XCTAssertEqual(Cleaners.read(line, "|", 3).joined(separator: "/"), pipe, "| \(line.debugDescription)")
+            XCTAssertEqual(Cleaners.read(line, "\t", 3).joined(separator: "/"), tab, "tab \(line.debugDescription)")
         }
     }
 
     func testRuntimeNameIsSed() throws {
-        let identifiers = ["com.apple.CoreSimulator.SimRuntime.iOS-17-2", "com.apple.CoreSimulator.SimRuntime.watchOS-10-0-1", "SimRuntime.x-SimRuntime.tvOS-9",
-                           "plain", "", "-n", "a-b"]
-        let bash = try BashOracle.run(identifiers.map { "echo \(BashOracle.quoted($0)) | sed 's/.*SimRuntime\\.//; s/-/ /; s/-/./g'" })
-        for (identifier, answer) in zip(identifiers, bash) { XCTAssertEqual(Cleaners.runtimeName(identifier), answer, identifier) }
+        let cases = [("com.apple.CoreSimulator.SimRuntime.iOS-17-2", "iOS 17.2"), ("com.apple.CoreSimulator.SimRuntime.watchOS-10-0-1", "watchOS 10.0.1"),
+                     ("SimRuntime.x-SimRuntime.tvOS-9", "tvOS 9"), ("plain", "plain"), ("", ""), ("-n", ""), ("a-b", "a b")]
+        for (identifier, expected) in cases { XCTAssertEqual(Cleaners.runtimeName(identifier), expected, identifier) }
     }
 
     func testSimListIsPython() throws {
         let devices = #"{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-17-2":[{"udid":"A1","state":"Shutdown","name":"Tab\there"},{"udid":"B2","state":"Booted","name":"x"}],"rt.watchOS-10-0":[{"udid":"C3","state":"Shutdown","name":"w"}]}}"#
         let runtimes = #"{"R1":{"runtimeIdentifier":"com.apple.CoreSimulator.SimRuntime.iOS-17-2","sizeBytes":7000000000,"lastUsedAt":"2026-01-02T10:00:00Z","version":"17.2"},"R2":{"runtimeIdentifier":"rt.watchOS-10-0","sizeBytes":-3000.7,"version":10.0},"R3":{"deletable":false},"R4":{"deletable":0,"sizeBytes":5},"R5":{"lastUsedAt":"","sizeBytes":"42"}}"#
-        let inputs = [devices + "\n@@\n" + runtimes, "\n@@\n", "garbage\n@@\n" + runtimes, devices + "\n@@\n[]", #"{"devices":[]}"# + "\n@@\n" + runtimes,
-                      #"{"devices":{"r":[1]}}"# + "\n@@\n" + runtimes, #"[1]"# + "\n@@\n" + runtimes, devices + "\n@@\n" + #"{"R":{"sizeBytes":null}}"#,
-                      devices + "\n@@\n" + #"{"R":{"lastUsedAt":5}}"#, devices + "\n@@\n" + #"{"R":{"runtimeIdentifier":7}}"#, #"{"devices":{"r":[{"name":3}]}}"# + "\n@@\n{}",
-                      devices + "\n@@\n" + #"{"R":{"sizeBytes":"1.5"}}"#, #"{"x":"@@"}"# + "\n@@\n{}",
-                      #"{"devices":{"a":{},"b":"","c":[{"udid":"U","name":"two\nlines"}]}}"# + "\n@@\n" + #"{"R":{"sizeBytes":" 42\n","version":"1\n2"}}"#,
-                      #"{"devices":{"a":{"k":1},"c":[{"udid":"U"}]}}"# + "\n@@\n{}", #"{"devices":{"a":"x"}}"# + "\n@@\n{}"]
-        for input in inputs {
-            XCTAssertEqual(Cleaners.simList(input).joined(separator: "\n"), try BashOracle.python("sim-list", [], input: input, home: home).output, input)
+        let deviceLines = "D\tA1\tShutdown\tcom.apple.CoreSimulator.SimRuntime.iOS-17-2\tTab here\nD\tB2\tBooted\tcom.apple.CoreSimulator.SimRuntime.iOS-17-2\tx\nD\tC3\tShutdown\trt.watchOS-10-0\tw"
+        let runtimeLines = "R\tR1\t6835937\t2026-01-02\t0\t0\tiOS\t17.2\nR\tR2\t-3\t-\t0\t0\twatchOS\t10.0\nR\tR5\t0\t-\t0\t0\t\t?"
+        let cases = [
+            (devices + "\n@@\n" + runtimes, deviceLines + "\nR\tR1\t6835937\t2026-01-02\t2\t1\tiOS\t17.2\nR\tR2\t-3\t-\t1\t0\twatchOS\t10.0\nR\tR5\t0\t-\t0\t0\t\t?"),
+            ("\n@@\n", ""), ("garbage\n@@\n" + runtimes, runtimeLines), (devices + "\n@@\n[]", deviceLines), (#"{"devices":[]}"# + "\n@@\n" + runtimes, ""),
+            (#"{"devices":{"r":[1]}}"# + "\n@@\n" + runtimes, ""), (#"[1]"# + "\n@@\n" + runtimes, runtimeLines), (devices + "\n@@\n" + #"{"R":{"sizeBytes":null}}"#, deviceLines),
+            (devices + "\n@@\n" + #"{"R":{"lastUsedAt":5}}"#, deviceLines), (devices + "\n@@\n" + #"{"R":{"runtimeIdentifier":7}}"#, deviceLines),
+            (#"{"devices":{"r":[{"name":3}]}}"# + "\n@@\n{}", ""), (devices + "\n@@\n" + #"{"R":{"sizeBytes":"1.5"}}"#, deviceLines), (#"{"x":"@@"}"# + "\n@@\n{}", ""),
+            (#"{"devices":{"a":{},"b":"","c":[{"udid":"U","name":"two\nlines"}]}}"# + "\n@@\n" + #"{"R":{"sizeBytes":" 42\n","version":"1\n2"}}"#,
+             "D\tU\t\tc\ttwo\nlines\nR\tR\t0\t-\t0\t0\t\t1\n2"),
+            (#"{"devices":{"a":{"k":1},"c":[{"udid":"U"}]}}"# + "\n@@\n{}", ""), (#"{"devices":{"a":"x"}}"# + "\n@@\n{}", ""),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(Cleaners.simList(input).joined(separator: "\n"), expected, input)
         }
     }
 
@@ -78,11 +87,12 @@ final class CleanersTests: XCTestCase {
         make("\(storage)/.dot/workspace.json", #"{"folder": "file://\#(home)/Projects/missing"}"#)
         make("\(storage)/file", "")
         link("\(storage)/linked-ws", to: "\(home)/\(storage)/gone")
-        let python = { try BashOracle.python("editor-workspaces", ["\(self.home)/\(storage)", self.home], home: self.home).output }
-        XCTAssertEqual(Cleaners.goneWorkspaces("\(home)/\(storage)", home: home).joined(separator: "\n"), try python())
+        // 2.9's helper stopped at the "[x" host, so nothing after zzzz-bracket is listed
+        let gone = [".dot", "bad", "deep", "double", "gone", "hash", "local", "nfc", "nfd", "query", "tab", "ws"].map { "\(home)/\(storage)/\($0)" }
+        XCTAssertEqual(Cleaners.goneWorkspaces("\(home)/\(storage)", home: home), gone)
         make("\(storage)/zz-array/workspace.json", "[1]")
         make("\(storage)/zzz-after/workspace.json", #"{"folder": "file://\#(home)/Projects/missing"}"#)
-        XCTAssertEqual(Cleaners.goneWorkspaces("\(home)/\(storage)", home: home).joined(separator: "\n"), try python(), "Python stops at a list")
+        XCTAssertEqual(Cleaners.goneWorkspaces("\(home)/\(storage)", home: home), gone, "a list stops the scan")
     }
 
     func testProfilesArePython() throws {
@@ -99,15 +109,14 @@ final class CleanersTests: XCTestCase {
         make("\(folder)/text.mobileprovision", "no plist")
         make("\(folder)/dir.mobileprovision")
         link("\(folder)/link.mobileprovision", to: "\(home)/\(folder)/old.mobileprovision")
-        let folders = ["\(home)/\(folder)", "\(home)/missing"]
-        XCTAssertEqual(Cleaners.expiredProfiles(folders).joined(separator: "\n"), try BashOracle.python("profiles-expired", folders, home: home).output)
-        // Python stops at a folder it cannot list
+        let expired = ["b-old.provisionprofile", "old.mobileprovision"].map { "\(home)/\(folder)/\($0)" }
+        XCTAssertEqual(Cleaners.expiredProfiles(["\(home)/\(folder)", "\(home)/missing"]), expired)
+        // 2.9's helper stopped at a folder it could not list
         make("locked")
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: "\(home)/locked")
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: "\(home)/locked") }
-        for order in [["\(home)/locked", "\(home)/\(folder)"], ["\(home)/\(folder)", "\(home)/locked"]] {
-            XCTAssertEqual(Cleaners.expiredProfiles(order).joined(separator: "\n"), try BashOracle.python("profiles-expired", order, home: home).output, "\(order)")
-        }
+        XCTAssertEqual(Cleaners.expiredProfiles(["\(home)/locked", "\(home)/\(folder)"]), [])
+        XCTAssertEqual(Cleaners.expiredProfiles(["\(home)/\(folder)", "\(home)/locked"]), expired)
     }
 
     func testLayoutGroupsArePython() throws {
@@ -130,14 +139,21 @@ final class CleanersTests: XCTestCase {
         link("\(support)/Linked", to: "\(home)/elsewhere")
         make("\(support)/Firefox/Profiles/x/History", "")
         let covered = "\(home)/\(support)/Covered/One\n\n\(home)/\(caches)/Thing/Cache\n"
-        let tables = ["NAMES": CacheTables.electronCaches.joined(separator: "|"),
-                      "APPS": CacheTables.electronApps.map { "\($0.folder)|\($0.app)" }.joined(separator: "\n"),
-                      "BRS": CacheTables.browsers.map { "\($0.name)|\($0.app)|\($0.folders.joined(separator: ";"))" }.joined(separator: "\n"), "COVERED": covered]
         let swift = Cleaners.layoutGroups(support: "\(home)/\(support)", caches: "\(home)/\(caches)", covered: covered).map { group in
             [String(group.level), group.kind, group.name, group.opened.joined(separator: "\u{1F}"), group.paths.joined(separator: "\u{1F}")].joined(separator: "\t")
         }
-        let python = try BashOracle.python("electron-caches", ["\(home)/\(support)", "\(home)/\(caches)"], home: home, env: tables).output
-        XCTAssertEqual(swift.joined(separator: "\n"), python)
-        XCTAssertFalse(swift.isEmpty)
+        func group(_ level: Int, _ kind: String, _ name: String, _ folder: String, _ path: String) -> String {
+            [String(level), kind, name, "\(home)/\(support)/\(folder)\u{1F}\(home)/\(caches)/\(folder)", path].joined(separator: "\t")
+        }
+        XCTAssertEqual(swift, [
+            group(1, "app", "Plain", "Plain", "\(home)/\(support)/Plain/Cache"),
+            group(1, "app", "Slack", "Slack", "\(home)/\(support)/Slack/Partitions/p1/Code Cache\u{1F}\(home)/\(caches)/Slack/GPUCache"),
+            group(1, "app", "Vendor App", "Vendor", "\(home)/\(support)/Vendor/App/Sub/Deep/GPUCache"),
+            group(1, "app", "Visual Studio Code", "Code", "\(home)/\(support)/Code/Cache"),
+            group(1, "app", "a", "a", "\(home)/\(support)/a/b/c/d/Cache"),
+            group(3, "browser", "Arc", "Arc", "\(home)/\(caches)/Arc/User Data/Default/Cache"),
+            group(3, "browser", "Firefox", "Firefox", "\(home)/\(caches)/Firefox/Profiles/x/cache2"),
+            group(3, "browser", "Mozilla", "Mozilla", "\(home)/\(caches)/Mozilla/Profiles/y/cache2"),
+        ])
     }
 }

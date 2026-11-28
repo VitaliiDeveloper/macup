@@ -1,7 +1,7 @@
 @testable import MacupCore
 import XCTest
 
-/// The updaters' parsing against what the bash build runs today: macup_helpers.py for the JSON, bash and sed for the rest.
+/// The updaters' parsing, with the answers 2.9's macup_helpers.py gave for the JSON and bash and sed for the rest.
 final class UpdatesTests: XCTestCase {
     var home = ""
 
@@ -12,11 +12,6 @@ final class UpdatesTests: XCTestCase {
 
     override func tearDown() { try? FileManager.default.removeItem(atPath: home) }
 
-    /// macup_helpers.py `command args…` with this input: what it prints (as `$(…)` keeps it) and whether it ended well.
-    func python(_ command: String, _ arguments: [String], input: String = "") throws -> (output: String, ok: Bool) {
-        try BashOracle.python(command, arguments, input: input, home: home)
-    }
-
     func write(_ text: String, _ name: String) throws -> String {
         let path = "\(home)/\(name)"
         try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
@@ -26,28 +21,27 @@ final class UpdatesTests: XCTestCase {
 
     func testPluginsAsPythonReadsThem() throws {
         let cases = [
-            #"{"version":2,"plugins":{"zeta@m":[{"scope":"project","version":"1.0.0"},{"scope":"user","version":"1.2.0"}],"alpha@m":[{"gitCommitSha":"abcdef1234567"}],"Beta@m":{"version":"0.9"},"local@m":[{"scope":"local","version":"3"}]}}"#,
-            #"{"b":{"version":2},"a":{"version":1.50},"c":{"version":true},"d":{"version":"","gitCommitSha":""},"e":[{"scope":null}]}"#,
-            #"{"plugins":{"a":{"version":"1"},"b":{"gitCommitSha":12345678},"c":{"version":"3"}}}"#,
-            #"{"plugins":{"é":{"version":"1"},"e\u0301":{"version":"2"},"z":{"version":"3"},"Z":{"version":"4"},"😀":{"version":"5"}}}"#,
-            #"{"plugins":{"dup":{"version":"1"},"other":{"version":"2"},"dup":{"version":"3"}}}"#,
-            #"{"plugins":[]}"#, #"[]"#, #"{"plugins":{"a":{"version":"1"}}"#, "not json",
+            (#"{"version":2,"plugins":{"zeta@m":[{"scope":"project","version":"1.0.0"},{"scope":"user","version":"1.2.0"}],"alpha@m":[{"gitCommitSha":"abcdef1234567"}],"Beta@m":{"version":"0.9"},"local@m":[{"scope":"local","version":"3"}]}}"#,
+             "Beta@m 0.9\nalpha@m abcdef1\nzeta@m 1.2.0"),
+            (#"{"b":{"version":2},"a":{"version":1.50},"c":{"version":true},"d":{"version":"","gitCommitSha":""},"e":[{"scope":null}]}"#, "a 1.5\nb 2\nc True\nd ?"),
+            (#"{"plugins":{"a":{"version":"1"},"b":{"gitCommitSha":12345678},"c":{"version":"3"}}}"#, "a 1"),
+            (#"{"plugins":{"é":{"version":"1"},"e\u0301":{"version":"2"},"z":{"version":"3"},"Z":{"version":"4"},"😀":{"version":"5"}}}"#, "Z 4\ne\u{301} 2\nz 3\n\u{E9} 1\n😀 5"),
+            (#"{"plugins":{"dup":{"version":"1"},"other":{"version":"2"},"dup":{"version":"3"}}}"#, "dup 3\nother 2"),
+            (#"{"plugins":[]}"#, ""), (#"[]"#, ""), (#"{"plugins":{"a":{"version":"1"}}"#, ""), ("not json", ""),
         ]
-        for json in cases {
-            let path = try write(json, "installed_plugins.json")
-            XCTAssertEqual(Updates.plugins(path), try python("plugins", [path]).output, json)
+        for (json, expected) in cases {
+            XCTAssertEqual(Updates.plugins(try write(json, "installed_plugins.json")), expected, json)
         }
     }
 
     func testSkillsAsPythonReadsThem() throws {
         let cases = [
-            #"{"version":3,"skills":{"web":{"skillFolderHash":"aaaaaaa111"},"Pdf":{"skillFolderHash":"bb"},"none":{}}}"#,
-            #"{"skills":{"a":{"skillFolderHash":"1234567890"},"b":{"skillFolderHash":null},"c":{"skillFolderHash":"x"}}}"#,
-            #"{"skills":{"a":{"skillFolderHash":"x"},"b":[]}}"#, #"{}"#, #"[]"#, "{",
+            (#"{"version":3,"skills":{"web":{"skillFolderHash":"aaaaaaa111"},"Pdf":{"skillFolderHash":"bb"},"none":{}}}"#, "Pdf bb\nnone \nweb aaaaaaa"),
+            (#"{"skills":{"a":{"skillFolderHash":"1234567890"},"b":{"skillFolderHash":null},"c":{"skillFolderHash":"x"}}}"#, "a 1234567"),
+            (#"{"skills":{"a":{"skillFolderHash":"x"},"b":[]}}"#, "a x"), (#"{}"#, ""), (#"[]"#, ""), ("{", ""),
         ]
-        for json in cases {
-            let path = try write(json, ".skill-lock.json")
-            XCTAssertEqual(Updates.skillHashes(path), try python("skills", [path]).output, json)
+        for (json, expected) in cases {
+            XCTAssertEqual(Updates.skillHashes(try write(json, ".skill-lock.json")), expected, json)
         }
     }
 
@@ -55,17 +49,18 @@ final class UpdatesTests: XCTestCase {
         let root = home + "/root"
         try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(atPath: root + "/linked", withDestinationPath: home)
+        let mixed = #"{"zlib":{"current":"1.0.0","latest":"1.1.0"},"aaa":{"current":"2.0.0","latest":"3.0.0-beta.1"},"linked":{"current":"1.0.0","latest":"2.0.0"},"git":{"current":"git","latest":"1.0.0"},"same":{"current":"1.0.0","latest":"1.0.0"},"num":{"current":1.5,"latest":"2.0.0"},"@scope/pkg":{"current":"10.20.30x","latest":"10.20.31"}}"#
         let cases = [
-            #"{"zlib":{"current":"1.0.0","latest":"1.1.0"},"aaa":{"current":"2.0.0","latest":"3.0.0-beta.1"},"linked":{"current":"1.0.0","latest":"2.0.0"},"git":{"current":"git","latest":"1.0.0"},"same":{"current":"1.0.0","latest":"1.0.0"},"num":{"current":1.5,"latest":"2.0.0"},"@scope/pkg":{"current":"10.20.30x","latest":"10.20.31"}}"#,
-            #"{"a":{"current":"1.0.0","latest":"2.0.0"},"b":"oops","c":{"current":"1.0.0","latest":"2.0.0"}}"#,
-            #"{"a":{"latest":"2.0.0"},"b":{"current":null,"latest":"2.0.0"}}"#,
-            #"  {"a" : {"current" : "1.0.0" , "latest" : "1.0.1"} }  "#,
-            "{}", "[]", "", "npm ERR! offline", #"{"a":{"current":"1.0.0","latest":"2.0.0"}} trailing"#,
+            (mixed, "zlib 1.0.0 1.1.0\naaa 2.0.0 3.0.0-beta.1\n@scope/pkg 10.20.30x 10.20.31"),
+            (#"{"a":{"current":"1.0.0","latest":"2.0.0"},"b":"oops","c":{"current":"1.0.0","latest":"2.0.0"}}"#, "a 1.0.0 2.0.0"),
+            (#"{"a":{"latest":"2.0.0"},"b":{"current":null,"latest":"2.0.0"}}"#, ""),
+            (#"  {"a" : {"current" : "1.0.0" , "latest" : "1.0.1"} }  "#, "a 1.0.0 1.0.1"),
+            ("{}", ""), ("[]", ""), ("", ""), ("npm ERR! offline", ""), (#"{"a":{"current":"1.0.0","latest":"2.0.0"}} trailing"#, ""),
         ]
-        for json in cases {
-            XCTAssertEqual(Updates.npmOutdated(json, root: root), try python("npm-outdated", [root], input: json).output, json)
+        for (json, expected) in cases {
+            XCTAssertEqual(Updates.npmOutdated(json, root: root), expected, json)
         }
-        XCTAssertEqual(Updates.npmOutdated(cases[0], root: ""), try python("npm-outdated", [""], input: cases[0]).output)
+        XCTAssertEqual(Updates.npmOutdated(mixed, root: ""), "zlib 1.0.0 1.1.0\naaa 2.0.0 3.0.0-beta.1\nlinked 1.0.0 2.0.0\n@scope/pkg 10.20.30x 10.20.31")
     }
 
     func testAppsBehindAsPythonFindsThem() throws {
@@ -104,21 +99,19 @@ final class UpdatesTests: XCTestCase {
             cask("macup-bool", #""True.1""#, #"["MacupBool.app"]"#), cask("macup-real", #""2.0.1""#, #"["MacupReal.app"]"#),
         ].joined(separator: ",") + "]", "cask.json")
         let run = try makeRun()
-        let expected = try python("apps-behind", [catalog, home + "/Applications"])
         let found = try XCTUnwrap(Updates.appsBehind(run, catalog))
-        XCTAssertTrue(expected.ok)
-        XCTAssertEqual(([String(found.checked)] + found.behind).joined(separator: "\n"), expected.output)
+        XCTAssertEqual(([String(found.checked)] + found.behind).joined(separator: "\n"),
+                       "6\nMacupBool True → True.1\nMacupLong 99999999999999999999.1 → 100000000000000000000.0\nMacupNumber 3 → 4\nMacupOld 1.0 → 2.0\nMacupReal 2.0 → 2.0.1")
         XCTAssertTrue(found.behind.contains("MacupOld 1.0 → 2.0"), "the case the suite relies on is there")
 
         for broken in [#"{"a":1}"#, #"[{"version":"1"}]"#, #"[{"token":"x","artifacts":[["app"]]}]"#, #"[{"token":"x","artifacts":[{"app":{"a":1}}]}]"#, "["] {
             let path = try write(broken, "broken.json")
             XCTAssertNil(Updates.appsBehind(run, path), broken)
-            XCTAssertFalse(try python("apps-behind", [path, home + "/Applications"]).ok, broken)
         }
         for empty in ["{}", "\"\""] {
             let path = try write(empty, "empty.json")
             let found = try XCTUnwrap(Updates.appsBehind(run, path), empty)
-            XCTAssertEqual(([String(found.checked)] + found.behind).joined(separator: "\n"), try python("apps-behind", [path, home + "/Applications"]).output, empty)
+            XCTAssertEqual(([String(found.checked)] + found.behind).joined(separator: "\n"), "0", empty)
         }
     }
 
@@ -132,71 +125,59 @@ final class UpdatesTests: XCTestCase {
     }
 
     func testGrokFieldsAsSedReadsThem() throws {
-        let answers = [
-            #"{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"internal","error":null}"#,
-            #"{"currentVersion": "1.0.70", "latestVersion":null}"#,
-            "{\"latestVersion\":\"1\"}\n{\"latestVersion\":\"2\",\"x\":{\"latestVersion\":\"3\"}}\n{\"latestVersion\":\"4",
-            #"{"latestVersion":"","installer":"brew"}"#, "", "plain text",
-        ]
         let keys = ["currentVersion", "latestVersion", "installer"]
-        var calls: [String] = []
-        for answer in answers {
-            for key in keys { calls.append("printf '%s' \(BashOracle.quoted(answer)) | sed -n \"s/.*\\\"\(key)\\\":\\\"\\([^\\\"]*\\)\\\".*/\\1/p\"") }
-        }
-        let bash = try BashOracle.run(calls)
-        var index = 0
-        for answer in answers {
-            for key in keys {
-                XCTAssertEqual(Updates.jsonText(answer, key), bash[index], "\(key) in \(answer)")
-                index += 1
-            }
+        let cases = [
+            (#"{"currentVersion":"1.0.70","latestVersion":"1.0.77","installer":"internal","error":null}"#, ["1.0.70", "1.0.77", "internal"]),
+            (#"{"currentVersion": "1.0.70", "latestVersion":null}"#, ["", "", ""]),
+            ("{\"latestVersion\":\"1\"}\n{\"latestVersion\":\"2\",\"x\":{\"latestVersion\":\"3\"}}\n{\"latestVersion\":\"4", ["", "1\n3", ""]),
+            (#"{"latestVersion":"","installer":"brew"}"#, ["", "", "brew"]), ("", ["", "", ""]), ("plain text", ["", "", ""]),
+        ]
+        for (answer, expected) in cases {
+            XCTAssertEqual(keys.map { Updates.jsonText(answer, $0) }, expected, answer)
         }
     }
 
     func testReadSplitsAsBashReadDoes() throws {
-        let lines = ["a b c", "  a   b  c d  ", "a", "", "a\tb\t c ", "pkg 1.0.0 2.0.0", "name ", "Bar Baz Pro (2.10.3 → 3.0)", "a\\b c"]
-        let calls = lines.flatMap { line in
-            ["read -r one two <<< \(BashOracle.quoted(line)); printf '%s|%s' \"$one\" \"$two\"",
-             "read -r one two three <<< \(BashOracle.quoted(line)); printf '%s|%s|%s' \"$one\" \"$two\" \"$three\""]
-        }
-        let bash = try BashOracle.run(calls)
-        for (index, line) in lines.enumerated() {
-            XCTAssertEqual(Updates.read(line, 2).joined(separator: "|"), bash[index * 2], line)
-            XCTAssertEqual(Updates.read(line, 3).joined(separator: "|"), bash[index * 2 + 1], line)
+        let cases = [("a b c", "a|b c", "a|b|c"), ("  a   b  c d  ", "a|b  c d", "a|b|c d"), ("a", "a|", "a||"), ("", "|", "||"),
+                     ("a\tb\t c ", "a|b\t c", "a|b|c"), ("pkg 1.0.0 2.0.0", "pkg|1.0.0 2.0.0", "pkg|1.0.0|2.0.0"), ("name ", "name|", "name||"),
+                     ("Bar Baz Pro (2.10.3 → 3.0)", "Bar|Baz Pro (2.10.3 → 3.0)", "Bar|Baz|Pro (2.10.3 → 3.0)"), ("a\\b c", "a\\b|c", "a\\b|c|")]
+        for (line, two, three) in cases {
+            XCTAssertEqual(Updates.read(line, 2).joined(separator: "|"), two, line)
+            XCTAssertEqual(Updates.read(line, 3).joined(separator: "|"), three, line)
         }
     }
 
     func testMasLinesAsSedCleansThem() throws {
-        let lines = ["        1  Foo          (1.0    -> 1.1)", "123456789  Bar Baz Pro  (2.10.3 -> 3.0)", "1 A -> B -> C", "\t2  tab", "   ", "x"]
-        let bash = try BashOracle.run(lines.map { "printf '%s\\n' \(BashOracle.quoted($0)) | sed -E 's/^ +//; s/ +/ /g; s/ -> / → /'" })
-        for (line, expected) in zip(lines, bash) { XCTAssertEqual(Updates.masLine(line), expected, line) }
+        let cases = [("        1  Foo          (1.0    -> 1.1)", "1 Foo (1.0 → 1.1)"), ("123456789  Bar Baz Pro  (2.10.3 -> 3.0)", "123456789 Bar Baz Pro (2.10.3 → 3.0)"),
+                     ("1 A -> B -> C", "1 A → B -> C"), ("\t2  tab", "\t2 tab"), ("   ", ""), ("x", "x")]
+        for (line, expected) in cases { XCTAssertEqual(Updates.masLine(line), expected, line) }
     }
 
     func testSecondFieldAsAwkFindsIt() throws {
-        let cases = [("007 old\n7 seven\nweb aaa", "7"), ("1e1 ten\n10 other", "10"), ("web aaa\npdf bbb\nweb ccc", "web"), ("a\\tb x", "a\\tb"), ("x 1", "y"), ("", "a")]
-        let bash = try BashOracle.run(cases.map { "printf '%s\\n' \(BashOracle.quoted($0.0)) | awk -v n=\(BashOracle.quoted($0.1)) '$1==n{print $2}'" })
-        for (item, expected) in zip(cases, bash) { XCTAssertEqual(Updates.secondField(of: item.1, in: item.0), expected, "\(item)") }
+        let cases = [("007 old\n7 seven\nweb aaa", "7", "old\nseven"), ("1e1 ten\n10 other", "10", "ten\nother"), ("web aaa\npdf bbb\nweb ccc", "web", "aaa\nccc"),
+                     ("a\\tb x", "a\\tb", ""), ("x 1", "y", ""), ("", "a", "")]
+        for (text, name, expected) in cases { XCTAssertEqual(Updates.secondField(of: name, in: text), expected, "\(name) in \(text)") }
     }
 
     func testNewestVersionedFormulaAsSortFindsIt() throws {
-        let lists = [["node@9", "node@18", "node@24", "node@22"], ["python@3.9", "python@3.12", "python@3.10"], ["node@20"], ["a@1.2.10", "a@1.2.9", "a@1.10"]]
-        let bash = try BashOracle.run(lists.map { "printf '%s\\n' \($0.joined(separator: " ")) | sort -t@ -k2 -V | tail -1" })
-        for (list, expected) in zip(lists, bash) { XCTAssertEqual(list.max(by: Updates.versionOrder), expected, "\(list)") }
+        let cases = [(["node@9", "node@18", "node@24", "node@22"], "node@24"), (["python@3.9", "python@3.12", "python@3.10"], "python@3.12"),
+                     (["node@20"], "node@20"), (["a@1.2.10", "a@1.2.9", "a@1.10"], "a@1.10")]
+        for (list, expected) in cases { XCTAssertEqual(list.max(by: Updates.versionOrder), expected, "\(list)") }
     }
 
     func testMacOSTitlesAsAwkShortensThem() throws {
-        let titles = ["Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, ", "macOS Sequoia 15.1, Version: 15.1, Size: 1",
-                      "Safari, Version: 18.1", "BridgeOS", "Blank, Version: , Size: 1", "", ", Version: 2", "A, Version: 1, Version: 2",
-                      "Café, Version: é", "X, Version: 1.0,2", "Tools 16.0.1, Version: 16.0"]
-        let bash = try BashOracle.run(titles.map { "printf '%s\\n' \(BashOracle.quoted($0)) | awk -F', Version: ' '{v=$2; sub(/,.*/, \"\", v); print (v == \"\" || index($1, v)) ? $1 : $1 \" \" v}'" })
-        for (title, expected) in zip(titles, bash) { XCTAssertEqual(Updates.title(title), expected, title) }
+        let cases = [("Command Line Tools for Xcode, Version: 16.0, Size: 746159KiB, Recommended: YES, ", "Command Line Tools for Xcode 16.0"),
+                     ("macOS Sequoia 15.1, Version: 15.1, Size: 1", "macOS Sequoia 15.1"), ("Safari, Version: 18.1", "Safari 18.1"), ("BridgeOS", "BridgeOS"),
+                     ("Blank, Version: , Size: 1", "Blank"), ("", ""), (", Version: 2", " 2"), ("A, Version: 1, Version: 2", "A 1"), ("Café, Version: é", "Café"),
+                     ("X, Version: 1.0,2", "X 1.0"), ("Tools 16.0.1, Version: 16.0", "Tools 16.0.1")]
+        for (title, expected) in cases { XCTAssertEqual(Updates.title(title), expected, title) }
     }
 
     func testMacOSOfflineAsGrepFindsIt() throws {
-        let texts = ["No new software available.", "Software Update Tool: could not reach the server", "ERROR", "Not Connected", "no\ninternet",
-                     "No Internet connection", "unable  to", "OffLine", "terror", "", "Unable to"]
-        let bash = try BashOracle.run(texts.map { "printf '%s\\n' \(BashOracle.quoted($0)) | grep -qiE 'error|could not|unable to|not connected|no internet|offline' && echo yes || echo no" })
-        for (text, expected) in zip(texts, bash) { XCTAssertEqual(Updates.saysOffline(text) ? "yes" : "no", expected, text) }
+        let offline = ["Software Update Tool: could not reach the server", "ERROR", "Not Connected", "No Internet connection", "OffLine", "terror", "Unable to"]
+        let online = ["No new software available.", "no\ninternet", "unable  to", ""]
+        for text in offline { XCTAssertTrue(Updates.saysOffline(text), text) }
+        for text in online { XCTAssertFalse(Updates.saysOffline(text), text) }
     }
 
     func testTimedOutputWithErrorsKeepsWhatCameBeforeTheStop() throws {

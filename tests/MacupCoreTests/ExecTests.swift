@@ -1,8 +1,8 @@
 @testable import MacupCore
 import XCTest
 
-/// What decides whether a path may be deleted or moved: safe_path, artifact_ok (cleanup.sh) and the leftovers' to_trash,
-/// each against bash and against the answer it must give.
+/// What decides whether a path may be deleted or moved: safe_path, artifact_ok (2.9's cleanup.sh) and the leftovers' to_trash,
+/// each with the answer it must give.
 final class ExecTests: XCTestCase {
     var home = ""
 
@@ -65,17 +65,11 @@ final class ExecTests: XCTestCase {
     ]
 
     func testSafePathTable() throws {
-        XCTAssertEqual(shell("'\(BashOracle.repo)/tests/fixture.sh' '\(home)'"), 0)
+        XCTAssertEqual(shell("'\(Checkout.root)/tests/fixture.sh' '\(home)'"), 0)
         let paths = Self.safePathTable.map { $0.0.isEmpty ? home : "\(home)/\($0.0)" } + ["/tmp/node_modules", "/Users/other/Library/Caches/x", "/"]
         let expected = Self.safePathTable.map(\.1) + [false, false, false]
-        let prelude = CleanupTests.safePathFunctions + "PROJECT_DIRS='~/Code'\n"
-        let bash = try BashOracle.run(paths.map { "safe_path \(BashOracle.quoted($0)) && echo yes || echo no" }, home: home, prelude: prelude)
         let safe = SafePaths(home: home, projectDirs: "~/Code")
-        for (index, path) in paths.enumerated() {
-            let answer = expected[index] ? "yes" : "no"
-            XCTAssertEqual(bash[index], answer, "bash: \(path)")
-            XCTAssertEqual(safe.allows(path) ? "yes" : "no", answer, "swift: \(path)")
-        }
+        for (path, answer) in zip(paths, expected) { XCTAssertEqual(safe.allows(path), answer, path) }
     }
 
     func testArtifactTable() throws {
@@ -91,16 +85,10 @@ final class ExecTests: XCTestCase {
             ("gradle/build", true), ("kts/build", true), ("rust/build", false), ("next/dist", false), ("rust/Target", false), ("gradle/Build", false),
             ("node_modules", true), ("next/node_modules/", false),
         ]
-        let paths = table.map { "\(home)/\($0.0)" }
-        let bash = try BashOracle.run(paths.map { "artifact_ok \(BashOracle.quoted($0)) && echo yes || echo no" }, home: home, prelude: CleanupTests.safePathFunctions)
-        for (index, (path, answer)) in zip(paths, table.map(\.1)).enumerated() {
-            XCTAssertEqual(bash[index], answer ? "yes" : "no", "bash: \(path)")
-            XCTAssertEqual(SafePaths.artifactOK(path), answer, "swift: \(path)")
-        }
+        for (path, answer) in table { XCTAssertEqual(SafePaths.artifactOK("\(home)/\(path)"), answer, path) }
     }
 
-    /// The same calls in two identical homes, one through bash's to_trash, one through Swift's: what each answers, what
-    /// the report's raw log says, and what is left where.
+    /// The calls through to_trash: what each answers, what the report's raw log says, and what is left where, as 2.9's bash did.
     func testToTrashIsBash() throws {
         let calls = ["", "data/../data/a", "data/..", "link", "missing", "data/other", "data/a", "data/b", "data/c", "data/s|sudo",
                      "Library/Containers/X", "Library/Group Containers/G", "other/locked/d"]
@@ -114,7 +102,7 @@ final class ExecTests: XCTestCase {
                 chmod 555 Library/Containers "Library/Group Containers" other/locked
                 """), 0)
         }
-        func outcome(_ root: String, _ answers: [String]) -> [String] {
+        func outcome(_ root: String) -> [String] {
             let raw = (try? String(contentsOfFile: root + "/raw", encoding: .utf8)) ?? ""
             let listing = Process(), pipe = Pipe()
             listing.executableURL = URL(fileURLWithPath: "/usr/bin/find")
@@ -124,43 +112,39 @@ final class ExecTests: XCTestCase {
             try? listing.run()
             let found = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             listing.waitUntilExit()
-            return answers + [raw.replacingOccurrences(of: root, with: "H")] + Bash.lines(found).sorted()
+            return [raw.replacingOccurrences(of: root, with: "H")] + Bash.lines(found).sorted()
         }
-        let bashHome = home + "/bash", swiftHome = home + "/swift"
-        for root in [bashHome, swiftHome] {
-            try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
-            prepare(root)
-        }
-        let allow = allowed.map { "\(bashHome)/\($0)" }.joined(separator: "\n")
-        let prelude = BashOracle.function("to_trash", in: "src/leftovers.sh") + "RAW=\(BashOracle.quoted(bashHome + "/raw")); O_ALLOW=\(BashOracle.quoted(allow + "\n"))\n"
-        let bash = try BashOracle.run(calls.map { call -> String in
-            let parts = call.split(separator: "|").map(String.init), path = parts.first.map { "\(bashHome)/\($0)" } ?? ""
-            // its callers read only whether it failed
-            return "to_trash \(BashOracle.quoted(call.isEmpty ? "" : path)) \(parts.count > 1 ? "sudo" : "") && echo 0 || echo 1"
-        }, home: bashHome, env: ["PATH": "\(bashHome)/bin:/usr/bin:/bin:/usr/sbin"], prelude: prelude)
-
-        let env = try Env(["HOME": swiftHome, "PATH": "\(swiftHome)/bin:/usr/bin:/bin:/usr/sbin", "MACUP_PATH": "keep"])
+        let root = home + "/swift"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        prepare(root)
+        let env = try Env(["HOME": root, "PATH": "\(root)/bin:/usr/bin:/bin:/usr/sbin", "MACUP_PATH": "keep"])
         let arguments = try Arguments.parse(["check"])
         let settings = Settings(config: Config(env: env), env: env, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
         let out = Output(i18n: I18n(lang: .en, translations: [:]), colors: .off, fd: open("/dev/null", O_WRONLY))
         let run = Run(env: env, arguments: arguments, settings: settings, shell: Shell(env: env), out: out,
-                      report: Report(path: swiftHome + "/report.md", body: swiftHome + "/body"), lock: RunLock(dir: swiftHome + "/lock", held: false),
+                      report: Report(path: root + "/report.md", body: root + "/body"), lock: RunLock(dir: root + "/lock", held: false),
                       started: Date(), previous: "")
-        Leftovers.state(run).allow = allowed.map { "\(swiftHome)/\($0)" }.joined(separator: "\n") + "\n"
+        Leftovers.state(run).allow = allowed.map { "\(root)/\($0)" }.joined(separator: "\n") + "\n"
         let swift = calls.map { call -> String in
             let parts = call.split(separator: "|").map(String.init)
-            return Leftovers.toTrash(run, call.isEmpty ? "" : "\(swiftHome)/\(parts[0])", sudo: parts.count > 1) ? "0" : "1"
+            return Leftovers.toTrash(run, call.isEmpty ? "" : "\(root)/\(parts[0])", sudo: parts.count > 1) ? "0" : "1"
         }
-        try? FileManager.default.moveItem(atPath: run.log.raw, toPath: swiftHome + "/raw")
-        XCTAssertEqual(outcome(swiftHome, swift), outcome(bashHome, bash))
+        try? FileManager.default.moveItem(atPath: run.log.raw, toPath: root + "/raw")
+        let raw = ["macup refused to move: ", "macup refused to move: H/data/../data/a", "macup refused to move: H/data/..", "macup refused a symlink: H/link",
+                   "macup refused to move: H/data/other", "mv: rename H/Library/Containers/X to H/.Trash/X: Permission denied",
+                   "mv: rename H/Library/Group Containers/G to H/.Trash/G: Permission denied", "mv: rename H/other/locked/d to H/.Trash/d: Permission denied", ""]
+        let left = ["", ".", "./.Trash", "./.Trash/G", "./.Trash/G/f", "./.Trash/X", "./.Trash/X/f", "./.Trash/a", "./.Trash/b", "./.Trash/b/f", "./.Trash/c",
+                    "./.Trash/c 2", "./.Trash/c 3", "./.Trash/s", "./Library", "./Library/Containers", "./Library/Containers/X", "./Library/Group Containers",
+                    "./Library/Group Containers/G", "./data", "./data/other", "./link", "./other", "./other/locked", "./other/locked/d", "./other/locked/d/f"]
+        XCTAssertEqual(outcome(root), [raw.joined(separator: "\n")] + left)
         XCTAssertEqual(swift, ["1", "1", "1", "1", "0", "1", "0", "0", "0", "0", "0", "0", "1"])
     }
 
     func testLiteralPatternAndTrashNameAreBash() throws {
         let texts = ["/Applications/Foo (1).app/Contents/MacOS/Foo", "a.b*c?d[e]f{g}h|i^j$k+l\\m/n", "", "кеш é", "/a/b/", "/", "name", "/x/y.z"]
-        let prelude = BashOracle.function("re_esc", in: "src/leftovers.sh")
-        let bash = try BashOracle.run(texts.map { "re_esc \(BashOracle.quoted($0))" } + texts.filter { !$0.isEmpty }.map { "basename \(BashOracle.quoted($0))" },
-                                      prelude: prelude)
-        XCTAssertEqual(texts.map(Leftovers.literalPattern) + texts.filter { !$0.isEmpty }.map(Cleanup.trashName), bash)
+        let patterns = ["\\/Applications\\/Foo \\(1\\)\\.app\\/Contents\\/MacOS\\/Foo", "a\\.b\\*c\\?d\\[e\\]f\\{g\\}h\\|i\\^j\\$k\\+l\\\\m\\/n", "",
+                        "кеш é", "\\/a\\/b\\/", "\\/", "name", "\\/x\\/y\\.z"]
+        XCTAssertEqual(texts.map(Leftovers.literalPattern), patterns)
+        XCTAssertEqual(texts.filter { !$0.isEmpty }.map(Cleanup.trashName), ["Foo", "n", "кеш é", "b", "/", "name", "y.z"])
     }
 }

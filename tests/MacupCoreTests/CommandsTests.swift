@@ -2,23 +2,17 @@ import Foundation
 import XCTest
 @testable import MacupCore
 
-/// The one-off commands' pure pieces against the bash functions they replace (commands.sh).
+/// The one-off commands' pure pieces, answering as the bash functions they replace (2.9's commands.sh) did.
 final class CommandsTests: XCTestCase {
     private let folder = NSTemporaryDirectory() + "macup-commands-\(UUID().uuidString)"
 
     override func setUpWithError() throws { try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true) }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(atPath: folder) }
 
-    /// A one-line function of commands.sh, e.g. `report_mode(){ …; }`.
-    private func oneLiner(_ name: String) -> String {
-        BashOracle.read("src/commands.sh").components(separatedBy: "\n").first { $0.hasPrefix("\(name)(){") }! + "\n"
-    }
-
-    func testReportDateIsBashs() throws {
+    func testReportDateIsBashs() {
         let paths = ["/Users/me/Library/Logs/macup/macup_2026-11-01_10-00-00.md", "/Users/me/Library/Logs/macup/macup_2026-11-01_10-00-00_4242.md",
                      "/x/macup_odd.md", "/x/macup_2026_1.md", "/a/macup_x/macup_2026-01-02_03-04-05.md", "/x/macup_-n_1-2.md"]
-        let bash = try BashOracle.run(paths.map { "report_date \(BashOracle.quoted($0))" }, prelude: oneLiner("report_date"))
-        XCTAssertEqual(paths.map(Reports.date), bash)
+        XCTAssertEqual(paths.map(Reports.date), ["2026-11-01 10:00", "2026-11-01 10:00", "odd odd:odd", "2026 1:1", "2026-01-02 03:04", "-n 1:2"])
     }
 
     func testReportModeIsBashs() throws {
@@ -33,8 +27,7 @@ final class CommandsTests: XCTestCase {
         let short = "\(folder)/short.md"
         try "# title\n\n".write(toFile: short, atomically: true, encoding: .utf8)
         files += [short, "\(folder)/missing.md"]
-        let bash = try BashOracle.run(files.map { "report_mode \(BashOracle.quoted($0))" }, prelude: oneLiner("report_mode"))
-        XCTAssertEqual(files.map { Reports.mode($0) ?? "" }, bash)
+        XCTAssertEqual(files.map { Reports.mode($0) ?? "" }, ["check", "all+deep", "", "", "", "", "", "clean", "", ""])
     }
 
     func testBrewPrefixIsBashs() throws {
@@ -46,8 +39,9 @@ final class CommandsTests: XCTestCase {
         try fm.createSymbolicLink(atPath: "\(folder)/brew/bin/other", withDestinationPath: "\(folder)/elsewhere/macup")
         let paths = ["/opt/homebrew/Cellar/macup/2.9.2/bin/macup", "/usr/local/opt/macup/bin/macup", "/opt/macup/bin/macup", "/Cellar/macup/x",
                      "\(folder)/brew/bin/macup", "\(folder)/brew/bin/other", "\(folder)/plain", "/a/Cellar/macup/b/Cellar/macup/c"]
-        let bash = try BashOracle.run(paths.map { "brew_prefix \(BashOracle.quoted($0))" }, prelude: BashOracle.function("brew_prefix", in: "src/commands.sh"))
-        XCTAssertEqual(paths.map(SelfPath.brewPrefix), bash)
+        let resolved = try XCTUnwrap(realpath(folder, nil))
+        defer { free(resolved) }
+        XCTAssertEqual(paths.map(SelfPath.brewPrefix), ["/opt/homebrew", "/usr/local", "", "", String(cString: resolved) + "/brew", "", "", "/a"])
     }
 
     func testMacupIsRecognisedByItsVersionLine() throws {
@@ -85,11 +79,10 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(values.map { History.awkString(Awk.number($0) + 0) }.joined(separator: "\n") + "\n", awk)
     }
 
-    func testVersionLineIsSeds() throws {
+    func testVersionLineIsSeds() {
         let lines = ["MACUP_VERSION=\"2.9.2\"", "MACUP_VERSION=\"3.0\"  # \"x\" y", "MACUP_VERSION=\"", "MACUP_VERSION=\"\"", " MACUP_VERSION=\"1\"",
                      "MACUP_VERSION=1", "MACUP_VERSION=\"1.0\" tail"]
-        let bash = try BashOracle.run(lines.map { "printf '%s\\n' \(BashOracle.quoted($0)) | sed -n 's/^MACUP_VERSION=\"\\(.*\\)\"/\\1/p'; echo ." })
-        XCTAssertEqual(lines.map { (Version.versionLine($0).map { $0 + "\n" } ?? "") + "." }, bash)
+        XCTAssertEqual(lines.map(Version.versionLine), ["2.9.2", "3.0\"  # \"x y", nil, "", nil, nil, "1.0 tail"])
     }
 
     func testAnswersThatMeanYes() {

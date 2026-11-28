@@ -24,12 +24,21 @@ final class ConfigTasksTests: XCTestCase {
     ]
     let keys = ["language", "skip", "enable", "keep_reports", "simulator_days", "step_timeout_minutes", "clean_level", "project_dirs", "skipper", "only", "absent"]
 
-    func testConfAgainstBash() throws {
-        for text in configs {
+    /// What `conf key dflt` gives for each of `configs`, as 2.9's bash did; a key not listed gives "dflt".
+    func testConf() throws {
+        let expected: [[String: String]] = [
+            ["language": "uk", "skip": "check.docker, clean.*", "enable": "clean.trash"],
+            ["skip": "update.mas", "keep_reports": "15", "simulator_days": "0", "step_timeout_minutes": "x"],
+            ["language": "ru", "clean_level": "aggressive", "project_dirs": "~/A, ~/B"],
+            ["language": "", "enable": "clean.trash,clean.sim_erase", "skipper": "no", "only": "check.disk"],
+            ["language": "uk", "skip": "clean.brew", "enable": "clean.trash", "step_timeout_minutes": "010", "project_dirs": "a\u{85}"],
+            ["step_timeout_minutes": "09"],
+            [:],
+        ]
+        for (text, values) in zip(configs, expected) {
             try text.write(toFile: confPath, atomically: true, encoding: .utf8)
             let config = Config(path: confPath)
-            let got = try BashOracle.run(keys.map { "conf \($0) dflt" }, home: dir)
-            for (index, key) in keys.enumerated() { XCTAssertEqual(config.value(key, "dflt"), got[index], "conf \(key) in \(text.debugDescription)") }
+            for key in keys { XCTAssertEqual(config.value(key, "dflt"), values[key] ?? "dflt", "conf \(key) in \(text.debugDescription)") }
         }
         XCTAssertEqual(Config(path: dir + "/none").value("skip", "x"), "x")
         XCTAssertEqual(Config(path: dir).value("skip", "x"), "x", "a folder is not a config file")
@@ -41,9 +50,8 @@ final class ConfigTasksTests: XCTestCase {
         try bytes.write(to: URL(fileURLWithPath: confPath))
         var config = Config(path: confPath)
         config.reportsErrors = false
-        let got = try BashOracle.run(["conf language x", "conf skip none"], home: dir)
         XCTAssertTrue(config.sedFails)
-        XCTAssertEqual([config.value("language", "x"), config.value("skip", "none")], got)
+        XCTAssertEqual([config.value("language", "x"), config.value("skip", "none")], ["ru", "none"])
         var latin = Config(path: confPath, utf8: false)
         latin.reportsErrors = false
         XCTAssertEqual(latin.value("skip", "none"), "clean.*", "LC_ALL=C: sed reads every byte")
@@ -62,68 +70,93 @@ final class ConfigTasksTests: XCTestCase {
         XCTAssertNil(Config.level("huge"))
     }
 
-    func testConfSetAgainstBash() throws {
-        for (key, value) in [("language", "ru"), ("skip", "a&b"), ("newkey", "v")] {
-            for text in configs + [nil] {
-                // bash
-                try? FileManager.default.removeItem(atPath: confPath)
-                if let text { try text.write(toFile: confPath, atomically: true, encoding: .utf8) }
-                let prelude = "write_default_conf(){ mkdir -p \"$CONF_DIR\"; printf 'language = en\\n' >\"$CONF\"; }"
-                _ = try BashOracle.run(["conf_set \(key) \(BashOracle.quoted(value))"], home: dir, prelude: prelude)
-                let want = try String(contentsOfFile: confPath, encoding: .utf8)
-                // swift
-                try? FileManager.default.removeItem(atPath: confPath)
-                if let text { try text.write(toFile: confPath, atomically: true, encoding: .utf8) }
-                try Config.set(key, value, path: confPath) { "language = en\n" }
-                XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), want, "conf_set \(key) in \(text.debugDescription)")
-            }
+    /// The file conf_set leaves, as 2.9's bash (sed) did: every line of the key replaced, & as sed's whole match,
+    /// a missing key appended, a missing file made from the default first.
+    func testConfSet() throws {
+        let cases: [(key: String, value: String, config: String?, want: String)] = [
+            ("language", "ru", configs[0], "language = ru\nskip = check.docker, clean.*\nenable=clean.trash # opt in\n"),
+            ("language", "ru", configs[1], "  skip=update.brew\nskip = update.mas  # later wins\nkeep_reports = 15\nsimulator_days = 0\nstep_timeout_minutes = x\nlanguage = ru\n"),
+            ("language", "ru", configs[2], "skip = a\nskip = # emptied\nlanguage = ru\nclean_level = aggressive\nproject_dirs = ~/A, ~/B\n"),
+            ("language", "ru", configs[4], "skip = clean.brew\u{A0}\nenable = clean.trash\u{3000} # ideographic space\nlanguage = ru\nproject_dirs = a\u{85}\nstep_timeout_minutes = 010\n"),
+            ("language", "ru", configs[6], "language = ru\n"),
+            ("language", "ru", nil, "language = ru\n"),
+            ("skip", "a&b", configs[0], "language = uk\nskip = askip = check.docker, clean.*b\nenable=clean.trash # opt in\n"),
+            ("skip", "a&b", configs[1], "skip = a  skip=update.brewb\nskip = askip = update.mas  # later winsb\nkeep_reports = 15\nsimulator_days = 0\nstep_timeout_minutes = x\n"),
+            ("skip", "a&b", configs[2], "skip = askip = ab\nskip = askip = # emptiedb\nlanguage\t=\tru\t\r\nclean_level = aggressive\nproject_dirs = ~/A, ~/B\n"),
+            ("skip", "a&b", configs[3], "skipper = no\nlanguage = -n\nenable = clean.trash,clean.sim_erase\nonly = check.disk\nskip = a&b\n"),
+            ("skip", "a&b", nil, "language = en\nskip = a&b\n"),
+            ("newkey", "v", configs[2], "skip = a\nskip = # emptied\nlanguage\t=\tru\t\r\nclean_level = aggressive\nproject_dirs = ~/A, ~/B\nnewkey = v\n"),
+            ("newkey", "v", nil, "language = en\nnewkey = v\n"),
+        ]
+        for example in cases {
+            try? FileManager.default.removeItem(atPath: confPath)
+            if let text = example.config { try text.write(toFile: confPath, atomically: true, encoding: .utf8) }
+            try Config.set(example.key, example.value, path: confPath) { "language = en\n" }
+            XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), example.want, "conf_set \(example.key) in \(example.config.debugDescription)")
         }
     }
 
-    func testDefaultConfigIsTheBashTemplate() throws {
-        _ = try BashOracle.run(["write_default_conf"], home: dir, prelude: "MSG_LANG=uk\n" + BashOracle.function("write_default_conf", in: "src/commands.sh"))
-        XCTAssertEqual(Config.defaultText(lang: .uk), try String(contentsOfFile: confPath, encoding: .utf8))
+    /// The config write_default_conf of 2.9 wrote for MSG_LANG=uk.
+    func testDefaultConfigIsTheBashTemplate() {
+        XCTAssertEqual(Config.defaultText(lang: .uk), Checkout.fixture("ConfigTasksTests-default-config-uk.txt"))
     }
 
+    /// The TASKS table of 2.9's core.sh: id|on or off|text.
     func testTaskTableIsCoreSh() {
-        let core = BashOracle.read("src/core.sh")
-        let start = core.range(of: "TASKS='")!.upperBound
-        let table = core[start..<core[start...].firstIndex(of: "'")!]
-        let rows = table.split(separator: "\n").map { $0.split(separator: "|", maxSplits: 2).map(String.init) }
+        let rows = Checkout.fixture("ConfigTasksTests-tasks.txt").split(separator: "\n").map { $0.split(separator: "|", maxSplits: 2).map(String.init) }
         XCTAssertEqual(rows.count, Tasks.all.count)
         for (row, task) in zip(rows, Tasks.all) { XCTAssertEqual(row, [task.id, task.on ? "on" : "off", task.text]) }
     }
 
-    func testSelectionAgainstBash() throws {
-        let clis: [(skip: String, only: String, enable: String)] = [
-            ("", "", ""), (",update.*", "", ""), ("", ",check.*", ""), ("", ",check.disk, clean.trash", ",clean.trash"),
-            (",clean.trash", ",clean.*", ",clean.trash,clean.sim_erase"), ("", "clean.*", ""), (", check.disk ,", "", ",update.gem"),
+    /// Which tasks of each group run: "none", "default" (as Tasks.all has them on), the default with ids added (+)
+    /// and removed (-), or the ids that run, whichever is shorter.
+    func runs(_ selection: Selection) -> String {
+        ["check", "update", "clean"].map { group in
+            let tasks = Tasks.all.filter { $0.id.hasPrefix(group + ".") }
+            let name = { (id: String) in String(id.dropFirst(group.count + 1)) }
+            let running = tasks.filter { selection.runs($0.id) }.map { name($0.id) }
+            let changes = tasks.filter { selection.runs($0.id) != $0.on }.map { (selection.runs($0.id) ? "+" : "-") + name($0.id) }
+            let text = running.isEmpty ? "none" : changes.isEmpty ? "default"
+                : changes.count < running.count ? "default " + changes.joined(separator: " ") : running.joined(separator: ", ")
+            return "\(group): \(text)"
+        }.joined(separator: "; ")
+    }
+
+    /// The tasks that run and load_conf's settings (skip|enable|only|level|keep|step seconds|simulator days), as 2.9's bash had them.
+    func testSelection() throws {
+        let cases: [(config: String, skip: String, only: String, enable: String, runs: String, settings: String)] = [
+            (configs[0], "", "", "", "check: default -docker; update: default; clean: none", ",check.docker,clean.*,,|,clean.trash,,||1|20|3600|30"),
+            (configs[0], ", check.disk ,", "", ",update.gem", "check: default -disk -docker; update: default +gem; clean: none", ",check.docker,clean.*,,check.disk,,|,clean.trash,,update.gem,||1|20|3600|30"),
+            (configs[1], "", "", "", "check: default; update: default -mas; clean: default", ",update.mas,,|,,,||1|15|3600|30"),
+            (configs[1], "", ",check.disk, clean.trash", ",clean.trash", "check: disk; update: none; clean: trash", ",update.mas,,|,,,clean.trash,|,check.disk,clean.trash|1|15|3600|30"),
+            (configs[2], "", "", "", "check: default; update: default; clean: default", ",,,|,,,||3|20|3600|30"),
+            (configs[2], "", ",check.*", "", "check: default; update: none; clean: none", ",,,|,,,|,check.*|3|20|3600|30"),
+            (configs[3], "", "", "", "check: default; update: default; clean: default +sim_erase +trash", ",,,|,clean.trash,clean.sim_erase,,||1|20|3600|30"),
+            (configs[3], ",clean.trash", ",clean.*", ",clean.trash,clean.sim_erase", "check: none; update: none; clean: default +sim_erase",
+             ",,,clean.trash,|,clean.trash,clean.sim_erase,,clean.trash,clean.sim_erase,|,clean.*|1|20|3600|30"),
+            // leading zeros are decimal (intended difference): bash read 010 as octal 8 minutes and gave up on 09 halfway through load_conf
+            (configs[4], "", "", "", "check: default; update: default; clean: default -brew +trash", ",clean.brew,,|,clean.trash,,||1|20|600|30"),
+            (configs[5], "", "", "", "check: default; update: default; clean: default", ",,,|,,,||1|20|540|30"),
+            (configs[5], "", "clean.*", "", "check: none; update: none; clean: default", ",,,|,,,|clean.*|1|20|540|30"),
+            (configs[6], "", "", "", "check: default; update: default; clean: default", ",,,|,,,||1|20|3600|30"),
+            (configs[6], ",update.*", "", "", "check: default; update: none; clean: default", ",,,update.*,|,,,||1|20|3600|30"),
+            (configs[6], ", check.disk ,", "", ",update.gem", "check: default -disk; update: default +gem; clean: default", ",,,check.disk,,|,,,update.gem,||1|20|3600|30"),
         ]
         let env = try Env(["HOME": dir])
-        for text in configs {
-            try text.write(toFile: confPath, atomically: true, encoding: .utf8)
-            for cli in clis {
-                let settings = Settings(config: Config(path: confPath), env: env, cliSkip: cli.skip, cliOnly: cli.only, cliEnable: cli.enable, cliLevel: nil)
-                let sel = Selection(settings)
-                let prelude = "CLI_SKIP=\(BashOracle.quoted(cli.skip)); CLI_ONLY=\(BashOracle.quoted(cli.only)); CLI_ENABLE=\(BashOracle.quoted(cli.enable)); load_conf"
-                let calls = Tasks.all.map { "if task \($0.id); then echo 1; else echo 0; fi" } + ["printf %s \"$SKIP|$ENABLE|$CLI_ONLY|$LEVEL|$KEEP_RUNS|$STEP_SECS|$SIM_DAYS\""]
-                let got = try BashOracle.run(calls, home: dir, prelude: prelude)
-                for (index, task) in Tasks.all.enumerated() { XCTAssertEqual(sel.runs(task.id) ? "1" : "0", got[index], "task \(task.id) with \(cli) in \(text.debugDescription)") }
-                // leading zeros are decimal (intended difference): bash read 010 as octal 8 minutes and gave up on 09 halfway through load_conf
-                if text.contains("step_timeout_minutes = 09") { XCTAssertEqual(settings.stepSeconds, 540); continue }
-                var fields = (got.last ?? "").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-                if text.contains("step_timeout_minutes = 010") { XCTAssertEqual(fields[5], "480", "bash's octal"); fields[5] = "600" }
-                XCTAssertEqual("\(settings.skip)|\(settings.enable)|\(settings.only)|\(settings.level)|\(settings.keepReports)|\(settings.stepSeconds)|\(settings.simulatorDays)",
-                               fields.joined(separator: "|"), "load_conf")
-            }
+        for example in cases {
+            try example.config.write(toFile: confPath, atomically: true, encoding: .utf8)
+            let settings = Settings(config: Config(path: confPath), env: env, cliSkip: example.skip, cliOnly: example.only, cliEnable: example.enable, cliLevel: nil)
+            let context = "skip \(example.skip.debugDescription) only \(example.only.debugDescription) in \(example.config.debugDescription)"
+            XCTAssertEqual(runs(Selection(settings)), example.runs, context)
+            XCTAssertEqual("\(settings.skip)|\(settings.enable)|\(settings.only)|\(settings.level)|\(settings.keepReports)|\(settings.stepSeconds)|\(settings.simulatorDays)",
+                           example.settings, context)
         }
     }
 
-    func testUnknownTasksAgainstBash() throws {
-        let lists = [",chek.disk", ",check.*,clean.nope, update.brew ", ",,,", "a,b,c", ",clean.*,update.*", ",check.disk,check.tyme_machine",
-                     ",check\\.disk,check\\.d\\isk", "x\\", "a\nb,check.*"]
-        let prelude = BashOracle.function("unknown_tasks", in: "src/arguments.sh")
-        let got = try BashOracle.run(lists.map { "unknown_tasks \(BashOracle.quoted($0))" }, prelude: prelude)
-        for (index, list) in lists.enumerated() { XCTAssertEqual(Tasks.unknown(list), got[index], "unknown_tasks \(list)") }
+    func testUnknownTasks() {
+        let cases = [(",chek.disk", "chek.disk"), (",check.*,clean.nope, update.brew ", "clean.nope,  update.brew "), (",,,", ""), ("a,b,c", "a, b, c"),
+                     (",clean.*,update.*", ""), (",check.disk,check.tyme_machine", "check.tyme_machine"), (",check\\.disk,check\\.d\\isk", ""),
+                     ("x\\", "x\\"), ("a\nb,check.*", "a, b")]
+        for (list, unknown) in cases { XCTAssertEqual(Tasks.unknown(list), unknown, "unknown_tasks \(list)") }
     }
 }

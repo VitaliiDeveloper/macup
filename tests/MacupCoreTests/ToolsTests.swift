@@ -1,7 +1,7 @@
 @testable import MacupCore
 import XCTest
 
-/// The tools checks against what the bash build runs today: macup_helpers.py for what it parses, bash for the rest.
+/// The tools checks, with the answers 2.9's macup_helpers.py gave for what it parsed and bash for the rest.
 final class ToolsTests: XCTestCase {
     var home = ""
     var shell: Shell!
@@ -13,24 +13,6 @@ final class ToolsTests: XCTestCase {
     }
 
     override func tearDown() { try? FileManager.default.removeItem(atPath: home) }
-
-    /// python3 running `script` (a macup_helpers.py command, or code with -c) with this input: what it prints, as `$(…)` keeps it.
-    func python(_ arguments: [String], input: String = "") throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = arguments.first == "-c" ? arguments : [BashOracle.repo + "/src/py/macup_helpers.py"] + arguments
-        process.environment = ["HOME": home, "PATH": "\(home)/bin:/usr/bin:/bin", "LC_CTYPE": "en_US.UTF-8"]
-        let stdout = Pipe(), stdin = Pipe()
-        process.standardOutput = stdout
-        process.standardInput = stdin
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        stdin.fileHandleForWriting.write(Data(input.utf8))
-        try stdin.fileHandleForWriting.close()
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return Bash.substitution(String(decoding: data, as: UTF8.self))
-    }
 
     @discardableResult
     func write(_ text: String, _ name: String, executable: Bool = false) throws -> String {
@@ -49,21 +31,28 @@ final class ToolsTests: XCTestCase {
 
     func testSimRuntimesAsPythonReadsThem() throws {
         let cases = [
-            #"{"B":{"platformIdentifier":"com.apple.platform.iphonesimulator","version":"18.2","sizeBytes":7516192768},"A":{"platformIdentifier":"com.apple.platform.iphonesimulator","version":"17.5","sizeBytes":6979321856},"C":{"platformIdentifier":"com.apple.platform.watchsimulator","version":"11.2"}}"#,
-            #"{"A":{"platformIdentifier":"x","sizeBytes":1.5e9},"B":{"version":"1","sizeBytes":true}}"#,
-            #"{"A":{"platformIdentifier":"com.apple.platform.xros","version":"2.0","sizeBytes":2048},"B":{"platformIdentifier":"com.apple.platform.xros","version":"10.0","sizeBytes":1024}}"#,
-            #"{"A":{"platformIdentifier":"Zplatform","version":"1"},"B":{"platformIdentifier":"aplatform","version":"1"},"C":{"platformIdentifier":"é","version":"1"}}"#,
-            #"{"A":{"platformIdentifier":1}}"#, #"{"A":{"platformIdentifier":"a","version":2.0}}"#, #"{"A":{"version":"1"},"B":{"version":1}}"#,
-            #"{"A":{"platformIdentifier":"a.b","version":"1","sizeBytes":5},"B":{"platformIdentifier":"a.c","version":"1","sizeBytes":"5"}}"#, #"{"A":{"sizeBytes":"big"}}"#,
-            #"{"A":{"platformIdentifier":"p.a","version":"1","sizeBytes":9223372036854775807},"B":{"platformIdentifier":"p.b","version":"1","sizeBytes":1000000000}}"#,
-            #"{"A":{"platformIdentifier":"p.a","sizeBytes":99999999999999999999999}}"#,
-            #"{"A":{"platformIdentifier":"p.iphonesimulator","version":18},"B":{"platformIdentifier":"p.watchsimulator","version":"11.2"}}"#,
-            #"{"A":{"platformIdentifier":null,"version":"2"},"B":{"platformIdentifier":null,"version":"1"}}"#,
-            #"{"A":{"platformIdentifier":"p","version":2},"B":{"platformIdentifier":"p","version":1.5},"C":{"platformIdentifier":"p","version":true}}"#,
-            #"{"A":{"platformIdentifier":"p","version":"2"},"B":{"platformIdentifier":"p","version":1}}"#, #"{"A":[]}"#, #"{}"#, #"[]"#, "", "{", "\u{FEFF}{}",
+            (#"{"B":{"platformIdentifier":"com.apple.platform.iphonesimulator","version":"18.2","sizeBytes":7516192768},"A":{"platformIdentifier":"com.apple.platform.iphonesimulator","version":"17.5","sizeBytes":6979321856},"C":{"platformIdentifier":"com.apple.platform.watchsimulator","version":"11.2"}}"#,
+             "3 14155776\niphonesimulator 17.5 · 7.0 GB\niphonesimulator 18.2 · 7.5 GB\nwatchsimulator 11.2 · 0.0 GB"),
+            (#"{"A":{"platformIdentifier":"x","sizeBytes":1.5e9},"B":{"version":"1","sizeBytes":true}}"#, "2 1464843.0\n 1 · 0.0 GB\nx ? · 1.5 GB"),
+            (#"{"A":{"platformIdentifier":"com.apple.platform.xros","version":"2.0","sizeBytes":2048},"B":{"platformIdentifier":"com.apple.platform.xros","version":"10.0","sizeBytes":1024}}"#,
+             "2 3\nxros 10.0 · 0.0 GB\nxros 2.0 · 0.0 GB"),
+            (#"{"A":{"platformIdentifier":"Zplatform","version":"1"},"B":{"platformIdentifier":"aplatform","version":"1"},"C":{"platformIdentifier":"é","version":"1"}}"#,
+             "3 0\nZ 1 · 0.0 GB\na 1 · 0.0 GB\né 1 · 0.0 GB"),
+            (#"{"A":{"platformIdentifier":1}}"#, "1 0"), (#"{"A":{"platformIdentifier":"a","version":2.0}}"#, "1 0\na 2.0 · 0.0 GB"), (#"{"A":{"version":"1"},"B":{"version":1}}"#, ""),
+            (#"{"A":{"platformIdentifier":"a.b","version":"1","sizeBytes":5},"B":{"platformIdentifier":"a.c","version":"1","sizeBytes":"5"}}"#, ""), (#"{"A":{"sizeBytes":"big"}}"#, ""),
+            (#"{"A":{"platformIdentifier":"p.a","version":"1","sizeBytes":9223372036854775807},"B":{"platformIdentifier":"p.b","version":"1","sizeBytes":1000000000}}"#,
+             "2 9007199255717554\na 1 · 9223372036.9 GB\nb 1 · 1.0 GB"),
+            (#"{"A":{"platformIdentifier":"p.a","sizeBytes":99999999999999999999999}}"#, "1 97656249999999999999\na ? · 100000000000000.0 GB"),
+            (#"{"A":{"platformIdentifier":"p.iphonesimulator","version":18},"B":{"platformIdentifier":"p.watchsimulator","version":"11.2"}}"#,
+             "2 0\niphonesimulator 18 · 0.0 GB\nwatchsimulator 11.2 · 0.0 GB"),
+            (#"{"A":{"platformIdentifier":null,"version":"2"},"B":{"platformIdentifier":null,"version":"1"}}"#, "2 0"),
+            (#"{"A":{"platformIdentifier":"p","version":2},"B":{"platformIdentifier":"p","version":1.5},"C":{"platformIdentifier":"p","version":true}}"#,
+             "3 0\np True · 0.0 GB\np 1.5 · 0.0 GB\np 2 · 0.0 GB"),
+            (#"{"A":{"platformIdentifier":"p","version":"2"},"B":{"platformIdentifier":"p","version":1}}"#, ""), (#"{"A":[]}"#, ""), (#"{}"#, "0 0"), (#"[]"#, ""),
+            ("", ""), ("{", ""), ("\u{FEFF}{}", ""),
         ]
-        for json in cases {
-            XCTAssertEqual(Tools.simRuntimes(json), try python(["sim-runtimes"], input: json), json)
+        for (json, expected) in cases {
+            XCTAssertEqual(Tools.simRuntimes(json), expected, json)
         }
     }
 
@@ -96,9 +85,15 @@ final class ToolsTests: XCTestCase {
         try link("\(home)/Cellar/x/1/bin/brewcli", ".local/bin/brewcli")
         try link("\(home)/Cellar/y/1/bin/gone", ".local/bin/brewgone")
         try link(local, "again/bin")
-        let folders = [local, "\(home)/.npm-global/bin", "\(home)/again/bin", "\(home)/missing", "/opt/homebrew/bin", "/usr/local/bin"]
-        XCTAssertEqual(Tools.commandScan(folders, home: home, shell: shell), try python(["commands"] + folders))
-        XCTAssertEqual(Tools.commandScan(folders, home: home + "/", shell: shell), try python(["commands"] + folders))
+        let folders = [local, "\(home)/.npm-global/bin", "\(home)/again/bin", "\(home)/missing"]
+        let expected = [
+            "12", "-\t\(local)\tframework, gone1, gone10, gone11, gone12, gone2, gone3, gone4, gone5, gone6 +5\tOld.app, Python.framework, ~/.local/bin, ~/gone",
+            "-\t\(home)/.npm-global/bin\tscoped\tnode_modules/@scope/pkg", "cafe\u{301}\t-\tcafe\u{301}2\t", "caf\u{E9}\t-\tcafe\u{301}\t",
+            "macup_no_such_interp\t-\tflagcli, nodecli\t", "macup_tab\t-\tcrlf\t", "python\tpipx reinstall-all\tpipxtool\t",
+            "python\tuv tool install --reinstall sometool\tsometool\t", String(repeating: "x", count: 254) + "\t-\tlong\t",
+        ].joined(separator: "\n")
+        XCTAssertEqual(Tools.commandScan(folders, home: home, shell: shell), expected)
+        XCTAssertEqual(Tools.commandScan(folders, home: home + "/", shell: shell), expected)
     }
 
     func testPathsAsPythonResolvesThem() throws {
@@ -111,19 +106,26 @@ final class ToolsTests: XCTestCase {
         try link("to-real/../real", "dotdot")
         let paths = ["\(home)/to-real/file", "\(home)/dir/up", "\(home)/dangling/more", "\(home)/loop-a/x", "\(home)/dotdot/file", "\(home)//a/./b/../c/",
                      "//x/y", "///x", "/", "\(home)/to-real/../to-real/missing/..", "\(home)/dir/up/../.."]
-        let code = "import os, sys\nfor path in sys.argv[1:]: print(os.path.realpath(path)); print(os.path.normpath(path)); print(os.path.dirname(path)); print(os.path.basename(path))"
-        let swift = paths.map { [PythonPath.realpath($0), PythonPath.normpath($0), PythonPath.dirname($0), PythonPath.basename($0)].joined(separator: "\n") }
-        XCTAssertEqual(swift.joined(separator: "\n"), try python(["-c", code] + paths))
+        let real = try XCTUnwrap(realpath(home, nil).map { String(cString: $0) })
+        // os.path's realpath, normpath, dirname and basename of each path
+        let expected = [
+            ["\(real)/real/file", "\(home)/to-real/file", "\(home)/to-real", "file"], ["\(real)/real/file", "\(home)/dir/up", "\(home)/dir", "up"],
+            ["/nonexistent/x/more", "\(home)/dangling/more", "\(home)/dangling", "more"], ["\(real)/loop-a/x", "\(home)/loop-a/x", "\(home)/loop-a", "x"],
+            ["\(real)/real/file", "\(home)/dotdot/file", "\(home)/dotdot", "file"], ["\(real)/a/c", "\(home)/a/c", "\(home)//a/./b/../c", ""],
+            ["/x/y", "//x/y", "//x", "y"], ["/x", "/x", "///", "x"], ["/", "/", "/", ""],
+            ["\(real)/real", "\(home)/to-real", "\(home)/to-real/../to-real/missing", ".."], [real, home, "\(home)/dir/up/..", ".."],
+        ]
+        XCTAssertEqual(paths.map { [PythonPath.realpath($0), PythonPath.normpath($0), PythonPath.dirname($0), PythonPath.basename($0)] }, expected)
         try write("", "bin/plain")
         try write("", "bin/tool", executable: true)
         try FileManager.default.createDirectory(atPath: home + "/bin/folder", withIntermediateDirectories: true)
         let names = ["tool", "plain", "folder", "ls", "/bin/ls", "bin/tool", "nope"], searches = ["", ":", "/bin", "\(home)/bin", "/nope:\(home)/bin"]
-        let whichCode = "import os, shutil, sys\nos.chdir(sys.argv[1])\nfor search in sys.argv[2:]:\n  for name in \(names): print(shutil.which(name, path=search) is not None)"
         let here = FileManager.default.currentDirectoryPath
         FileManager.default.changeCurrentDirectoryPath(home)
         defer { FileManager.default.changeCurrentDirectoryPath(here) }
-        let found = searches.flatMap { search in names.map { PythonPath.which($0, path: search) ? "True" : "False" } }
-        XCTAssertEqual(found.joined(separator: "\n"), try python(["-c", whichCode, home] + searches))
+        // what shutil.which finds, run from the home folder
+        let found = searches.map { search in names.filter { PythonPath.which($0, path: search) } }
+        XCTAssertEqual(found, [["/bin/ls", "bin/tool"], ["/bin/ls", "bin/tool"], ["ls", "/bin/ls", "bin/tool"], ["tool", "/bin/ls", "bin/tool"], ["tool", "/bin/ls", "bin/tool"]])
     }
 
     func testCrashesAsPythonCountsThem() throws {
@@ -158,11 +160,12 @@ final class ToolsTests: XCTestCase {
         try write("{}", "\(reports)/.hidden.ips")
         try FileManager.default.createDirectory(atPath: "\(reports)/Folder.ips", withIntermediateDirectories: true)
         let now = Date().timeIntervalSince1970
-        XCTAssertEqual(Tools.crashCounts(home: home, now: now), try python(["crashes"]))
+        let apps = "A 6 Crashy App\nA 3 Café\nA 3 Home App\nA 3 Legacy App\nA 3 Two  Spaces"
+        XCTAssertEqual(Tools.crashCounts(home: home, now: now), "S 3\n" + apps)
         try write("{\"app_name\":[1],\"bug_type\":\"309\"}\n{\"procPath\":\"/System/x\"}\n", "\(reports)/List-1.ips")
-        XCTAssertEqual(Tools.crashCounts(home: home, now: now), try python(["crashes"]), "a list as the name of a system crash is not counted")
+        XCTAssertEqual(Tools.crashCounts(home: home, now: now), "S 4\n" + apps, "a list as the name of a system crash is not counted")
         try write("{\"app_name\":[1],\"bug_type\":\"309\"}\n{\"procPath\":\"/Applications/L.app\"}\n", "\(reports)/List-2.ips")
-        XCTAssertEqual(Tools.crashCounts(home: home, now: now), try python(["crashes"]), "a list as the name of an app stops Python")
+        XCTAssertEqual(Tools.crashCounts(home: home, now: now), "", "a list as the name of an app stops the count, as it stopped 2.9's helper")
     }
 
     func testCrashesUnderAHomeWithGlobCharacters() throws {
@@ -172,12 +175,12 @@ final class ToolsTests: XCTestCase {
         for index in 1...3 {
             try write("{\"app_name\":\"Foo\\nS 99\",\"bug_type\":\"309\"}\n{\"procPath\":\"/Applications/Foo.app/x\"}\n", "Library/Logs/DiagnosticReports/Foo-\(index).ips")
         }
-        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), try python(["crashes"]))
+        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), "S 0")
         home = base + "/h1"
         for index in 1...3 {
             try write("{\"app_name\":\"Foo\\nS 99\",\"bug_type\":\"309\"}\n{\"procPath\":\"/Applications/Foo.app/x\"}\n", "Library/Logs/DiagnosticReports/Foo-\(index).ips")
         }
-        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), try python(["crashes"]), "a name that holds a line of the answer")
+        XCTAssertEqual(Tools.crashCounts(home: home, now: Date().timeIntervalSince1970), "S 0\nA 3 Foo\nS 99", "a name that holds a line of the answer")
     }
 
     func testTimestampsAsPythonReadsThem() throws {
@@ -185,12 +188,14 @@ final class ToolsTests: XCTestCase {
                       "2026-11-20 10:11:12.0 +01:00:30", "2026-11-20 10:11:12.0 +01:00:30.5", "2026-11-20 10:11:12.0 +0100:30", "2026-11-20 10:11:12.0 +2400",
                       "2026-02-29 10:11:12.0 +0000", "2024-02-29 10:11:12.0 +0000", "2026-11-20 10:11:60.0 +0000", "2026-11-20 10:11:12 +0000",
                       "2026-11-20 10:11:12.0 +0000\n", "2026-11-20  10:11:12.0\t+0000", "2026-11-20 10:11:12.0 z", "0000-01-01 00:00:00.0 +0000"]
-        let code = "import datetime, sys\nfor stamp in sys.argv[1:]:\n  try: print('%.6f' % datetime.datetime.strptime(stamp, '%Y-%m-%d %H:%M:%S.%f %z').timestamp())\n  except Exception: print('-')"
-        XCTAssertEqual(stamps.map { Tools.reportTimestamp($0).map { String(format: "%.6f", $0) } ?? "-" }.joined(separator: "\n"), try python(["-c", code] + stamps))
+        // what Python's strptime(stamp, '%Y-%m-%d %H:%M:%S.%f %z').timestamp() gave
+        XCTAssertEqual(stamps.map { Tools.reportTimestamp($0).map { String(format: "%.6f", $0) } ?? "-" },
+                       ["1795169472.000000", "1795174872.123456", "1767319445.600000", "1793614272.000000", "1795165842.000000", "1795165841.500000", "-", "-", "-",
+                        "1709201472.000000", "-", "-", "-", "1795169472.000000", "-", "-"])
         let ends = ["Nov 26 10:00:00 2026 GMT", "Nov  6 10:00:00 2026 GMT", "nov 26 1:2:3 2026 utc", "Feb 30 10:00:00 2026 GMT", "Nov 26 10:00:00 2026 XYZ",
                     "November 26 10:00:00 2026 GMT", "Nov 26 10:00:00 2026", "Nov 26 10:00:60 2026 GMT"]
-        let endCode = "import datetime, calendar, sys\nfor stamp in sys.argv[1:]:\n  try: print(calendar.timegm(datetime.datetime.strptime(stamp, '%b %d %H:%M:%S %Y %Z').timetuple()))\n  except Exception: print('-')"
-        XCTAssertEqual(ends.map { Tools.certificateDate($0).map { String($0) } ?? "-" }.joined(separator: "\n"), try python(["-c", endCode] + ends))
+        // what calendar.timegm of Python's strptime(stamp, '%b %d %H:%M:%S %Y %Z') gave
+        XCTAssertEqual(ends.map { Tools.certificateDate($0).map { String($0) } ?? "-" }, ["1795687200", "1793959200", "1795654923", "-", "-", "-", "-", "-"])
     }
 
     func testCertificatesAsPythonReadsThem() throws {
@@ -214,31 +219,28 @@ final class ToolsTests: XCTestCase {
         let identities = ["Apple Development: Soon Gone (A1)", "Apple Distribution: Long Lived (B2)", "Apple Development: Renewed (C3)",
                           "Developer ID Application: Acme, Inc. (E5)", "Apple Development: Zed (Z9)", "Not In Keychain"].enumerated()
             .map { "  \($0.offset + 1)) 000\($0.offset) \"\($0.element)\"" }.joined(separator: "\n") + "\n     6 valid identities found\n"
-        for listed in [identities, "     0 valid identities found\n", ""] {
-            XCTAssertEqual(Tools.expiringCertificates(listed, shell: shell), try python(["certs-expiring"], input: listed), listed)
+        let cases = [(identities, "Apple Development: Soon Gone (A1)\nApple Development: Zed (Z9)\nDeveloper ID Application: Acme, Inc. (E5)"),
+                     ("     0 valid identities found\n", ""), ("", "")]
+        for (listed, expected) in cases {
+            XCTAssertEqual(Tools.expiringCertificates(listed, shell: shell), expected, listed)
         }
-        XCTAssertEqual(Tools.expiringCertificates(identities, shell: shell), "Apple Development: Soon Gone (A1)\nApple Development: Zed (Z9)\nDeveloper ID Application: Acme, Inc. (E5)")
     }
 
     func testBashPiecesAsBashHasThem() throws {
-        let lines = ["node\t-\tnodecli\t", "\t-\t\t/x/bin\ta, b\t~/gone, Old.app\t\t", "a b\tc d", "solo", ""]
-        for line in lines {
-            let bash = try BashOracle.run(["IFS=$'\\t' read -r name hint names from <<< \(BashOracle.quoted(line)); printf '%s|' \"$name\" \"$hint\" \"$names\" \"$from\""])
-            XCTAssertEqual(Tools.readTabs(line, 4).map { $0 + "|" }.joined(), bash[0], line)
+        let lines = [("node\t-\tnodecli\t", "node|-|nodecli||"), ("\t-\t\t/x/bin\ta, b\t~/gone, Old.app\t\t", "-|/x/bin|a, b|~/gone, Old.app|"), ("a b\tc d", "a b|c d|||"),
+                     ("solo", "solo||||"), ("", "||||")]
+        for (line, expected) in lines {
+            XCTAssertEqual(Tools.readTabs(line, 4).map { $0 + "|" }.joined(), expected, line)
         }
-        for text in ["", "a\n", "a\nb\n", "a\n\nb\n\n", "a;b\nc"] {
-            let bash = try BashOracle.run(["printf '%s' \(BashOracle.quoted(text)) | paste -sd';' - | sed 's/;/; /g'"])
-            XCTAssertEqual(Bash.substitution(Tools.pasted(text, ";").replacingOccurrences(of: ";", with: "; ")), bash[0], text)
+        for (text, expected) in [("", ""), ("a\n", "a"), ("a\nb\n", "a; b"), ("a\n\nb\n\n", "a; ; b; "), ("a;b\nc", "a; b; c")] {
+            XCTAssertEqual(Bash.substitution(Tools.pasted(text, ";").replacingOccurrences(of: ";", with: "; ")), expected, text)
         }
         let colored = "\u{1B}[32m✓ ok\u{1B}[0m \u{1B}[?25l\u{1B}[1;31mbad\u{1B}[0m\n\u{1B}]8;;x\u{1B}\\"
-        XCTAssertEqual(Bash.substitution(Tools.noColor(colored)), try BashOracle.run(["printf '%s' \(BashOracle.quoted(colored)) | nocolor"])[0])
+        XCTAssertEqual(Bash.substitution(Tools.noColor(colored)), "✓ ok bad\n\u{1B}]8;;x\u{1B}\\")
         let userPath = "/usr/bin:\(home)/no/such:: :\(home)/bin:\(home)/no/such:\(home)/a,b:\(home):/x/\(home)/y\(home)/late"
-        let pipeline = "printf '%s' \"$USER_PATH\" | tr ':' '\\n' | awk 'NF && !seen[$0]++' | while IFS= read -r d; do [[ \"$d\" == \"$HOME\"/* ]] && [ ! -d \"$d\" ] && tildify \"$d\"; done | paste -sd, - | sed 's/,/, /g'"
-        let env = try Env(["HOME": home, "PATH": userPath])
-        XCTAssertEqual(Tools.missingPathFolders(env), try BashOracle.run([pipeline], home: home, prelude: "USER_PATH=" + BashOracle.quoted(userPath))[0])
-        for output in ["Apple Swift version 6.0.3 (swiftlang)\nTarget: x", "x\nSwift version \nSwift version 5.9", "none"] {
-            let bash = try BashOracle.run(["printf '%s' \(BashOracle.quoted(output)) | grep -o 'Swift version [0-9.]*' | head -1 | sed 's/Swift version //'"])
-            XCTAssertEqual(Tools.swiftVersion(output), bash[0], output)
+        XCTAssertEqual(Tools.missingPathFolders(try Env(["HOME": home, "PATH": userPath])), "~/no/such, ~/a, b")
+        for (output, expected) in [("Apple Swift version 6.0.3 (swiftlang)\nTarget: x", "6.0.3"), ("x\nSwift version \nSwift version 5.9", ""), ("none", "")] {
+            XCTAssertEqual(Tools.swiftVersion(output), expected, output)
         }
     }
 }

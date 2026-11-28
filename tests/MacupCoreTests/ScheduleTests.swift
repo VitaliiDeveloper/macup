@@ -9,24 +9,15 @@ final class ScheduleTests: XCTestCase {
     override func setUpWithError() throws { try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true) }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(atPath: folder) }
 
-    /// The plist bash's heredoc writes, run by bash, with its /bin/bash taken out.
-    func testPlistIsBashsWithoutBash() throws {
-        let source = BashOracle.read("src/commands.sh")
-        let xesc = try XCTUnwrap(source.components(separatedBy: "\n").first { $0.trimmingCharacters(in: .whitespaces).hasPrefix("xesc(){") })
-        let start = try XCTUnwrap(source.range(of: "cat >\"$SCHED_PLIST\" <<EOF\n"))
-        let end = try XCTUnwrap(source[start.upperBound...].range(of: "\nEOF\n"))
-        let heredoc = source[start.upperBound..<end.lowerBound].replacingOccurrences(of: "\"$PATH\"", with: "\"$path_value\"")
-        let prelude = "\(xesc)\nSCHED_LABEL=\(Env.schedLabel)\nplist(){ local self=$1 day=$2 path_value=$3 LOGDIR=$4\ncat <<EOF\n\(heredoc)\nEOF\n}\n"
-        let cases: [(program: String, weekly: Bool, path: String, log: String)] = [
-            ("/Users/me/.local/bin/macup", true, "/opt/homebrew/bin:/usr/bin:/bin", "/Users/me/Library/Logs/macup"),
-            ("/Users/a&b/<x>/macup", false, "/p&q:/r<s>", "/Users/a&b/Library/Logs/macup"),
+    /// The plist 2.9's bash heredoc wrote for the same inputs, with its /bin/bash taken out.
+    func testPlistIsBashsWithoutBash() {
+        let cases: [(program: String, weekly: Bool, path: String, log: String, fixture: String)] = [
+            ("/Users/me/.local/bin/macup", true, "/opt/homebrew/bin:/usr/bin:/bin", "/Users/me/Library/Logs/macup", "weekly"),
+            ("/Users/a&b/<x>/macup", false, "/p&q:/r<s>", "/Users/a&b/Library/Logs/macup", "daily"),
         ]
-        let bash = try BashOracle.run(cases.map { item in
-            "plist \(BashOracle.quoted(item.program)) \(BashOracle.quoted(item.weekly ? "<key>Weekday</key><integer>1</integer>" : "")) \(BashOracle.quoted(item.path)) \(BashOracle.quoted(item.log))"
-        }, prelude: prelude)
-        for (item, expected) in zip(cases, bash) {
+        for item in cases {
             let swift = Schedule.text(program: item.program, weekly: item.weekly, path: item.path, log: item.log + "/schedule.log")
-            XCTAssertEqual(swift, expected.replacingOccurrences(of: "<string>/bin/bash</string>", with: "") + "\n")
+            XCTAssertEqual(swift, Checkout.fixture("ScheduleTests-plist-\(item.fixture).txt"))
         }
     }
 
@@ -57,7 +48,7 @@ final class ScheduleTests: XCTestCase {
     func testReleaseAssetAndTheBootstrapLine() throws {
         XCTAssertEqual(Release.assetURL(repo: "VitaliiDeveloper/macup", version: "3.0.0"),
                        "https://github.com/VitaliiDeveloper/macup/releases/download/v3.0.0/macup-3.0.0-macos-universal.tar.gz")
-        let bootstrap = BashOracle.repo + "/tools/bootstrap.sh"
+        let bootstrap = Checkout.root + "/tools/bootstrap.sh"
         XCTAssertTrue(Release.isBootstrap(bootstrap))
         XCTAssertFalse(Release.isBootstrap(write("#!/bin/bash\n# LEGACY_VERSION=1\nMACUP_VERSION=\"3.0.0\"\n")))
         XCTAssertTrue(Release.isBootstrap(write("LEGACY_VERSION=\"2.9.2\"\n")))

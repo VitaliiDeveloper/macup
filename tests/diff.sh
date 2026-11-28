@@ -3,6 +3,7 @@
 # case on the same fake home, and what they leave must be the same after normalising (docs/swift-port-plan.md, "Parity").
 #   tests/diff.sh              every case
 #   tests/diff.sh tasks help   the cases whose name starts with one of these words
+#   DIFF_SHARD=1/4 tests/diff.sh   every 4th of those cases, from the second: CI runs them in 4 jobs
 # Every case runs in en, uk and ru (MACUP_LANG), without a terminal and on one (through script), unless its last field
 # says "pipe". Compared: stdout and stderr together as macup writes them (--json included), the exit status, the newest
 # report, the files in the fake home. The system tools a run asks (df, diskutil, tmutil, date, brew, sudo, pgrep, osascript)
@@ -11,7 +12,7 @@ cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-diff.XXXXXX"); trap 'chmod -R u+rwx "$work" 2>/dev/null; rm -rf "$work"' EXIT
 export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}
 [ -f macup ] && [ -x "$MACUP_BIN" ] || { echo "build both first: ./build.sh"; exit 1; }
-failed=0; runs=0
+failed=0; runs=0; picked=0
 # shellcheck source=tests/fakes.sh
 . tests/fakes.sh
 fakes "$work/bin" pgrep df diskutil tmutil date brew sudo osascript; export PATH="$work/bin:$PATH"
@@ -95,6 +96,8 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
 
 while IFS='|' read -r name fix envs args modes <&3; do
   if [ $# -gt 0 ]; then matched=0; for prefix in "$@"; do case "$name" in "$prefix"*) matched=1 ;; esac; done; [ $matched = 1 ] || continue; fi
+  picked=$((picked + 1))
+  [ -z "${DIFF_SHARD:-}" ] || [ $(((picked - 1) % ${DIFF_SHARD#*/})) = "${DIFF_SHARD%/*}" ] || continue
   for lang in en uk ru; do
     for tty in ${modes:-pipe tty}; do
       runs=$((runs + 1))

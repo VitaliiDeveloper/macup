@@ -36,6 +36,9 @@ say(){ # message id, its values → stderr, so a command's own output stays clea
     uk:missing)   text='macup %s ще не опубліковано, або завантаження не вдалося: %s. Нічого не змінено; запусти macup ще раз за кілька хвилин.' ;;
     ru:missing)   text='macup %s ещё не опубликован, или скачать не удалось: %s. Ничего не изменено; запустите macup ещё раз через несколько минут.' ;;
     *:missing)    text='macup %s is not published yet, or the download failed: %s. Nothing changed; run macup again in a few minutes.' ;;
+    uk:notyet)    text='macup %s ще не опубліковано, або завантаження не вдалося: %s.' ;;
+    ru:notyet)    text='macup %s ещё не опубликован, или скачать не удалось: %s.' ;;
+    *:notyet)     text='macup %s is not published yet, or the download failed: %s.' ;;
     uk:waiting)   text='macup %s ще не опубліковано, або завантаження не вдалося; цей запуск використовує macup %s, а наступний спробує ще раз.' ;;
     ru:waiting)   text='macup %s ещё не опубликован, или скачать не удалось; этот запуск использует macup %s, а следующий попробует ещё раз.' ;;
     *:waiting)    text='macup %s is not published yet, or the download failed; this run uses macup %s, and the next one tries again.' ;;
@@ -87,17 +90,25 @@ legacy(){ # → $WORK/macup: the last 2.9 script, checked as 2.9 checks its own 
   /bin/bash -n "$WORK/macup" 2>/dev/null && grep -qx "MACUP_VERSION=\"$LEGACY_VERSION\"" "$WORK/macup" && chmod 755 "$WORK/macup" || { say broken; return 1; }
 }
 
+asks(){ # COMMAND ARGS…: whether 2.9's parser would run that command (schedule: daily or weekly), wherever it stands among the options
+  local command=$1 arg previous=""; shift
+  for arg in "$@"; do
+    case "$command:$previous:$arg" in
+      self-update:*:self-update|self-update:*:selfupdate|self-update:*:upgrade|uninstall:*:uninstall|schedule:schedule:daily|schedule:schedule:weekly) return 0 ;;
+    esac
+    previous=$arg
+  done
+  return 1
+}
+
 # A release is tagged minutes before its binary is uploaded, and from then on 2.9 copies update to this file. Until the
 # binary is there, a run uses the last 2.9 from a temporary copy and replaces nothing; the next run tries 3.0 again.
 waiting(){
-  local arg previous=""
+  # the installer says itself what to do next
+  [ -n "${MACUP_FROM_INSTALLER:-}" ] && { say notyet "$MACUP_VERSION" "$URL"; exit 1; }
   # 2.9 takes its own path from $0: from a temporary copy these would schedule, update or uninstall that copy
-  for arg in "$@"; do
-    case "$previous:$arg" in *:self-update|*:selfupdate|*:upgrade|*:uninstall|schedule:daily|schedule:weekly) say missing "$MACUP_VERSION" "$URL"; exit 1 ;; esac
-    previous=$arg
-  done
-  # the installer says itself that it could not finish
-  [ -z "${MACUP_FROM_INSTALLER:-}" ] && legacy 2>/dev/null || { say missing "$MACUP_VERSION" "$URL"; exit 1; }
+  { asks self-update "$@" || asks uninstall "$@" || asks schedule "$@"; } && { say missing "$MACUP_VERSION" "$URL"; exit 1; }
+  legacy 2>/dev/null || { say missing "$MACUP_VERSION" "$URL"; exit 1; }
   say waiting "$MACUP_VERSION" "$LEGACY_VERSION"
   /bin/bash "$WORK/macup" "$@"; exit
 }
@@ -143,12 +154,12 @@ main(){
     mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
     say legacy "$MACUP_VERSION" "$LEGACY_VERSION"; rm -rf "$WORK"
     # 2.9's self-update would install this bootstrap again, which would put 2.9 back again
-    case "${1:-}" in self-update|selfupdate|upgrade) exit 0 ;; esac
+    asks self-update "$@" && exit 0
     exec /bin/bash "$self" "$@"
   fi
+  binary || waiting "$@"
   # the installer names the file it installs, not this temporary one
   [ -n "${MACUP_FROM_INSTALLER:-}" ] || say finish "$MACUP_VERSION"
-  binary || waiting "$@"
   reschedule || exit 1
   mv -f "$WORK/macup" "$self" || { say write "$self"; exit 1; }
   [ -n "${MACUP_FROM_INSTALLER:-}" ] || say installed "$MACUP_VERSION" "$self"

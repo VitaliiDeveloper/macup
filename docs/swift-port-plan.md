@@ -255,7 +255,7 @@ Within a wave, a unit that needs a foundation change stops and asks the coordina
 So the repository root keeps a bash `macup` with that exact version line, and its `macup.sha256`: a bootstrap. The bootstrap:
 
 - downloads and checks the release binary and replaces itself by rename;
-- until the release asset is uploaded (from the merge into `main` until the release workflow attaches it), or when the download fails, runs the command with the last 2.9.x from a temporary copy and replaces nothing, so the next run tries again. `self-update`, `schedule` and `uninstall`, which act on 2.9's own file (`$0`), say "not published yet" instead. `install.sh` sets `MACUP_FROM_INSTALLER`, so it gets no 2.9 stand-in and none of the bootstrap's progress lines: it installs nothing and says to run it again;
+- until the release asset is uploaded (from the merge into `main` until the release workflow attaches it), runs the command with the last 2.9.x from a temporary copy and replaces nothing, so the next run tries again; when that download fails too, it says so and changes nothing. `self-update`, `schedule` and `uninstall`, which act on 2.9's own file (`$0`), say "not published yet" instead. `install.sh` sets `MACUP_FROM_INSTALLER`, so it gets no 2.9 stand-in, none of the bootstrap's progress lines and no "run macup again": it installs nothing and says to run the installer again;
 - refuses to run next to `Package.swift` and `build.sh`, where it is the tracked bootstrap of a checkout;
 - refuses to run from a Homebrew Cellar path and says `brew upgrade macup`;
 - on a macOS older than the deployment target, installs the last 2.9.x instead of a binary that cannot start;
@@ -271,7 +271,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 - A 3.0 binary is found by a fixed marker string, not by running it with `version` (decided in phase 5). The marker is `Env.marker`: a line `# macup` and a line `MACUP_VERSION="<version>"`, one literal that `Env.version` is read from. So the 2.9 rules (`grep -q '^MACUP_VERSION='` in 2.9's `uninstall`, that and `'^# macup'` in its `install.sh`) and `SelfPath.isMacup` find a 3.0 binary unchanged, and running an unknown file named macup is never needed. `tools/release.sh` checks that each stripped slice holds both lines together. Until phase 4 removed it, the binary also embedded the bash build, whose own lines are apart; that is why the check asks for them together.
 - `install.sh` and `uninstall` use the same rule.
 
-**Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL, checks that the asset exists, and gives the formula `depends_on macos: :ventura` (replacing `depends_on :macos`), so `brew upgrade` on macOS 12 keeps 2.9.2 instead of installing a binary that cannot start. `brew audit --strict --online` is run in the tap before relying on it.
+**Homebrew.** The formula installs the release asset. `tools/bump-formula.sh` learns the asset URL, checks that the asset exists, and gives the formula `depends_on macos: :ventura` (replacing `depends_on :macos`), so Homebrew on macOS 12 refuses the upgrade instead of installing a binary that cannot start, and 2.9.2 stays (not yet tried on a macOS 12 Mac). `brew audit --strict --online` is run in the tap before relying on it.
 
 **Cleanup.**
 
@@ -289,7 +289,7 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 3. The suite runs.
 4. One pull request goes from `swift/main` into `main`.
 
-Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap. Until the asset exists (the release workflow waits for CI on `main`, 12 to 40 minutes), its runs use 2.9.2 from a temporary copy, scheduled checks included, and `self-update`, `schedule` and `uninstall` say "not published yet". `tests/shipping.sh` covers it; the copy moves to 3.0 by itself once the asset is there. Run `tools/bump-formula.sh` only after the asset is up: it checks that.
+Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap. The release workflow does not wait for CI: pushed before CI on `main` has passed for the merge commit (12 to 40 minutes), it fails and must be re-run once CI is green, so watch it. Until the asset exists, its runs use 2.9.2 from a temporary copy, scheduled checks included, and `self-update`, `schedule` and `uninstall` say "not published yet". `tests/shipping.sh` covers it; the copy moves to 3.0 by itself once the asset is there. Run `tools/bump-formula.sh` only after the asset is up: it checks that.
 
 ## Every pull request into `swift/main`
 

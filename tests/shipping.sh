@@ -164,7 +164,7 @@ fresh "$work/bootstrap"; out=$(run env XPC_SERVICE_NAME=com.vitaliideveloper.mac
 [ $rc = 3 ] && grep -q 'this run uses macup 2.9.2' <<<"$out" && grep -qE "^$home/tmp/+macup-update\.[A-Za-z0-9]+/macup check --quiet --notify$" "$home/ran.log" && untouched \
   && pass "bootstrap from launchd before the release asset: the check runs on 2.9.2, nothing replaced or reloaded" || { fail "bootstrap from launchd before the asset (rc=$rc): $out"; cat "$home/ran.log"; }
 refused=1
-for command in self-update "--lang en schedule weekly" uninstall; do
+for command in self-update "--no-color selfupdate" upgrade "--lang en schedule weekly" uninstall; do
   fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" $command); rc=$?
   [ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz. Nothing' <<<"$out" && untouched && [ ! -e "$home/ran.log" ] \
     && [ "$(urls)" = "$asset_sum" ] || { refused=0; echo "  $command (rc=$rc): $out"; }
@@ -241,6 +241,9 @@ fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" version);
 fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" self-update --no-color); rc=$?
 [ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && ! grep -q 'macup updated' <<<"$out" && [ "$(urls)" = "v2.9.2/macup.sha256 v2.9.2/macup" ] \
   && pass "bootstrap on macOS 12 asked to self-update: 2.9 stays, no update back to the bootstrap" || { fail "bootstrap on macOS 12, self-update ($rc): $out"; urls; }
+fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" --no-color upgrade); rc=$?
+[ $rc = 0 ] && cmp -s "$bin/macup" "$work/macup-2.9.2" && ! grep -q 'macup updated' <<<"$out" \
+  && pass "bootstrap on macOS 12 asked to upgrade after an option: 2.9 stays" || fail "bootstrap on macOS 12, --no-color upgrade ($rc): $out"
 
 # the real binary, packed as the release workflow packs it
 real=${MACUP_BIN:-$PWD/.build/debug/macup}
@@ -258,7 +261,7 @@ release_asset 9.9.9 "$work/asset/macup"; rm -rf "$FAKE_REMOTE/releases/v9.9.9"
 mkdir -p "$ihome/.local/bin"; cp "$work/macup-2.9.2" "$ihome/.local/bin/macup"
 : >"$FAKE_REMOTE/curl.log"; out=$(install_remote); rc=$?
 [ $rc = 1 ] && grep -q 'is not published yet' <<<"$out" && grep -q 'run the installer again in a few minutes' <<<"$out" && cmp -s "$ihome/.local/bin/macup" "$work/macup-2.9.2" \
-  && ! grep -q 'this run uses' <<<"$out" && ! grep -q v2.9.2 "$FAKE_REMOTE/curl.log" \
+  && ! grep -qE 'this run uses|run macup again|Finishing' <<<"$out" && ! grep -q v2.9.2 "$FAKE_REMOTE/curl.log" \
   && [ "$(ls -A "$ihome/.local/bin")" = macup ] && pass "install.sh before the release asset: says so, the copy installed before keeps working" || { fail "install.sh before the asset ($rc): $out"; ls -A "$ihome/.local/bin"; }
 release_asset 9.9.9 "$work/asset/macup"
 out=$(install_remote); rc=$?

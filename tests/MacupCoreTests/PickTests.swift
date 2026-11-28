@@ -11,18 +11,17 @@ final class PickTests: XCTestCase {
             ("clean.e", 2, true, 1024, .trash),
         ]
         let list = rows.map { Candidate(task: $0.0, level: $0.1, auto: $0.2, label: $0.0, kb: $0.3, kind: $0.4, paths: "", proc: "", measureDir: "", open: "", info: "", key: "") }
-        let answers = ["", "1", "1,3", "2-5", "1-9999", "08", "0", "5-2", "safe", "standard", "aggressive", "2-2", "02-2", "3", "3-3", "zzz, 999",
-                       " 1 , 4 ", "1-2-3", "-n", "12345", "4-", "1\t3", "7", "6-8", "safe,7", "Safe", "0001-0003", "10000", "8-9"]
-        var prelude = BashOracle.function("visible", in: "src/cleanup.sh") + BashOracle.function("vis_index", in: "src/cleanup.sh")
-            + BashOracle.function("pick", in: "src/cleanup.sh") + "ask(){ printf '%s\\n' \"$ANSWER\"; }\nC_N=\(rows.count)\n"
-        for (index, row) in rows.enumerated() {
-            prelude += "C_TASK[\(index)]=\(row.0); C_LVL[\(index)]=\(row.1); C_AUTO[\(index)]=\(row.2 ? 1 : 0); C_KB[\(index)]=\(row.3); C_KIND[\(index)]=\(row.4.rawValue)\n"
-        }
-        let bash = try BashOracle.run(answers.map { "ANSWER=\(BashOracle.quoted($0)) pick" }, prelude: prelude)
-        XCTAssertEqual(bash[3], "3\n5", "2-5: the visible 2nd to 5th, without the leftover and the dev container, which only their own number takes")
+        // the indexes 2.9's bash pick printed for each answer
+        let answers: [(String, [Int])] = [
+            ("", []), ("1", [0]), ("1,3", [0, 3]), ("1-9999", [0, 3, 5, 6, 8]), ("08", [8]), ("0", []), ("5-2", []), ("safe", [0, 6]),
+            ("standard", [0, 1, 6, 8]), ("aggressive", [0, 1, 3, 6, 8]), ("2-2", [2]), ("02-2", []), ("3", [3]), ("3-3", [3]), ("zzz, 999", []),
+            (" 1 , 4 ", [0, 4]), ("1-2-3", []), ("-n", []), ("12345", []), ("4-", []), ("1\t3", [0, 3]), ("7", [7]), ("6-8", [6, 8]),
+            ("safe,7", [0, 6, 7]), ("Safe", []), ("0001-0003", [0, 3]), ("10000", []), ("8-9", [8]),
+        ]
         let i18n = I18n(lang: .en, translations: [:])
-        for (answer, picked) in zip(answers, bash) {
-            XCTAssertEqual(Pick.choose(answer, list, i18n).map(String.init).joined(separator: "\n"), picked, answer.debugDescription)
+        XCTAssertEqual(Pick.choose("2-5", list, i18n), [3, 5], "2-5: the visible 2nd to 5th, without the leftover and the dev container, which only their own number takes")
+        for (answer, picked) in answers {
+            XCTAssertEqual(Pick.choose(answer, list, i18n), picked, answer.debugDescription)
         }
     }
 }

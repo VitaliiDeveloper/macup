@@ -11,14 +11,6 @@ final class LeftoversTests: XCTestCase {
 
     override func tearDown() { try? FileManager.default.removeItem(atPath: home) }
 
-    /// leftovers.sh up to the sizes section (only definitions), and cleanup.sh's dev_prefixes and dev_container.
-    var prelude: String {
-        let leftovers = BashOracle.read("src/leftovers.sh").components(separatedBy: "\n").prefix { !$0.contains(" SIZES (never deleted)") }
-        return "SCHED_LABEL=com.vitaliideveloper.macup\n" + leftovers.joined(separator: "\n") + "\n"
-            + BashOracle.function("dev_prefixes", in: "src/cleanup.sh") + BashOracle.read("src/cleanup.sh").components(separatedBy: "\n")
-            .drop { !$0.hasPrefix("dev_container(){") }.prefix { !$0.hasPrefix("in_projects(){") }.joined(separator: "\n") + "\n"
-    }
-
     func makeRun(_ argv: [String] = ["check"], config: String = "") throws -> Run {
         try config.write(toFile: home + "/.config/macup/config", atomically: true, encoding: .utf8)
         let env = try Env(["HOME": home, "PATH": "/usr/bin:/bin", "MACUP_PATH": "keep", "MACUP_SYSLIB": home + "/SysLib"])
@@ -29,28 +21,31 @@ final class LeftoversTests: XCTestCase {
                    lock: RunLock(dir: home + "/lock", held: false), started: Date(), previous: "")
     }
 
+    /// vendor_of, lc and cap as 2.9's bash gave them: cap leaves an id whose first letter is not ASCII empty.
     func testNamesAreBash() throws {
-        let ids = ["ai.perplexity.CometUpdater", "io.github.Foo.agent", "io.github", "io.github.", "com", "", ".x.y", "a..b", "uk.co.Bank.app",
-                   "Привет.Мир.x", "ÉCOLE.İx.y", "com.electron.App"]
-        let bash = try BashOracle.run(ids.flatMap { ["vendor_of \(BashOracle.quoted($0))", "lc \(BashOracle.quoted($0))", "cap \(BashOracle.quoted($0))"] }, prelude: prelude)
-        for (index, id) in ids.enumerated() {
-            XCTAssertEqual(Leftovers.vendorOf(id), bash[index * 3], id)
-            XCTAssertEqual(Leftovers.lc(id), bash[index * 3 + 1], id)
-            XCTAssertEqual(Leftovers.capitalized(id), bash[index * 3 + 2], id)
+        let ids: [(id: String, vendor: String, lc: String, cap: String)] = [
+            ("ai.perplexity.CometUpdater", "ai.perplexity", "ai.perplexity.cometupdater", "Ai.perplexity.CometUpdater"),
+            ("io.github.Foo.agent", "io.github.foo", "io.github.foo.agent", "Io.github.Foo.agent"), ("io.github", "", "io.github", "Io.github"),
+            ("io.github.", "", "io.github.", "Io.github."), ("com", "", "com", "Com"), ("", "", "", ""), (".x.y", "", ".x.y", ".x.y"), ("a..b", "", "a..b", "A..b"),
+            ("uk.co.Bank.app", "uk.co.bank", "uk.co.bank.app", "Uk.co.Bank.app"), ("Привет.Мир.x", "привет.мир", "привет.мир.x", ""),
+            ("ÉCOLE.İx.y", "école.ix", "école.ix.y", ""), ("com.electron.App", "com.electron.app", "com.electron.app", "Com.electron.App"),
+        ]
+        for test in ids {
+            XCTAssertEqual(Leftovers.vendorOf(test.id), test.vendor, test.id)
+            XCTAssertEqual(Leftovers.lc(test.id), test.lc, test.id)
+            XCTAssertEqual(Leftovers.capitalized(test.id), test.cap, test.id)
         }
     }
 
     func testNameOKIsBash() throws {
-        let names = ["mac helper", "app", "helper app", "comet", "", "data cache", "cache"]
-        let bash = try BashOracle.run(names.map { "name_ok \(BashOracle.quoted($0)) && echo yes || echo no" }, prelude: prelude + "LO_NAMES=comet\nLO_APPLE=\n")
+        let names = ["mac helper": false, "app": false, "helper app": true, "comet": false, "": false, "data cache": false, "cache": false]
         let lookup = Leftovers.Taken(apps: [Array("comet".utf8)], apple: [])
-        for (name, answer) in zip(names, bash) { XCTAssertEqual(Leftovers.nameOK(lookup, name) ? "yes" : "no", answer, name) }
+        for (name, answer) in names { XCTAssertEqual(Leftovers.nameOK(lookup, name), answer, name) }
     }
 
     func testOuterIsBash() throws {
-        let lists = ["/a/b\n/a\n/a b/c\n/a/b/c", "\n/x/y/\n/x/y\n/x", "/a/b/../c\n/a/bb\n/a/b", "/Ä/x\n/A/x\n/a"]
-        let bash = try BashOracle.run(lists.map { "outer \(BashOracle.quoted($0))" }, prelude: prelude)
-        for (list, answer) in zip(lists, bash) { XCTAssertEqual(Leftovers.outer(list), answer, list) }
+        let lists = ["/a/b\n/a\n/a b/c\n/a/b/c": "/a\n/a b/c", "\n/x/y/\n/x/y\n/x": "/x", "/a/b/../c\n/a/bb\n/a/b": "/a/b\n/a/bb", "/Ä/x\n/A/x\n/a": "/A/x\n/a\n/Ä/x"]
+        for (list, answer) in lists { XCTAssertEqual(Leftovers.outer(list), answer, list) }
     }
 
     func testPlistValuesArePlutil() throws {
@@ -62,16 +57,16 @@ final class LeftoversTests: XCTestCase {
         <key>J</key><date>2020-01-01T00:00:00Z</date><key>K</key><data>AAEC</data>\
         <key>AssociatedBundleIdentifiers</key><array><string>com.A.b</string><string>a"b/c\\d</string><integer>5</integer><true/><array><string>n</string></array></array></dict></plist>
         """.write(toFile: file, atomically: true, encoding: .utf8)
-        let keys = ["A", "B", "C", "D", "E", "F", "E.0", "E.1", "E.2", "G", "H", "I", "J", "K", "Z", "F.x", "AssociatedBundleIdentifiers"]
-        let bash = try BashOracle.run(keys.map { "pl \($0) \(BashOracle.quoted(file)) || echo NONE" } + ["assoc_ids \(BashOracle.quoted(file))"], prelude: prelude)
+        let keys: KeyValuePairs = ["A": "3600.000000", "B": "true", "C": "3600", "D": "", "E": "2", "F": "a/b\"c", "E.0": "x/y", "E.1": "z,w", "E.2": "NONE", "G": "",
+                                   "H": "false", "I": "_x\nb\nC", "J": "2020-01-01T00:00:00Z", "K": "AAEC", "Z": "NONE", "F.x": "NONE", "AssociatedBundleIdentifiers": "5"]
         let root = Leftovers.plist(file)
-        for (key, answer) in zip(keys, bash) { XCTAssertEqual(Leftovers.raw(root, key) ?? "NONE", answer, key) }
-        XCTAssertEqual(Leftovers.associatedIDs(root).joined(separator: "\n"), bash.last)
+        for (key, answer) in keys { XCTAssertEqual(Leftovers.raw(root, key) ?? "NONE", answer, key) }
+        XCTAssertEqual(Leftovers.associatedIDs(root).joined(separator: "\n"), #"com.A.b\#na\b\/c\\d\#n5\#ntrue\#nn"#)
         XCTAssertNil(Leftovers.plist(home + "/.config/macup/config"), "not a plist: what plutil -lint refuses")
         let dated = home + "/dated.plist"
         try "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>AssociatedBundleIdentifiers</key><array><string>com.x</string><date>2020-01-01T00:00:00Z</date></array></dict></plist>"
             .write(toFile: dated, atomically: true, encoding: .utf8)
-        XCTAssertEqual(Leftovers.associatedIDs(Leftovers.plist(dated)).joined(separator: "\n"), try BashOracle.run(["assoc_ids \(BashOracle.quoted(dated))"], prelude: prelude)[0])
+        XCTAssertEqual(Leftovers.associatedIDs(Leftovers.plist(dated)), [])
     }
 
     func testOwnFolderIsBash() throws {
@@ -80,23 +75,24 @@ final class LeftoversTests: XCTestCase {
             try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         }
         try FileManager.default.createSymbolicLink(atPath: "\(support)/Linked", withDestinationPath: "\(home)/elsewhere")
-        let programs = ["\(support)/Vendor/Updater/bin/u", "\(support)/Vendor/Updater/u", "\(support)/Flat/updater", "\(support)/Vendor/Gone/u",
-                        "\(sysSupport)/Sys/svc/bin/s", "\(home)/Library/Vendor/Sub/x", "\(support)/Linked/sub/x", "/opt/x/y/z", "\(support)//a/b"]
-        let bash = try BashOracle.run(programs.map { "lo_dir \(BashOracle.quoted($0))" }, home: home, env: ["MACUP_SYSLIB": home + "/SysLib"], prelude: prelude)
+        let programs: KeyValuePairs = [
+            "\(support)/Vendor/Updater/bin/u": "\(support)/Vendor/Updater", "\(support)/Vendor/Updater/u": "\(support)/Vendor/Updater", "\(support)/Flat/updater": "",
+            "\(support)/Vendor/Gone/u": "", "\(sysSupport)/Sys/svc/bin/s": "\(sysSupport)/Sys/svc", "\(home)/Library/Vendor/Sub/x": "\(home)/Library/Vendor/Sub",
+            "\(support)/Linked/sub/x": "", "/opt/x/y/z": "", "\(support)//a/b": "",
+        ]
         let run = try makeRun()
-        for (program, answer) in zip(programs, bash) { XCTAssertEqual(Leftovers.ownFolder(run, program), answer, program) }
+        for (program, answer) in programs { XCTAssertEqual(Leftovers.ownFolder(run, program), answer, program) }
     }
 
     func testDevContainersAreBash() throws {
-        let prefixes = "dev.me, com.apple.x,COM.APPLE,bad prefix,two.parts.ok nodot"
-        let run = try makeRun(config: "dev_container_prefixes = \(prefixes)\n")
+        let run = try makeRun(config: "dev_container_prefixes = dev.me, com.apple.x,COM.APPLE,bad prefix,two.parts.ok nodot\n")
         let containers = home + "/Library/Containers"
-        let paths = ["\(containers)/dev.me", "\(containers)/dev.me.App", "\(containers)/dev.meX", "\(containers)/two.parts.ok.x", "\(containers)/com.apple.x.y",
-                     "\(containers)/dev.me.a b", "\(containers)/dev.me/sub", "\(home)/elsewhere/dev.me", "\(containers)/"]
-        let bash = try BashOracle.run(["dev_prefixes"] + paths.map { "dev_container \(BashOracle.quoted($0)) && echo yes || echo no" }, home: home,
-                                      prelude: "DEV_PREFIXES=\(BashOracle.quoted(prefixes))\n" + prelude)
-        XCTAssertEqual(Leftovers.devPrefixes(run).joined(separator: "\n"), bash[0])
-        for (path, answer) in zip(paths, bash.dropFirst()) { XCTAssertEqual(Leftovers.devContainer(run, path) ? "yes" : "no", answer, path) }
+        let paths: KeyValuePairs = [
+            "\(containers)/dev.me": true, "\(containers)/dev.me.App": true, "\(containers)/dev.meX": false, "\(containers)/two.parts.ok.x": true,
+            "\(containers)/com.apple.x.y": false, "\(containers)/dev.me.a b": false, "\(containers)/dev.me/sub": false, "\(home)/elsewhere/dev.me": false, "\(containers)/": false,
+        ]
+        XCTAssertEqual(Leftovers.devPrefixes(run), ["dev.me", "two.parts.ok"])
+        for (path, answer) in paths { XCTAssertEqual(Leftovers.devContainer(run, path), answer, path) }
     }
 
     func testAppForAndNewestAreBash() throws {
@@ -106,34 +102,35 @@ final class LeftoversTests: XCTestCase {
             .write(toFile: home + "/bin/mdfind", atomically: true, encoding: .utf8)
         chmod(home + "/bin/mdfind", 0o755)
         try "dev.app\nsolo.one-x\n".write(toFile: home + "/ids", atomically: true, encoding: .utf8)
-        let ids = ["dev.app", "dev.app.share", "dev.app-LaunchAtLoginHelper", "dev.apps", "other.x.y", "dev", "solo.one-x.z", "solo.one-y"]
-        let containers = ["\(home)/c/full", "\(home)/c/empty", "\(home)/c/marker"]
-        for container in containers { try fm.createDirectory(atPath: container + "/sub", withIntermediateDirectories: true) }
-        fm.createFile(atPath: containers[0] + "/sub/old", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_600_000_000)])
-        fm.createFile(atPath: containers[0] + "/new", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)])
-        fm.createFile(atPath: containers[2] + "/.com.apple.containermanagerd.metadata.plist", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_750_000_000)])
-        for container in containers { try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_650_000_000)], ofItemAtPath: container) }
-        let cleaners = BashOracle.read("src/cleaners.sh").components(separatedBy: "\n")
-        let appFor = cleaners.drop { !$0.hasPrefix("app_for(){") }.prefix { !$0.hasPrefix("done; }") }.joined(separator: "\n") + "\ndone; }\n"
-        let bash = try BashOracle.run(ids.map { "app_for \($0) && echo yes || echo no" } + containers.map { "newest \(BashOracle.quoted($0))" }, home: home,
-                                      env: ["PATH": "\(home)/bin:/usr/bin:/bin"], prelude: appFor + BashOracle.function("newest", in: "src/cleaners.sh"))
+        let ids: KeyValuePairs = ["dev.app": true, "dev.app.share": true, "dev.app-LaunchAtLoginHelper": true, "dev.apps": false, "other.x.y": false, "dev": false,
+                                  "solo.one-x.z": true, "solo.one-y": false]
+        let containers: KeyValuePairs = ["\(home)/c/full": "2023-11-14", "\(home)/c/empty": "2022-04-15", "\(home)/c/marker": "2022-04-15"]
+        for (container, _) in containers { try fm.createDirectory(atPath: container + "/sub", withIntermediateDirectories: true) }
+        fm.createFile(atPath: home + "/c/full/sub/old", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_600_000_000)])
+        fm.createFile(atPath: home + "/c/full/new", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)])
+        fm.createFile(atPath: home + "/c/marker/.com.apple.containermanagerd.metadata.plist", contents: nil, attributes: [.modificationDate: Date(timeIntervalSince1970: 1_750_000_000)])
+        for (container, _) in containers { try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_650_000_000)], ofItemAtPath: container) }
         let run = try makeRun()
         run.shell.vars["PATH"] = "\(home)/bin:/usr/bin:/bin"
-        for (id, answer) in zip(ids, bash) { XCTAssertEqual(Leftovers.appFor(run, id) ? "yes" : "no", answer, id) }
-        for (container, answer) in zip(containers, bash.dropFirst(ids.count)) { XCTAssertEqual(Leftovers.newest(run, container), answer, container) }
+        for (id, answer) in ids { XCTAssertEqual(Leftovers.appFor(run, id), answer, id) }
+        for (container, answer) in containers { XCTAssertEqual(Leftovers.newest(run, container), answer, container) }
     }
 
     /// strcoll ties the Cyrillic and CJK names with each other: sort -u keeps the first of each tie of the same length.
+    /// The expected lines are what `sort -u -t'|' -k1,1` (by key) and `sort -u` (whole) printed in each locale.
     func testSortUniqueIsSort() throws {
         let lines = ["b|2", "a|1", "b|1", "B|3", "é|4", "e\u{301}|6", "e|5", "б|7", "а|8", "аа|9", "日本|10", "中文|11", "b|12"]
         let pairs = lines.map { line -> (String, String) in let parts = line.split(separator: "|"); return (String(parts[0]), String(parts[1])) }
-        let quoted = lines.map(BashOracle.quoted).joined(separator: " ")
+        let sorts: [(vars: [String: String], byKey: String, whole: String)] = [
+            (["LANG": "en_US.UTF-8"], "б|7\nаа|9\na|1\nb|2\nB|3\ne|5\ne\u{301}|6\né|4", "日本|10\n中文|11\nб|7\nа|8\nаа|9\na|1\nb|1\nb|12\nb|2\nB|3\né|4\ne|5\ne\u{301}|6"),
+            (["LANG": "uk_UA.UTF-8"], "é|4\n日本|10\na|1\nb|2\nB|3\ne|5\ne\u{301}|6\nа|8\nаа|9\nб|7", "日本|10\n中文|11\né|4\na|1\nb|1\nb|12\nb|2\nB|3\ne|5\ne\u{301}|6\nа|8\nаа|9\nб|7"),
+            (["LC_ALL": "C"], "B|3\na|1\nb|2\ne|5\ne\u{301}|6\né|4\nа|8\nаа|9\nб|7\n中文|11\n日本|10", "B|3\na|1\nb|1\nb|12\nb|2\ne|5\ne\u{301}|6\né|4\nа|8\nаа|9\nб|7\n中文|11\n日本|10"),
+        ]
         defer { Names.toolLocale = nil }
-        for vars in [["LANG": "en_US.UTF-8"], ["LANG": "uk_UA.UTF-8"], ["LC_ALL": "C"]] {
-            Names.setLocale(try Env(["HOME": home, "LC_CTYPE": "en_US.UTF-8"].merging(vars) { $1 }))
-            let bash = try BashOracle.run(["printf '%s\\n' \(quoted) | sort -u -t'|' -k1,1", "printf '%s\\n' \(quoted) | sort -u"], env: vars)
-            XCTAssertEqual(Array(Leftovers.sortedUnique(pairs, key: \.0).map { "\($0.0)|\($0.1)" }.joined(separator: "\n").utf8), Array(bash[0].utf8), "\(vars)")
-            XCTAssertEqual(Array(Leftovers.sortedUnique(lines).joined(separator: "\n").utf8), Array(bash[1].utf8), "\(vars)")
+        for sort in sorts {
+            Names.setLocale(try Env(["HOME": home, "LC_CTYPE": "en_US.UTF-8"].merging(sort.vars) { $1 }))
+            XCTAssertEqual(Array(Leftovers.sortedUnique(pairs, key: \.0).map { "\($0.0)|\($0.1)" }.joined(separator: "\n").utf8), Array(sort.byKey.utf8), "\(sort.vars)")
+            XCTAssertEqual(Array(Leftovers.sortedUnique(lines).joined(separator: "\n").utf8), Array(sort.whole.utf8), "\(sort.vars)")
         }
     }
 

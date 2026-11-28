@@ -52,7 +52,11 @@ public final class Output {
         var rest = Data(text.utf8)
         while !rest.isEmpty {
             let written = rest.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
-            if written < 0 { if errno == EINTR { continue }; return }
+            if written < 0 {
+                if errno == EINTR { continue }
+                if errno == EPIPE { Interrupt.pipeClosed() }
+                return
+            }
             rest.removeFirst(written)
         }
     }

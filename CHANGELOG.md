@@ -1,6 +1,45 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 — unreleased
+
+**macup is now one universal binary, written in Swift, instead of a bash script.** Commands, options, the config file, reports, history, `--json` and exit statuses stay the same, and so does what each run prints, in all three languages, apart from the changes below. It needs macOS 13 Ventura or later, on Apple silicon or Intel.
+
+Upgrading:
+
+- **From 2.9: `macup self-update`.** 2.9 installs a small bootstrap and already says "macup updated: 2.9.x → 3.0.0". The bootstrap's first run downloads the 3.0 binary, checks its SHA-256 and that it runs, replaces itself with it and runs the command you typed. If the release binary is not uploaded yet (the first minutes after a release) or the download fails, it says so, runs nothing and changes nothing; run macup again a few minutes later.
+- **A schedule moves onto the binary.** 2.9's LaunchAgent ran `/bin/bash <path>`, which cannot start a binary. The bootstrap rewrites it and loads it again, and so does the first run of 3.0 in Terminal, which covers Homebrew. A scheduled check that runs before that still works: it runs from a temporary copy and its log says to run macup once in Terminal. If launchd refuses the reload, macup says the schedule applies after the next login.
+- **macOS 12 and older keep 2.9.2.** The bootstrap installs the last 2.9 release there instead of a binary that cannot start, and the Homebrew formula requires macOS 13. 2.9.2 on such a Mac keeps saying that 3.0.0 is available; `self-update` there reports 3.0.0, and the next run puts 2.9.2 back and says why.
+- **Homebrew:** `brew upgrade macup`. The formula installs the same release binary.
+- **The installer** (`curl … | bash`) installs the release binary the same way. A copy you already have stays until the new one has run once. Run from a checkout, it installs the binary you built there.
+
+Changed:
+
+- **No more `python3`.** npm globals, agent skills, Claude Code plugins, simulators and simulator runtimes, apps that fall behind, finding app caches by folder layout, editor workspaces, expired provisioning profiles, the commands check, signing certificates and crash reports used to be skipped on a Mac without it. They now run everywhere.
+- **`self-update` installs the release binary.** It is checked against the release's published SHA-256 and must report the version it was downloaded for. It is downloaded only when a newer version is out, and it takes the old file's place by a rename, so a macup that is running at that moment is not disturbed.
+  - A folder macup cannot write is reported before the release is downloaded.
+  - Through a symlink, the file it points at is replaced and the link stays.
+  - A fork (`MACUP_REPO`) that publishes no release binary can no longer self-update: macup says the download failed.
+- **`macup schedule` writes the binary itself** as the LaunchAgent's program, without `/bin/bash`.
+
+Fixes:
+
+- **Edit backups of Claude Code sessions that still exist are no longer offered for the Trash** when there are more than about 1,770 sessions; the check of which session a backup belongs to could answer wrong there. The Grok CLI check is fixed the same way.
+- **Installed apps whose id has Cyrillic or CJK parts are no longer taken for deleted ones.** Their data could be listed as leftovers and offered for the Trash.
+- **Numbers with leading zeros in the config are read as decimal.** `step_timeout_minutes = 09` stopped the config from loading (no level, no project folders, and `macup tasks` printed the help), and `010` meant 8 minutes. Days written as `007` now show as `7` in the cleaners' labels and the `--deep` tip.
+- **Time Machine's backup age is right.** It occasionally came out a day short, so an 8-day-old backup passed the 7-day check.
+- **`macup history`'s trend line is bold and starts with its label.** It used to begin with the last freed size in bytes.
+- **A step-timeout warning from agent skills or a Claude Code plugin update counts** in the summary, `--json` and history, and that section's header prints once.
+- **An empty memory size from `sysctl` reads as 0 GB** instead of ending the run.
+- **A broken line in history.csv reads as 0** instead of stopping the run.
+- **A task id that is not valid UTF-8** (in `--skip` and the like) is reported as unknown instead of being ignored.
+- **`softwareupdate` output with non-UTF-8 text is read past that line,** and very long output can no longer turn into an error.
+
+Small differences you might notice:
+
+- When no temporary file can be made, the run stops with exit status 1 instead of going on without a report body.
+- A run killed by a signal it does not handle prints `Killed: 9` instead of bash's job line.
+- Stray errors from `uptime`, `pmset` and `date`, and bash's "integer expression expected" lines, are no longer printed.
+- Tool output that is not UTF-8 shows the replacement character (�) where bash printed the raw bytes. Counts and the report's command output are the same.
 
 For developers:
 

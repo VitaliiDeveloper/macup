@@ -7,7 +7,7 @@ extension Updates {
         out.step("Looking for macOS updates (up to a minute)")
         let limit = 240
         let listed = timedOutput(run, limit, ["softwareupdate", "-l"], errors: true)
-        let blank = Config(path: "/dev/null", utf8: run.env.utf8Locale).isSpace
+        let blank = { Config.isSpace($0, utf8: run.env.utf8Locale) }
         func after(_ prefix: String) -> [String] {
             Bash.lines(listed.text).compactMap { line in
                 let rest = Substring(line).unicodeScalars.drop(while: blank)

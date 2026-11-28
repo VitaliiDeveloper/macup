@@ -1,6 +1,6 @@
 # Porting macup to Swift
 
-Status: in progress. Phases 0 to 2 are merged; phase 3 and the phase 5 parts that do not wait for phase 4 are under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
+Status: in progress. Phases 0 to 3 are merged, and so are the phase 5 parts that do not wait for phase 4; phase 4 is under way. Integration branch: `swift/main`. Everything for the port lands there. `swift/main` reaches `main` in one final pull request and ships as 3.0.0.
 
 ## Why
 
@@ -99,6 +99,10 @@ The differential harness lives in `tests/diff.sh` (phase 0). For every case it r
   - tool output that is not UTF-8 shows U+FFFD where bash prints the raw bytes; counts and the report's command output are the same;
   - `| head -1` on `flutter`, `codex` and `xcodebuild`: Swift reads the tool to its end instead of stopping it with SIGPIPE, same text;
   - the Python version comes from `python3 -c "import platform; …"`, so it differs only on a python3 older than 3.6.
+- Found in phase 4, last bash routes (PR #26):
+  - config numbers with leading zeros are decimal: `step_timeout_minutes = 09` is 9 minutes where bash's arithmetic failed and abandoned `load_conf` (no level, empty `project_dirs`, `macup tasks` printed the help and exited 2), and `010` is 10 minutes where bash read octal 8;
+  - `simulator_days`, `device_support_days` and `stale_project_days` written with leading zeros show without them in the cleaners' labels;
+  - a task id that is not UTF-8 (`--skip $'nope\xe9'`) is reported as unknown; bash's `tr` failed on the byte and the run went on.
 
 ## Layout
 
@@ -312,6 +316,7 @@ Merging it and tagging 3.0.0 happen only when the owner says so.
 Not worth a release from `main`: the Swift port copies them so `diff.sh` stays exact, and phase 4 fixes them in Swift, each with a test and a line in the 3.0.0 CHANGELOG.
 
 - [ ] `show_history`: awk's `h()` assigns the global `b`, which is also the bold colour (`-v b="$B"`), so "Free space trend:" starts with the last freed value in bytes and is never bold (found by the commands unit, PR #13).
+- [x] `load_conf`: `step_timeout_minutes` with a leading zero went through bash arithmetic (octal: 010 was 8 minutes, 08 and 09 an error that abandoned `load_conf`, so the run had no level and `macup tasks` printed the help); phase 4 reads it as decimal (#26).
 - [ ] Time Machine's backup age (`src/checks.sh` and `Security.timeMachine`): `date -j -f %Y-%m-%d` gives the backup's date the current time of day, so when a second ticks between `date +%s` and that call the age comes out a day short, and an 8-day-old backup passes the 7-day check. Phase 4 parses the date in Swift. Until then `diff.sh`'s fake `date` reads that date as its midnight, since the two builds hit the race on different runs (found on #16's CI, run 45897078448). That pin never matched until #23: it tested 4 arguments, and the call has 5 (#20's pull_request run).
 - [ ] `app_names` / `apple_names` (leftovers): bash merges installed names with `sort -u`, which drops names that strcoll ties at the same length (Cyrillic or CJK id parts), so such an app's leftovers can be reported as orphaned. Found by the leftovers unit (#15).
 
@@ -326,6 +331,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 - [x] `diff.sh` flake (#19): the Time Machine day count (`chk-security-off`) differs by one when a second passes between a build's `now` and its `date -j -f %Y-%m-%d` call; the fixture date is exactly N days back and BSD date keeps the time of day (#16 push run). Fix in the test fakes: pin that `date` form to midnight. Owner: the commands unit, in the sorted-glob PR. The pin only took effect with #23 (it tested 4 arguments; the call has 5).
 - [x] `diff.sh` flake: the `tmutil` fake wrote `destinationinfo` with `printf` in pieces, and bash's `grep -q` under pipefail closed the pipe between them in about 1% of runs ("no backup destination" in bash only). The fake writes once, as the real `tmutil` does (#18). Fakes that a `grep -q` reads should write in one piece.
 - [x] Foundation: make `Config.isSpace` static (`Config.isSpace(_:utf8:)`); `Updates.macOS` (#14) builds a `Config` on `/dev/null` only to reach it (#20).
+- [ ] `diff.sh` flake (#26's pull_request run 46118275857, `upd-mas-asks uk tty`): bash's `tick` spinner (`src/core.sh:261`) polls `tail "$RAW"` in a subshell while the main shell lives, so when a step ends the run, the EXIT cleanup can remove `$RAW` first and bash prints `tail: …: No such file or directory`. Oracle-side only. Fix in `src/core.sh` with `2>/dev/null` on that `tail`; owner: the phase 4 PR2 session, since `src/` stays as the oracle until phase 5.
 - [ ] Move `Updates.codePointOrder` (Python's `sorted()` order) into Foundation beside `Names`: the cleaners unit (#18) calls it, and units should not depend on each other. Owner: the phase 3 session, after #18.
 
 ## Progress
@@ -346,7 +352,8 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 3 | Foundation moves for the pick (`Terminal`, `Config.isSpace`) | `swift/foundation-followups` | #20 | merged (d5fb784) |
 | 3 | exec of every kind, `run_key`, the leftovers' moves, the dev container scan | `swift/exec` | #24 | merged (374f630) |
 | 3 | the pick, confirmations, `--pick` | `swift/pick` | #25 | merged (442f900) |
-| 4 | the last bash routes, then the bash exec and embedded script removed | | | in progress |
+| 4 | the last bash routes: rejected command lines, unknown task ids, leading zeros | `swift/no-bash` | #26 | merged (7e098f9) |
+| 4 | the bash exec and embedded script removed | | | in progress |
 | 4 | `self-update` and `schedule` for the binary, the first-run LaunchAgent check | | | in progress |
 | 4 | the three reproduced bash bugs fixed | | | in progress |
 | 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | merged (84f4222) |

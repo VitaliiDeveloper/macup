@@ -72,9 +72,9 @@ jobs:
       - name: Options without a command change nothing
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          for a in "" "--no-color" "--lang uk" "--skip check.docker"; do
-            if macup $a </dev/null >out.txt 2>&1; then echo "macup $a should exit non-zero"; exit 1; fi
-            grep -q 'macup check' out.txt || { echo "macup $a should print help"; cat out.txt; exit 1; }
+          for options in "" "--no-color" "--lang uk" "--skip check.docker"; do
+            if macup $options </dev/null >out.txt 2>&1; then echo "macup $options should exit non-zero"; exit 1; fi
+            grep -q 'macup check' out.txt || { echo "macup $options should print help"; cat out.txt; exit 1; }
           done
           if macup --lang xx check </dev/null; then exit 1; fi
           macup --deep --no-color --only check.system </dev/null 2>/dev/null | head -1 | grep -q 'check+deep'
@@ -87,5 +87,5 @@ jobs:
       - name: Languages
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          for l in uk ru en; do macup lang $l; macup tasks --no-color | head -4; macup help | head -3; done
+          for lang in uk ru en; do macup lang $lang; macup tasks --no-color | head -4; macup help | head -3; done
           MACUP_LANG=uk macup check --no-color --only check.system,check.disk,check.memory

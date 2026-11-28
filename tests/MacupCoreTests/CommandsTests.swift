@@ -58,10 +58,14 @@ final class CommandsTests: XCTestCase {
     }
 
     func testCheckoutAndDirname() throws {
-        try FileManager.default.createDirectory(atPath: "\(folder)/src", withIntermediateDirectories: true)
-        XCTAssertFalse(SelfPath.isCheckout(folder))
         try "".write(toFile: "\(folder)/build.sh", atomically: true, encoding: .utf8)
+        XCTAssertFalse(SelfPath.isCheckout(folder))
+        try "".write(toFile: "\(folder)/Package.swift", atomically: true, encoding: .utf8)
         XCTAssertTrue(SelfPath.isCheckout(folder))
+        XCTAssertTrue(SelfPath.isBuildOutput("\(folder)/.build/debug/macup"))
+        XCTAssertTrue(SelfPath.isBuildOutput("\(folder)/.build/arm64-apple-macosx/release/macup"))
+        XCTAssertFalse(SelfPath.isBuildOutput("\(folder)/macup"), "the checkout's macup is the bootstrap")
+        XCTAssertFalse(SelfPath.isBuildOutput("/Users/me/.build/debug/macup"))
         XCTAssertEqual(["/a/b", "/a", "a", "/"].map(SelfPath.dirname), ["/a", "/", ".", "/"])
     }
 

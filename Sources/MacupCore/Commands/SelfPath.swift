@@ -4,14 +4,13 @@ import Foundation
 public enum SelfPath {
     /// The path this binary was started by, as the bash build's $0 was: the path the shell found in PATH, a symlink kept as
     /// a symlink (Homebrew's bin/macup, which a schedule must keep pointing at). Not resolved to the real file.
-    /// A binary in a checkout's .build is the build output, like ./macup there: it is named as ./macup, so uninstall leaves it.
-    public static func current() -> String {
-        let path = launchPath()
-        if let range = path.range(of: "/.build/", options: .backwards) {
-            let checkout = String(path[..<range.lowerBound])
-            if isCheckout(checkout) { return checkout + "/macup" }
-        }
-        return path
+    public static func current() -> String { launchPath() }
+
+    /// A binary in a checkout's .build is the build output, which uninstall leaves alone. The checkout's own ./macup is
+    /// the 2.9 bootstrap, never this binary.
+    static func isBuildOutput(_ path: String) -> Bool {
+        guard let range = path.range(of: "/.build/", options: .backwards) else { return false }
+        return isCheckout(String(path[..<range.lowerBound]))
     }
 
     /// The file this binary runs from, symlinks resolved: what self-update replaces, and what a schedule that names this
@@ -32,9 +31,7 @@ public enum SelfPath {
     }
 
     static func isCheckout(_ dir: String) -> Bool {
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: dir + "/build.sh", isDirectory: &isDir) && !isDir.boolValue
-            && FileManager.default.fileExists(atPath: dir + "/src", isDirectory: &isDir) && isDir.boolValue
+        Files.isRegular(dir + "/build.sh") && Files.isRegular(dir + "/Package.swift")
     }
 
     /// `brew_prefix`: the Homebrew prefix that installed the macup at this path; "" for any other install.

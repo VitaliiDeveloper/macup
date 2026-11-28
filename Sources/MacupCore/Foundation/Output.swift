@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// The colours of core.sh: on a terminal without NO_COLOR, off with --no-color (and --json for a run).
+/// The colours of 2.9's core.sh: on a terminal without NO_COLOR, off with --no-color (and --json for a run).
 public struct Colors: Equatable {
     public var bold = "", green = "", yellow = "", red = "", cyan = "", dim = "", reset = "", cl = ""
 
@@ -9,7 +9,7 @@ public struct Colors: Equatable {
     public static let on = Colors(bold: "\u{1B}[1m", green: "\u{1B}[32m", yellow: "\u{1B}[33m", red: "\u{1B}[31m", cyan: "\u{1B}[36m",
                                   dim: "\u{1B}[2m", reset: "\u{1B}[0m", cl: "\r\u{1B}[K")
 
-    /// What core.sh starts with: colours when stdout is a terminal and NO_COLOR is not set.
+    /// What 2.9's core.sh starts with: colours when stdout is a terminal and NO_COLOR is not set.
     public static func initial(env: Env, fd: Int32 = 1) -> Colors {
         isatty(fd) == 1 && !env.noColor ? .on : .off
     }
@@ -23,14 +23,14 @@ public struct Item: Equatable {
     public var details: [String] = []
 }
 
-/// The lines of a run: core.sh's `ok`, `info`, `warn`, `fail`, `err`, `sub`, `mdonly`, `step`, `section`, `md`, `detail`.
+/// The lines of a run: 2.9's core.sh's `ok`, `info`, `warn`, `fail`, `err`, `sub`, `mdonly`, `step`, `section`, `md`, `detail`.
 /// Each goes to the terminal, to the report (markdown) and, with --json, to the items.
 public final class Output {
     public var colors: Colors
     public let i18n: I18n
     /// Where the terminal lines go (a run with --quiet points it at /dev/null).
     public var fd: Int32
-    /// The report being written (core.sh's $BODY); nil before a run has one, and md then writes nothing.
+    /// The report being written (2.9's core.sh's $BODY); nil before a run has one, and md then writes nothing.
     public var body: FileHandle?
     public var json = false
 
@@ -52,7 +52,11 @@ public final class Output {
         var rest = Data(text.utf8)
         while !rest.isEmpty {
             let written = rest.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
-            if written < 0 { if errno == EINTR { continue }; return }
+            if written < 0 {
+                if errno == EINTR { continue }
+                if errno == EPIPE { Interrupt.pipeClosed() }
+                return
+            }
             rest.removeFirst(written)
         }
     }
@@ -118,7 +122,7 @@ public final class Output {
     }
 
     /// With --json, a line under the last item.
-    /// The bash build keeps details in a file of "item<TAB>text" lines: only the first line of a detail survives, an empty one none.
+    /// 2.9 kept details in a file of "item<TAB>text" lines: only the first line of a detail survives, an empty one none.
     public func detail(_ text: String) {
         guard json, !items.isEmpty, body != nil, let first = Bash.lines(text).first, !first.isEmpty else { return }
         items[items.count - 1].details.append(first)

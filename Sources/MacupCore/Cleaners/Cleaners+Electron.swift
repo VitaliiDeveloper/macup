@@ -63,7 +63,7 @@ extension Cleaners {
         let paths: [String]
     }
 
-    /// macup_helpers.py electron_cache_groups, as bash reads its lines back: by kind and name, folders sorted by code point.
+    /// 2.9's inline Python, as bash reads its lines back: by kind and name, folders sorted by code point.
     static func layoutGroups(support: String, caches: String, covered: String) -> [LayoutGroup] {
         let names = Set(CacheTables.electronCaches), coveredPaths = Bash.lines(covered).filter { !$0.isEmpty }
         let apps = CacheTables.electronApps, browserFolders = CacheTables.browsers.flatMap { browser in browser.folders.map { ($0, browser.name) } }
@@ -112,7 +112,7 @@ extension Cleaners {
         for name in entries where Run.isDirectory(folder + "/" + name) {
             let path = folder + "/" + name
             if Run.isSymlink(path) || name.hasSuffix(".app") || name.hasSuffix(".ShipIt") || name == "org.sparkle-project.Sparkle" { continue }
-            if depth == 0, name.hasPrefix("com.apple.") || name == "macup" { continue }
+            if depth == 0, Bash.starts(name, "com.apple.") || name == "macup" { continue }
             if names.contains(name) || (name == "cache2" && isCaches) {
                 if depth > 0, isCaches || (name != "cache2" && chromium(folder)) { record(root, path) }
                 continue

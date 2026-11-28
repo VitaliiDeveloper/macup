@@ -161,6 +161,54 @@ final class OutputShellTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(t0), 12)
     }
 
+    /// A child that ignores SIGTERM and holds the capture's pipe: it gets SIGKILL too, though the tool itself has ended by then
+    /// (a fake gh like this kept a scheduled check waiting for good).
+    func testTimedCaptureKillsAChildThatIgnoresTerm() throws {
+        let sh = Shell(env: try env()), pidFile = dir + "/child"
+        let t0 = Date()
+        let answer = sh.timedCapture(1, ["/bin/sh", "-c", "( trap '' TERM; exec sleep 42 ) & echo $! >\(pidFile); echo before; sleep 30"], stdin: .null)
+        XCTAssertEqual(answer.status, 124)
+        XCTAssertEqual(String(decoding: answer.data, as: UTF8.self), "before\n")
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 10)
+        XCTAssertTrue(gone(try childPID(pidFile)), "the child is killed before tl returns")
+        // the step path (`run`) too: macup could exit before a later SIGKILL
+        XCTAssertEqual(sh.tl(1, ["/bin/sh", "-c", "( trap '' TERM; exec sleep 42 ) & echo $! >\(pidFile); sleep 30"], stdin: .null, stdout: .null, stderr: .null), 124)
+        XCTAssertTrue(gone(try childPID(pidFile)))
+    }
+
+    /// A setuid child (sudo, here top) is stopped too: it takes macup's signals, though macup may not read all about it.
+    func testTimedCaptureStopsASetuidChild() throws {
+        var info = stat()
+        guard stat("/usr/bin/top", &info) == 0, info.st_mode & S_ISUID != 0 else { throw XCTSkip("/usr/bin/top is not setuid here") }
+        let sh = Shell(env: try env()), pidFile = dir + "/child"
+        XCTAssertEqual(sh.timedCapture(1, ["/bin/sh", "-c", "/usr/bin/top -l 60 -s 1 >/dev/null & echo $! >\(pidFile); sleep 30"], stdin: .null).status, 124)
+        XCTAssertTrue(gone(try childPID(pidFile)))
+    }
+
+    /// A timed tool that ends and leaves something running on its pipe: what it wrote comes back 5 seconds later at most.
+    func testTimedCaptureDoesNotWaitForWhatTheToolLeftRunning() throws {
+        let sh = Shell(env: try env()), pidFile = dir + "/child"
+        let t0 = Date()
+        let answer = sh.timedCapture(30, ["/bin/sh", "-c", "sleep 9 & echo $! >\(pidFile); echo done"], stdin: .null)
+        defer { if let pid = try? childPID(pidFile) { kill(pid, SIGKILL) } }
+        XCTAssertEqual(answer.status, 0)
+        XCTAssertEqual(String(decoding: answer.data, as: UTF8.self), "done\n")
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 8)
+        XCTAssertEqual(sh.timedCapture(0, ["/bin/sh", "-c", "echo untimed; echo err >&2"], stdin: .null).data, Data("untimed\n".utf8))
+        XCTAssertEqual(sh.timedCapture(5, ["/bin/sh", "-c", "echo out; echo err >&2"], stdin: .null, errorsToo: true).data, Data("out\nerr\n".utf8))
+        XCTAssertEqual(sh.timedCapture(5, ["cat"], input: "fed").data, Data("fed".utf8))
+    }
+
+    private func childPID(_ file: String) throws -> pid_t {
+        try XCTUnwrap(pid_t(try String(contentsOfFile: file, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+    }
+
+    /// launchd reaps an orphan a moment after it ends.
+    private func gone(_ pid: pid_t) -> Bool {
+        for _ in 0..<40 where Shell.startTime(pid) != nil { usleep(50_000) }
+        return Shell.startTime(pid) == nil
+    }
+
     func testRunWritesTheCommandAndItsOutput() throws {
         let sh = Shell(env: try env())
         let log = RunLog(raw: dir + "/raw", stepSeconds: 60)

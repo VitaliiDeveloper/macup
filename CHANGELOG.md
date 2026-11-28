@@ -33,10 +33,15 @@ Fixes:
 - **A broken line in history.csv reads as 0** instead of stopping the run.
 - **A task id that is not valid UTF-8** (in `--skip` and the like) is reported as unknown instead of being ignored.
 - **`softwareupdate` output with non-UTF-8 text is read past that line,** and very long output can no longer turn into an error.
+- **A system leftover no longer takes its vendor folder along when macup cannot read that folder.** An unreadable folder counted as empty, so after the leftover moved, the whole vendor folder, other products' data included, could go to the Trash. A container whose contents could not be listed no longer counts as moved.
+- **A tool that leaves a process behind that ignores the stop signal no longer keeps a run waiting.** Once a tool's time is up, everything it started is killed 5 seconds later, and its output is taken at most 5 seconds after it ended; a scheduled check could wait forever and keep the lock.
+- **A `HOME` of `//` or `/.` is refused like `/`.** Every cleaner would have looked at the system's Library.
+- **`macup uninstall` removes what a killed self-update or install left next to macup** (`.macup-update.*`, `.macup-install.*`) and no longer keeps the PATH line because of it.
 
 Small differences you might notice:
 
 - When no temporary file can be made, the run stops with exit status 1 instead of going on without a report body.
+- `macup lang` says "Couldn't write …" and exits 1 when it cannot write the config, instead of announcing the new language.
 - A run killed by a signal it does not handle prints `Killed: 9` instead of bash's job line.
 - Stray errors from `uptime`, `pmset` and `date`, and bash's "integer expression expected" lines, are no longer printed.
 - Tool output that is not UTF-8 shows the replacement character (�) where bash printed the raw bytes. Counts and the report's command output are the same.

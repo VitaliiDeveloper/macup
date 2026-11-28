@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// cleaners.sh up to `leftovers_cands`: every clean.* task registers what it found, in the order bash registers it.
+/// 2.9's cleaners.sh up to `leftovers_cands`: every clean.* task registers what it found, in the order bash registers it.
 enum Cleaners {
     static func register(_ run: Run) {
         let home = run.env.home, dev = run.env.dev, paths = run.env.paths
@@ -124,7 +124,7 @@ enum Cleaners {
             guard let size = Int64(fields[0]), size >= 102_400 else { break }
             let path = fields[1], name = base(path)
             guard realFolder(path) else { continue }
-            if name.hasPrefix("com.apple.") || name.hasPrefix("Adobe Camera Raw") || name.hasSuffix(".ShipIt") { continue }
+            if Bash.starts(name, "com.apple.") || Bash.starts(name, "Adobe Camera Raw") || Bash.ends(name, ".ShipIt") { continue }
             if covered.contains(where: { same($0, path) || $0.utf8.firstRange(of: (path + "/").utf8) != nil }) { continue }
             // not a cache whatever the folder is called: Poetry keeps its virtualenvs in ~/Library/Caches/pypoetry
             if !find(run, [path, "-maxdepth", "3", "-name", "pyvenv.cfg", "-print", "-quit"]).isEmpty { continue }

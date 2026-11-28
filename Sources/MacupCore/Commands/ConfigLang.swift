@@ -1,6 +1,6 @@
 import Foundation
 
-/// `macup config` and `macup lang` (commands.sh `open_conf`, `choose_lang`).
+/// `macup config` and `macup lang` (2.9's commands.sh `open_conf`, `choose_lang`).
 enum ConfigLang {
     static func open(_ context: OneOff.Context) -> Int32 {
         let env = context.env
@@ -32,7 +32,12 @@ enum ConfigLang {
         }
         guard let lang = Lang.option(code) else { out.write("en | uk | ru\n"); return 1 }
         // a config written now says the language the command started in, until the line is replaced
-        try? Config.set("language", lang.rawValue, path: context.env.conf, utf8: context.env.utf8Locale) { Config.defaultText(lang: context.lang) }
+        do {
+            try Config.set("language", lang.rawValue, path: context.env.conf, utf8: context.env.utf8Locale) { Config.defaultText(lang: context.lang) }
+        } catch {
+            out.write(context.i18n.format("Couldn't write %s", context.env.paths.tildify(context.env.conf)) + "\n")
+            return 1
+        }
         out.write(I18n(lang: lang, translationsJSON: context.translations).format("Language: %s", lang.name) + "\n")
         return 0
     }

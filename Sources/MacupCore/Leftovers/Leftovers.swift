@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// What is registered here is cleaned only when a person picks it; moving it to the Trash comes with the pick (phase 3).
+/// What is registered here is cleaned only when a person picks it, and then goes to the Trash (Moves.swift).
 public enum Leftovers {
     static func registerCandidates(_ run: Run) {
         guard run.taskAllowed("clean.orphan_agents") || run.taskAllowed("clean.orphan_data") else { return }
@@ -87,10 +87,11 @@ public enum Leftovers {
     static func ownFolder(_ run: Run, _ program: String) -> String {
         let home = run.env.home
         for base in ["\(home)/Library/Application Support", "\(run.env.sysLib)/Application Support", "\(home)/Library"] where Bash.starts(program, base + "/") {
-            let rest = String(decoding: program.utf8.dropFirst(base.utf8.count + 1), as: UTF8.self)
-            guard rest.filter({ $0 == "/" }).count >= 2 else { return "" }   // right in the vendor folder: that folder may hold other data
-            let parts = rest.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
-            let vendorFolder = "\(base)/\(parts[0])", folder = "\(vendorFolder)/\(parts[1])"
+            if Bash.holds(program, "/./") || Bash.holds(program, "/../") { return "" }   // the folder named need not hold the program
+            let parts = program.utf8.dropFirst(base.utf8.count + 1).split(separator: UInt8(ascii: "/"), maxSplits: 2, omittingEmptySubsequences: false)
+            // right in the vendor folder: that folder may hold other data; "", "." and ".." would name another folder than the vendor's
+            guard parts.count == 3, !parts.prefix(2).contains(where: { ["", ".", ".."].map { Array($0.utf8) }.contains(Array($0)) }) else { return "" }
+            let vendorFolder = "\(base)/\(String(decoding: parts[0], as: UTF8.self))", folder = "\(vendorFolder)/\(String(decoding: parts[1], as: UTF8.self))"
             return Run.isDirectory(folder) && !Run.isSymlink(folder) && !Run.isSymlink(vendorFolder) ? folder : ""
         }
         return ""
@@ -124,7 +125,7 @@ public enum Leftovers {
         out.beginSection("Startup items")
         let state = state(run)
         scan(run, state)
-        let services = startupFiles(run).filter(isFile).map(plistName).filter { !$0.hasPrefix("com.apple.") }
+        let services = startupFiles(run).filter(isFile).map(plistName).filter { !Bash.starts($0, "com.apple.") }
         out.info("Third-party background services: %s (full list in the report)", String(services.filter { !$0.isEmpty }.count))
         for service in services where !service.isEmpty { out.mdonly(service) }
         var found = ""

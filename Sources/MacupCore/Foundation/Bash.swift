@@ -1,6 +1,6 @@
 import Foundation
 
-/// Small bash behaviours the bash build relies on without saying so.
+/// Small bash behaviours 2.9 relied on without saying so, which macup keeps.
 /// Text is split on the newline scalar, never on Swift characters: "\r\n" is one Character.
 enum Bash {
     /// What the builtin `echo "$1"` writes: a lone `-n`, `-e`, `-E` (or a mix of those letters) is an option, not text.

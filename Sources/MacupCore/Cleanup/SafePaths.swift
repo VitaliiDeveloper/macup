@@ -16,7 +16,7 @@ public struct SafePaths {
     }
 
     /// Updaters keep downloaded updates in Sparkle and ShipIt folders until they are installed.
-    static let never = ["*/../*", "*/..", "*/.codex/sessions*", "*/.codex/archived_sessions*", "*/deno/location_data", "*/deno/location_data/*",
+    static let never = ["*/../*", "*/..", "*/./*", "*/.", "*/.codex/sessions*", "*/.codex/archived_sessions*", "*/deno/location_data", "*/deno/location_data/*",
                         "*.sqlite", "*/User", "*/User/*", "*/Backups", "*/Backups/*", "*/gradle.properties", "*/settings.xml", "*/.android/avd*",
                         "*/.android/*key*", "*/.ssh*", "*/.gnupg*", "*/Keychains*", "*/.aws", "*/.aws/*", "*/.kube", "*/.kube/*", "*/.netrc",
                         "*/.config", "*/.config/*", "*/.claude", "*/.claude/*", "*/org.sparkle-project.Sparkle", "*/org.sparkle-project.Sparkle/*",

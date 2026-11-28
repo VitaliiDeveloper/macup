@@ -7,7 +7,7 @@ extension Leftovers {
     /// `to_trash`: false when it was refused or did not move (the report says why).
     static func toTrash(_ run: Run, _ path: String, sudo: Bool = false) -> Bool {
         let home = run.env.home
-        if path.isEmpty || Bash.holds(path, "/../") || path.utf8.reversed().starts(with: "/..".utf8.reversed()) {
+        if path.isEmpty || Bash.holds(path, "/../") || Bash.ends(path, "/..") || Bash.holds(path, "/./") || Bash.ends(path, "/.") {
             run.log.append("macup refused to move: \(path)\n")
             return false
         }
@@ -37,9 +37,10 @@ extension Leftovers {
         return isEmptyFolder(path)
     }
 
-    /// `[ -z "$(ls -A "$path" 2>/dev/null)" ]`: also true when it cannot be read.
+    /// A folder macup cannot read counts as not empty: 2.9 took it for empty, so a root-only vendor folder went to the Trash
+    /// with other products' data in it.
     static func isEmptyFolder(_ path: String) -> Bool {
-        (try? FileManager.default.contentsOfDirectory(atPath: path))?.isEmpty ?? true
+        (try? FileManager.default.contentsOfDirectory(atPath: path))?.isEmpty ?? false
     }
 
     /// `re_esc`: a path as a pgrep pattern that matches only itself.
@@ -96,7 +97,6 @@ extension Leftovers {
         return (0, size)
     }
 
-    /// `^[A-Za-z0-9._-]+$`
     private static func isLabel(_ line: String) -> Bool {
         !line.isEmpty && line.unicodeScalars.allSatisfy { ("A"..."Z").contains($0) || ("a"..."z").contains($0) || ("0"..."9").contains($0) || "._-".unicodeScalars.contains($0) }
     }

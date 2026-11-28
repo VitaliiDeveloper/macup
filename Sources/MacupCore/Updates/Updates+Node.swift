@@ -27,7 +27,7 @@ extension Updates {
                 let name = read(line, 2)[0]
                 guard !name.isEmpty else { continue }
                 out.step("Plugin %s", name)
-                _ = inHome(run, ["claude", "plugin", "update", "--scope", "user", name])
+                _ = run.shell.inHome(orElse: 1) { run.run(["claude", "plugin", "update", "--scope", "user", name]) }
             }
         }
         let pluginsNow = plugins(installed)
@@ -46,7 +46,7 @@ extension Updates {
         out.ok("Claude Code plugins: %s installed", String(Run.count(pluginsNow)))
     }
 
-    /// macup_helpers.py `plugins`: installed_plugins.json → "name version" of each user-scope plugin, sorted by name.
+    /// 2.9's inline Python: installed_plugins.json → "name version" of each user-scope plugin, sorted by name.
     /// As there, an entry Python could not read ends the list.
     static func plugins(_ path: String) -> String {
         guard isFile(path), let root = JSONValue.parse(file: path), case .object = root, case .object(let all) = root["plugins"] ?? root else { return "" }
@@ -96,7 +96,7 @@ extension Updates {
         }
     }
 
-    /// macup_helpers.py `npm-outdated`: `npm outdated -g --json` → "package current latest" lines, in the order npm gave.
+    /// 2.9's inline Python: `npm outdated -g --json` → "package current latest" lines, in the order npm gave.
     static func npmOutdated(_ json: String, root: String) -> String {
         guard case .object(let packages) = JSONValue.parse(Data(json.utf8)) ?? .object([]) else { return "" }
         var lines: [String] = []
@@ -127,7 +127,7 @@ extension Updates {
         let before = skillHashes(lock)
         out.step("Agent skills")
         // -g: the global skills in ~/.agents, wherever macup is started from
-        guard inHome(run, ["env", "CI=1", "npx", "-y", "skills", "update", "-g"]) == 0 else {
+        guard run.shell.inHome(orElse: 1, { run.run(["env", "CI=1", "npx", "-y", "skills", "update", "-g"]) }) == 0 else {
             out.err("Agent skills: update failed (see the report)")
             return
         }
@@ -144,7 +144,7 @@ extension Updates {
         out.ok("Agent skills: %s installed, %s updated", String(Run.count(now)), String(changed))
     }
 
-    /// macup_helpers.py `skills`: ~/.agents/.skill-lock.json → "name hash" lines, sorted by name.
+    /// 2.9's inline Python: ~/.agents/.skill-lock.json → "name hash" lines, sorted by name.
     static func skillHashes(_ path: String) -> String {
         guard let root = JSONValue.parse(file: path), case .object = root, case .object(let skills) = root["skills"] ?? .object([]) else { return "" }
         var lines: [String] = []
@@ -164,7 +164,7 @@ extension Updates {
         return false
     }
 
-    /// core.sh `link_fix`: the brew link that puts an interpreter back on PATH; nothing when no formula has it.
+    /// 2.9's core.sh `link_fix`: the brew link that puts an interpreter back on PATH; nothing when no formula has it.
     static func linkFix(_ run: Run, _ name: String) -> String {
         guard !run.shell.have(name) else { return "" }   // a dead venv interpreter named python3: brew's is linked, a link fixes nothing
         var versioned: [String] = []

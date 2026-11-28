@@ -1,7 +1,7 @@
 import Foundation
 
 /// macup's reports: one file per run in the log folder (macup_<date>.md; .log files are left by versions before 2.9.0).
-/// commands.sh `show_last`, `reports`, `report_mode`, `report_date`.
+/// 2.9's commands.sh `show_last`, `reports`, `report_mode`, `report_date`.
 enum Reports {
     /// `macup last`: the newest report without its command output, which can be thousands of lines of brew.
     static func last(_ context: OneOff.Context) -> Data {

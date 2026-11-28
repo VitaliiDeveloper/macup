@@ -26,7 +26,8 @@ final class CleanupTests: XCTestCase {
             "\(home)/.claude/file-history/../x", "\(support)/Code/User/workspaceStorage/.abc", "\(support)/Code/User/workspaceStorage/a/b",
             "\(support)//User/workspaceStorage/abc", "\(support)/Code/User/workspaceStorage/a_b", "\(support)/Code/User/settings.json",
             "\(support)/Code/Backups/file", "\(support)/Foo/data", "\(support)/Foo/CacheStorage", "\(home)/Code/proj/Pods", "\(home)/Code/proj/src",
-            "\(home)/Documents/node_modules", "\(home)/Code", "/tmp/node_modules", "\(home)",
+            "\(home)/Documents/node_modules", "\(home)/Code", "/tmp/node_modules", "\(home)", "\(home)/Library/Caches/./foo", "\(home)/Library/Caches/.",
+            "\(home)/Library/./Keychains", "\(home)/./.ssh", "\(home)/Code/proj/./node_modules",
         ]
         let safe = SafePaths(home: home, projectDirs: "~/Code/, ~/Nope, ~, \(home)/Code/proj")
         for path in allowed { XCTAssertTrue(safe.allows(path), path) }

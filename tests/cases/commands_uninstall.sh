@@ -74,6 +74,15 @@ else
   env HOME="$home" TMPDIR="$home/" MACUP_AT="$home/.local/bin/macup" macup_run uninstall --yes --no-color </dev/null >"$work/un2.out" 2>&1
   [ ! -e "$home/.local/bin/macup" ] && [ -e "$home/.local/bin/claude" ] && grep -q '^# macup' "$home/.zshrc" && grep -q 'Kept: the PATH line in ~/.zshrc, because ~/.local/bin also has claude' "$work/un2.out" \
     && pass "uninstall keeps the PATH line when other programs live in that folder" || { fail "uninstall: PATH line kept"; cat "$work/un2.out"; }
+  # what a killed self-update or install left next to the binary is macup's own: it goes, and keeps no PATH line
+  home="$work/un4"; mkdir -p "$home/.local/bin/.macup-update.Ab12Cd" "$home/.local/bin/.macup-update.toolong7"; cp "$build_path" "$home/.local/bin/macup"
+  : >"$home/.local/bin/.macup-update.Ab12Cd/macup"; : >"$home/.local/bin/.macup-install.Xy34Zw"; : >"$home/.local/bin/.macup-install.Xy34Zw.tag"
+  printf '\n# macup\nexport PATH="$HOME/.local/bin:$PATH"\n' >"$home/.zshrc"
+  env HOME="$home" TMPDIR="$home/" MACUP_AT="$home/.local/bin/macup" macup_run uninstall --yes --no-color </dev/null >"$work/un4.out" 2>&1
+  [ "$(ls -A "$home/.local/bin")" = .macup-update.toolong7 ] && grep -q 'temporary files of interrupted runs: 3' "$work/un4.out" \
+    && grep -q 'also has .macup-update.toolong7' "$work/un4.out" && pass "uninstall removes what a killed self-update or install left, and keeps no PATH line for it" \
+    || { fail "uninstall: leftovers of a killed update"; cat "$work/un4.out"; ls -A "$home/.local/bin"; }
+  home="$work/un2"
   cp "$build_path" "$home/brew/Cellar/macup/9.9.9/bin/macup"; ln -s ../Cellar/macup/9.9.9/bin/macup "$home/brew/bin/macup"
   printf '#!/bin/bash\necho "brew $*" >>"%s/brew.log"\n' "$home" >"$home/brew/bin/brew"; chmod +x "$home/brew/bin/brew"
   env HOME="$home" MACUP_AT="$home/brew/bin/macup" macup_run self-update --no-color </dev/null >"$work/un3.out" 2>&1

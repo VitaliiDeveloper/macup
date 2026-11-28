@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// updates.sh: every update.* task, in the order bash runs them, then check.macos_updates.
+/// 2.9's updates.sh: every update.* task, in the order bash runs them, then check.macos_updates.
 enum Updates {
     static func run(_ run: Run) {
         guard run.wantsUpdates else { return }
@@ -85,48 +85,13 @@ enum Updates {
     /// `$(tl seconds tool… 2>/dev/null)`, or `2>&1` with `errors`: what the tool printed before it ended or was stopped,
     /// and its status (124 when stopped).
     static func timedOutput(_ run: Run, _ seconds: Int, _ argv: [String], errors: Bool = false) -> (status: Int32, text: String) {
-        var fds: [Int32] = [0, 0]
-        guard pipe(&fds) == 0 else { return (127, "") }
-        var data = Data()
-        let drained = DispatchSemaphore(value: 0)
-        // read while the tool runs: a full pipe would stop it before it ends
-        Thread {
-            data = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true).readDataToEndOfFile()
-            drained.signal()
-        }.start()
-        // .fd rather than .stdout: a missing tool's "command not found" goes into the capture, as with 2>&1
-        let status = run.shell.tl(seconds, argv, stdout: .fd(fds[1]), stderr: errors ? .fd(fds[1]) : .null)
-        close(fds[1])
-        drained.wait()
-        return (status, Bash.substitution(String(decoding: data.filter { $0 != 0 }, as: UTF8.self)))   // bash 3.2's $() drops NUL bytes
+        let answer = run.shell.timedCapture(seconds, argv, errorsToo: errors)
+        return (answer.status, Bash.substitution(String(decoding: answer.data.filter { $0 != 0 }, as: UTF8.self)))   // bash 3.2's $() drops NUL bytes
     }
 
     /// `$(tool 2>/dev/null | awk '{print $N}')`.
     static func field(_ run: Run, _ argv: [String], _ number: Int) -> String {
         Bash.substitution(Bash.lines(run.shell.capture(argv, stdin: .inherit).output).map { Awk.field($0, number) }.joined(separator: "\n"))
-    }
-
-    /// `(cd "$HOME" && run …)`: the step runs from the home folder (a project's settings in the current folder would apply),
-    /// with PWD and OLDPWD as cd leaves them.
-    static func inHome(_ run: Run, _ argv: [String]) -> Int32 {
-        let shell = run.shell, saved = (pwd: shell.vars["PWD"], oldpwd: shell.vars["OLDPWD"])
-        let here = open(".", O_RDONLY), herePath = FileManager.default.currentDirectoryPath
-        defer {
-            if here >= 0 { fchdir(here); close(here) } else { chdir(herePath) }
-            shell.vars["PWD"] = saved.pwd
-            shell.vars["OLDPWD"] = saved.oldpwd
-        }
-        // bash keeps the PWD it was given only when it names the folder it started in
-        var given = stat(), current = stat()
-        let pwdValid = saved.pwd.map { $0.hasPrefix("/") && stat($0, &given) == 0 && stat(".", &current) == 0 && given.st_dev == current.st_dev && given.st_ino == current.st_ino } ?? false
-        shell.vars["OLDPWD"] = pwdValid ? saved.pwd : herePath
-        guard chdir(run.env.home) == 0 else { return 1 }
-        var parts: [Substring] = []   // cd's logical path: no "//", "." or ".."
-        for part in run.env.home.split(separator: "/") where part != "." {
-            if part == ".." { _ = parts.popLast() } else { parts.append(part) }
-        }
-        shell.vars["PWD"] = "/" + parts.joined(separator: "/")
-        return run.run(argv)
     }
 
     /// `read -r first second … rest` with the default IFS: words, then the rest of the line without its outer blanks.

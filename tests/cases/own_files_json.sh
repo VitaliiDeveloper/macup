@@ -78,6 +78,14 @@ brew_started; kill -TERM "$pid" 2>/dev/null; wait "$pid"; rc=$?
 report=$(ls "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
 [ $rc = 130 ] && grep -q 'incomplete' "$report" && [ "$(grep -c . "$home/brew.log")" = 1 ] && pass "SIGTERM: the run stops once the running step ends" || { fail "SIGTERM after a step (rc=$rc)"; cat "$work/intb.out" "$home/brew.log"; }
 
+# --- an output nobody reads any more (macup check | head -1): 141, and no lock or temporary file left, as 2.9's EXIT trap had it.
+# perl opens the pipe with its reader already closed, so the first write fails whatever the timing; SIGPIPE at its default.
+home="$work/pipe"; TT="$work/pipetmp"; mkdir -p "$home/.config/macup" "$TT"; printf 'language = en\n' >"$home/.config/macup/config"
+env HOME="$home" TMPDIR="$TT" perl -e '$SIG{PIPE} = "DEFAULT"; pipe(my $in, my $out) or die; close $in; open(STDOUT, ">&", $out) or die; exec @ARGV' \
+  "$(command -v macup_run)" check --only check.system --no-color </dev/null 2>"$work/pipe.err"; rc=$?
+[ $rc = 141 ] && [ ! -e "$home/Library/Application Support/macup/lock" ] && [ -z "$(ls -A "$TT")" ] && [ ! -s "$work/pipe.err" ] \
+  && pass "a reader that went away: 141, the lock and the temporary files gone" || { fail "a closed pipe (rc=$rc)"; ls -A "$TT" "$home/Library/Application Support/macup"; cat "$work/pipe.err"; }
+
 # --- since the last run: swap that grew is not "something is filling the disk"
 home="$work/swp"; SW="$work/swpbin"; mkdir -p "$SW" "$home/.config/macup" "$home/Library/Application Support/macup"; printf 'language = en\n' >"$home/.config/macup/config"
 printf '#!/bin/bash\ncase "$*" in *vm.swapusage*) echo "total = 12288.00M  used = ${FAKE_SWAP_MB}.00M  free = 100.00M  (encrypted)" ;; *) exec /usr/sbin/sysctl "$@" ;; esac\n' >"$SW/sysctl"; chmod +x "$SW/sysctl"

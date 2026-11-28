@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// report.sh's deep scan (--deep).
+/// 2.9's report.sh's deep scan (--deep).
 extension Checks {
     static func deep(_ run: Run) {
         guard run.arguments.deep else { return }
@@ -84,7 +84,7 @@ extension Checks {
         }
     }
 
-    /// `… | sort -rn`, through the real sort: equal sizes come out in the order the locale gives, as in the bash build.
+    /// `… | sort -rn`, through the real sort: equal sizes come out in the order the locale gives, as in 2.9.
     static func sortedBySize(_ run: Run, _ text: String) -> [String] {
         var ends: [Int32] = [0, 0]
         guard pipe(&ends) == 0 else { return [] }

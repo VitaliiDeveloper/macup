@@ -1,6 +1,6 @@
 import Darwin
 
-/// Sizes in KB, as core.sh's `kb`, `hum`, `tokb` and `tokb10` give them.
+/// Sizes in KB, as 2.9's core.sh's `kb`, `hum`, `tokb` and `tokb10` give them.
 public enum Size {
     /// `kb`: what `du -sk` says for a path, 0 when it does not exist. du is called as a tool, never re-implemented.
     public static func kb(_ path: String, shell: Shell) -> Int64 {

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Leftovers of deleted apps (leftovers.sh). An updater lives outside its app (Application Support), so deleting the app
+/// Leftovers of deleted apps (2.9's leftovers.sh). An updater lives outside its app (Application Support), so deleting the app
 /// leaves it registered and its program intact. The owner is found by signing team, then by bundle-id vendor; a vendor
 /// that does not match is a miss, not a removal.
 extension Leftovers {
@@ -72,7 +72,7 @@ extension Leftovers {
         for file in startupFiles(run) {
             guard isFile(file), !Run.isSymlink(file) else { continue }
             let base = plistName(file)
-            if base.hasPrefix("com.apple.") || base == Env.schedLabel { continue }
+            if Bash.starts(base, "com.apple.") || base == Env.schedLabel { continue }
             let system = Bash.starts(file, run.env.sysLib + "/")
             func add(_ label: String, _ program: String, _ reason: Orphan.Reason, _ vendor: String, _ signer: String = "") {
                 state.orphans.append(Orphan(plist: file, label: label, program: program, reason: reason, system: system, vendor: vendor,
@@ -81,7 +81,7 @@ extension Leftovers {
             guard access(file, R_OK) == 0 else { continue }   // root-only: macup cannot judge it, which is not the same as broken
             guard let root = plist(file) else { add("", "", .broken, vendorOf(base)); continue }
             let label = raw(root, "Label") ?? ""
-            if label.hasPrefix("com.apple.") || label == Env.schedLabel { continue }
+            if Bash.starts(label, "com.apple.") || label == Env.schedLabel { continue }
             let program = raw(root, "Program") ?? raw(root, "ProgramArguments.0") ?? ""
             if label.isEmpty, program.isEmpty {
                 guard (root as? [String: Any])?.isEmpty == true, !locked(file) else { continue }   // locked: some tools block an updater this way

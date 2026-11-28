@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Where a run keeps what its commands print (core.sh's $RAW) and how long a command may take.
+/// Where a run keeps what its commands print (2.9's core.sh's $RAW) and how long a command may take.
 public struct RunLog {
     public let raw: String
     public var stepSeconds: Int
@@ -88,6 +88,29 @@ public extension Shell {
             done.signal()
             while !ticker.isFinished { usleep(1000) }
         }
+    }
+
+    /// `(cd "$HOME" && …)` around the work: it runs from the home folder (a project's settings in the current folder would
+    /// apply), with PWD and OLDPWD as cd leaves them; `failed` when there is no going there.
+    func inHome<Result>(orElse failed: Result, _ body: () -> Result) -> Result {
+        let saved = (pwd: vars["PWD"], oldpwd: vars["OLDPWD"])
+        let here = open(".", O_RDONLY), herePath = FileManager.default.currentDirectoryPath
+        defer {
+            if here >= 0 { fchdir(here); close(here) } else { chdir(herePath) }
+            vars["PWD"] = saved.pwd
+            vars["OLDPWD"] = saved.oldpwd
+        }
+        // bash keeps the PWD it was given only when it names the folder it started in
+        var given = stat(), current = stat()
+        let pwdValid = saved.pwd.map { $0.hasPrefix("/") && stat($0, &given) == 0 && stat(".", &current) == 0 && given.st_dev == current.st_dev && given.st_ino == current.st_ino } ?? false
+        vars["OLDPWD"] = pwdValid ? saved.pwd : herePath
+        guard chdir(env.home) == 0 else { return failed }
+        var parts: [Substring] = []   // cd's logical path: no "//", "." or ".."
+        for part in env.home.split(separator: "/") where part != "." {
+            if part == ".." { _ = parts.popLast() } else { parts.append(part) }
+        }
+        vars["PWD"] = "/" + parts.joined(separator: "/")
+        return body()
     }
 
     private func lineCount(_ path: String) -> Int {

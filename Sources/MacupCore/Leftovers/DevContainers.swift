@@ -2,7 +2,7 @@ import Foundation
 
 /// Interactive only: reading other apps' containers can raise a privacy prompt, and only a person can pick them.
 extension Leftovers {
-    /// The cleaners call it where cleaners.sh registers dev containers, before the Gradle caches.
+    /// The cleaners call it where 2.9's cleaners.sh registers dev containers, before the Gradle caches.
     static func registerDevContainers(_ run: Run) {
         guard run.taskAllowed("clean.dev_containers"), state(run).interactive, !devPrefixes(run).isEmpty else { return }
         let out = run.out
@@ -66,7 +66,7 @@ extension Leftovers {
     static func devPrefixes(_ run: Run) -> [String] {
         Bash.echoed(run.settings.devPrefixes).split(whereSeparator: { $0 == "," || $0 == " " || $0 == "\n" }).map(String.init).filter { prefix in
             let lower = prefix.lowercased()
-            return Checks.matches(prefixPattern, prefix) && lower != "com.apple" && !lower.hasPrefix("com.apple.")
+            return prefixPattern.hasMatch(in: prefix) && lower != "com.apple" && !Bash.starts(lower, "com.apple.")
         }
     }
 

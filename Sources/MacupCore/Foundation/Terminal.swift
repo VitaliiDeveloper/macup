@@ -1,6 +1,6 @@
 import Darwin
 
-/// core.sh's `ask`: the question goes to /dev/tty and the answer comes from there, so it works under `curl | bash`.
+/// 2.9's core.sh's `ask`: the question goes to /dev/tty and the answer comes from there, so it works under `curl | bash`.
 enum Terminal {
     static var available: Bool {
         let descriptor = Darwin.open("/dev/tty", O_RDONLY)

@@ -1,4 +1,4 @@
-/// JSON written by hand, byte for byte as core.sh's `jstr`, `jlines` and `jarr`: a backslash and a quote are escaped,
+/// JSON written by hand, byte for byte as 2.9's core.sh's `jstr`, `jlines` and `jarr`: a backslash and a quote are escaped,
 /// control characters (0x00–0x1F, newlines and tabs included) are deleted, nothing else changes (no \/ and no \u).
 public enum JSON {
     public static func str(_ text: String) -> String {

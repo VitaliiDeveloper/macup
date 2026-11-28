@@ -21,6 +21,25 @@ final class LeftoversTests: XCTestCase {
                    lock: RunLock(dir: home + "/lock", held: false), started: Date(), previous: "")
     }
 
+    /// A folder macup cannot read is not empty: 2.9 took it for empty, and a root-only vendor folder went to the Trash whole.
+    func testUnreadableFolderIsNotEmpty() throws {
+        let fm = FileManager.default, folder = home + "/Vendor", containers = home + "/Library/Containers", container = containers + "/Locked"
+        try fm.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        XCTAssertTrue(Leftovers.isEmptyFolder(folder))
+        chmod(folder, 0o300)
+        defer { chmod(folder, 0o755) }
+        XCTAssertFalse(Leftovers.isEmptyFolder(folder))
+        // a container that cannot move and whose contents cannot be listed: nothing moved, which is not a success
+        try fm.createDirectory(atPath: container + "/data", withIntermediateDirectories: true)
+        let run = try makeRun()
+        Leftovers.state(run).allow = container + "\n"
+        chmod(container, 0o300)
+        chmod(containers, 0o555)
+        defer { chmod(containers, 0o755); chmod(container, 0o755) }
+        XCTAssertFalse(Leftovers.toTrash(run, container))
+        XCTAssertTrue(fm.fileExists(atPath: container + "/data"))
+    }
+
     /// vendor_of, lc and cap as 2.9's bash gave them: cap leaves an id whose first letter is not ASCII empty.
     func testNamesAreBash() throws {
         let ids: [(id: String, vendor: String, lc: String, cap: String)] = [
@@ -71,7 +90,7 @@ final class LeftoversTests: XCTestCase {
 
     func testOwnFolderIsBash() throws {
         let support = home + "/Library/Application Support", sysSupport = home + "/SysLib/Application Support"
-        for folder in ["\(support)/Vendor/Updater/bin", "\(support)/Flat", "\(sysSupport)/Sys/svc/bin", "\(home)/Library/Vendor/Sub", "\(home)/elsewhere/sub"] {
+        for folder in ["\(support)/Vendor/Updater/bin", "\(support)/Flat", "\(sysSupport)/Sys/svc/bin", "\(home)/Library/Vendor/Sub", "\(home)/elsewhere/sub", "\(support)/Vendor/\u{301}Mark"] {
             try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         }
         try FileManager.default.createSymbolicLink(atPath: "\(support)/Linked", withDestinationPath: "\(home)/elsewhere")
@@ -79,6 +98,11 @@ final class LeftoversTests: XCTestCase {
             "\(support)/Vendor/Updater/bin/u": "\(support)/Vendor/Updater", "\(support)/Vendor/Updater/u": "\(support)/Vendor/Updater", "\(support)/Flat/updater": "",
             "\(support)/Vendor/Gone/u": "", "\(sysSupport)/Sys/svc/bin/s": "\(sysSupport)/Sys/svc", "\(home)/Library/Vendor/Sub/x": "\(home)/Library/Vendor/Sub",
             "\(support)/Linked/sub/x": "", "/opt/x/y/z": "", "\(support)//a/b": "",
+            // a component of "." or ".." names the vendor folder or Application Support itself
+            "\(support)/Vendor/./u": "", "\(support)/./Vendor/u": "", "\(support)/Vendor/../u": "", "\(support)/Vendor//u": "",
+            "\(support)/Vendor/Updater/../../Flat/updater": "",
+            // by bytes, as bash: a combining mark after "/" starts a name of its own
+            "\(support)/Vendor/\u{301}Mark/u": "\(support)/Vendor/\u{301}Mark",
         ]
         let run = try makeRun()
         for (program, answer) in programs { XCTAssertEqual(Leftovers.ownFolder(run, program), answer, program) }

@@ -1,6 +1,6 @@
 import Darwin
 
-/// report.sh's sizes of what macup never deletes, and Video & photo (measured only).
+/// 2.9's report.sh's sizes of what macup never deletes, and Video & photo (measured only).
 extension Checks {
     static func sizes(_ run: Run) {
         if run.task("check.sizes") { notTouched(run) }

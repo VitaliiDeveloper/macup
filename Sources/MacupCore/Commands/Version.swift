@@ -1,6 +1,6 @@
 import Foundation
 
-/// commands.sh `ver_gt`, `update_cmd` and the version check of summary.sh.
+/// 2.9's commands.sh `ver_gt`, `update_cmd` and the version check of summary.sh.
 public enum Version {
     public static func isNewer(_ version: String, than other: String) -> Bool {
         guard !version.isEmpty, version != other else { return false }
@@ -21,7 +21,7 @@ public enum Version {
         return negative ? -number : number
     }
 
-    /// check.self_update (summary.sh): the version main names, asked once a week; "" unless it is newer than this one.
+    /// check.self_update (2.9's summary.sh): the version main names, asked once a week; "" unless it is newer than this one.
     static func newerRelease(_ run: Run) -> String {
         let env = run.env
         guard !env.repo.hasPrefix("__") else { return "" }
@@ -44,7 +44,7 @@ public enum Version {
     }
 
     /// `update_cmd`.
-    static func updateCommand(_ run: Run) -> String {
+    static func updateCommand() -> String {
         SelfPath.isHomebrew() ? "brew upgrade macup" : "macup self-update"
     }
 }

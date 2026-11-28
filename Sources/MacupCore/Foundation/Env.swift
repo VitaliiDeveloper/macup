@@ -1,5 +1,5 @@
-/// The environment macup runs in: the top of core.sh.
-/// Reading it changes nothing; `apply()` makes the changes core.sh made to the process (PATH, LC_CTYPE).
+/// The environment macup runs in: the top of 2.9's core.sh.
+/// Reading it changes nothing; `apply()` makes the changes 2.9's core.sh made to the process (PATH, LC_CTYPE).
 public struct Env {
     /// How install.sh and uninstall, 2.9 copies included, tell a macup from another file: a line "# macup" and a line that
     /// starts with MACUP_VERSION=, as in every bash copy. One literal, so the binary keeps it as is; tools/release.sh checks.
@@ -33,15 +33,24 @@ public struct Env {
     public let schedPlist: String
 
     public enum Failure: Error, Equatable {
-        /// core.sh: every path hangs off $HOME; with none, "$HOME/Library/Caches" would be the system's /Library/Caches.
+        /// 2.9's core.sh: every path hangs off $HOME; with none, "$HOME/Library/Caches" would be the system's /Library/Caches.
         case noHome
         public var message: String { "macup: HOME is not set" }
+    }
+
+    /// "/", "//", "/." or "/x/..": the folder is the root, whose Library is the system's.
+    static func namesRoot(_ path: String) -> Bool {
+        var depth = 0
+        for part in path.utf8.split(separator: UInt8(ascii: "/")) where !part.elementsEqual(".".utf8) {
+            depth = part.elementsEqual("..".utf8) ? max(0, depth - 1) : depth + 1
+        }
+        return depth == 0
     }
 
     public init(_ vars: [String: String]) throws {
         self.vars = vars
         let home = vars["HOME"] ?? ""
-        guard home.hasPrefix("/"), home.count > 1 else { throw Failure.noHome }
+        guard home.hasPrefix("/"), !Env.namesRoot(home) else { throw Failure.noHome }
         self.home = home
         userPath = vars["PATH"] ?? ""
         if vars["MACUP_PATH"] == "keep" {
@@ -71,14 +80,14 @@ public struct Env {
 
     public var paths: Paths { Paths(home: home) }
 
-    /// core.sh exports LC_CTYPE=en_US.UTF-8 when the locale is not UTF-8, so tools count characters, not bytes.
+    /// 2.9's core.sh exports LC_CTYPE=en_US.UTF-8 when the locale is not UTF-8, so tools count characters, not bytes.
     public var lcCtype: String? {
         let locale = Env.nonEmpty(vars, "LC_ALL") ?? Env.nonEmpty(vars, "LC_CTYPE") ?? vars["LANG"] ?? ""
         for marker in Env.utf8Markers where locale.contains(marker) { return nil }
         return "en_US.UTF-8"
     }
 
-    /// The tools run in a UTF-8 locale: core.sh makes LC_CTYPE one, unless LC_ALL overrides it with another.
+    /// The tools run in a UTF-8 locale: 2.9's core.sh makes LC_CTYPE one, unless LC_ALL overrides it with another.
     public var utf8Locale: Bool {
         guard let all = Env.nonEmpty(vars, "LC_ALL") else { return true }
         return Env.utf8Markers.contains { all.contains($0) }
@@ -100,7 +109,7 @@ public struct Env {
         return result
     }
 
-    /// Makes this process's environment the one core.sh leaves, for code that reads it directly.
+    /// Makes this process's environment the one 2.9's core.sh leaves, for code that reads it directly.
     public func apply() {
         setenv("PATH", path, 1)
         if let ctype = lcCtype { setenv("LC_CTYPE", ctype, 1) }

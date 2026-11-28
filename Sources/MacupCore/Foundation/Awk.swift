@@ -1,6 +1,6 @@
 import Darwin
 
-/// The number rules of macOS awk (bwk awk 20200816), so sizes come out as the bash build prints them.
+/// The number rules of macOS awk (bwk awk 20200816), so sizes come out as 2.9 printed them.
 enum Awk {
     /// A string as awk turns it into a number: the longest prefix `strtod` reads, 0 for none.
     static func number(_ text: String) -> Double {

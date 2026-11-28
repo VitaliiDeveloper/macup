@@ -1,6 +1,6 @@
 import Foundation
 
-/// The config file (`key = value` lines): core.sh's `conf`, `conf_set`, `load_conf`.
+/// The config file (`key = value` lines): 2.9's core.sh's `conf`, `conf_set`, `load_conf`.
 /// It reads the file as sed does in macup's locale: in UTF-8, [[:space:]] includes Unicode blanks (no-break space, ideographic
 /// space), and sed stops at the first line that is not valid UTF-8, saying so on stderr every time `conf` runs.
 public struct Config {
@@ -9,7 +9,7 @@ public struct Config {
     private let lines: [String]
     /// sed stops at a byte that is not UTF-8.
     public let sedFails: Bool
-    /// Whether `value` writes sed's error, as `conf` does; routing reads the config without saying anything.
+    /// Whether `value` writes sed's error, as `conf` does; the schedule's repair reads the config without saying anything.
     public var reportsErrors = true
     let utf8: Bool
 
@@ -152,18 +152,44 @@ public struct Config {
             raws[index] = Data(Paths.sedReplacement("\(key) = \(value)", match: line).utf8)
             found = true
         }
-        let out: Data
-        if found {
-            let link = (try? fm.destinationOfSymbolicLink(atPath: path)) != nil
-            if link || conf.sedFails { return }
-            out = Data(raws.joined(separator: [0x0A]))
-        } else {
-            out = data + Data("\(key) = \(value)\n".utf8)
+        guard found else {
+            // appended, through a symlink too: what is there stays whatever happens to the write
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("\(key) = \(value)\n".utf8))
+            return
         }
-        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
-        defer { try? handle.close() }
-        try handle.truncate(atOffset: 0)
-        try handle.write(contentsOf: out)
+        let link = (try? fm.destinationOfSymbolicLink(atPath: path)) != nil
+        if link || conf.sedFails { return }
+        try replace(path, with: Data(raws.joined(separator: [0x0A])))
+    }
+
+    /// A new file next to it with its permissions, renamed over it: a write cut short leaves the config as it was (2.9's
+    /// sed -i did the same). In place when the folder takes no new file.
+    private static func replace(_ path: String, with data: Data) throws {
+        var info = stat()
+        var template = Array("\(path).XXXXXX".utf8CString)
+        let descriptor = mkstemp(&template)
+        guard descriptor >= 0, stat(path, &info) == 0 else {
+            if descriptor >= 0 { close(descriptor); unlink(template) } else if ![EACCES, EPERM, EROFS].contains(errno) { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: data)
+            return
+        }
+        let temporary = String(cString: template)
+        do {
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+            try handle.write(contentsOf: data)
+            fchmod(descriptor, info.st_mode & 0o7777)
+            try handle.close()
+            guard rename(temporary, path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        } catch {
+            unlink(temporary)
+            throw error
+        }
     }
 
     /// grep -qE "^[[:space:]]*key[[:space:]]*="
@@ -198,11 +224,19 @@ public struct Settings {
         keepReports = Config.num(config.value("keep_reports", "20"), 20)
         staleProjectDays = Config.num(config.value("stale_project_days", "90"), 90)
         simulatorDays = Config.num(config.value("simulator_days", "30"), 30)
-        var step = Config.num(config.value("step_timeout_minutes", "60"), 60) * 60
+        var step = Config.num(config.value("step_timeout_minutes", "60"), 60).saturatingTimes(60)
         if let seconds = env.stepSecsHook { step = Config.num(seconds, step) }   // seconds, for the tests
         stepSeconds = step
         level = cliLevel ?? Config.level(config.value("clean_level", "safe")) ?? 1
         devPrefixes = config.value("dev_container_prefixes", "")
         projectDirs = config.value("project_dirs", "~/Developer, ~/Projects, ~/Code, ~/dev, ~/src, ~/repos, ~/work")
+    }
+}
+
+extension Int {
+    /// The product, or Int.max when it does not fit: a limit of a billion years is as good as none.
+    func saturatingTimes(_ factor: Int) -> Int {
+        let product = multipliedReportingOverflow(by: factor)
+        return product.overflow ? Int.max : product.partialValue
     }
 }

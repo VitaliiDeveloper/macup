@@ -76,7 +76,7 @@ extension Cleaners {
         }
     }
 
-    /// macup_helpers.py editor_workspaces: the workspace folders whose workspace.json names a project folder that is gone.
+    /// 2.9's inline Python: the workspace folders whose workspace.json names a project folder that is gone.
     /// Python stops at a workspace.json that is no object, after the folders before it.
     static func goneWorkspaces(_ storage: String, home: String) -> [String] {
         var gone: [String] = []

@@ -1,11 +1,11 @@
 import Darwin
 import Foundation
 
-/// One run at a time: the lock of arguments.sh, a folder with a pid file. A 2.9 run and a 3.0 run use the same one,
+/// One run at a time: the lock of 2.9's arguments.sh, a folder with a pid file. A 2.9 run and a 3.0 run use the same one,
 /// so a scheduled check of either version and a run of the other still exclude each other.
 public struct RunLock {
     public let dir: String
-    /// False when the pid could not be written: the run goes on without a lock, as the bash build does.
+    /// False when the pid could not be written: the run goes on without a lock, as 2.9's did.
     public let held: Bool
 
     public enum Result {

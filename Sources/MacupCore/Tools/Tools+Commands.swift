@@ -40,7 +40,7 @@ extension Tools {
         for entry in env.userPath.unicodeScalars.split(whereSeparator: { $0 == ":" || $0 == "\n" }) {
             let folder = String(String.UnicodeScalarView(entry))
             guard entry.contains(where: { $0 != " " && $0 != "\t" }), seen.insert(Array(entry)).inserted else { continue }
-            if starts(folder, env.home + "/"), !Run.isDirectory(folder) { gone.append(env.paths.tildify(folder)) }
+            if Bash.starts(folder, env.home + "/"), !Run.isDirectory(folder) { gone.append(env.paths.tildify(folder)) }
         }
         return gone.joined(separator: ",").replacingOccurrences(of: ",", with: ", ", options: .literal)
     }
@@ -58,7 +58,7 @@ extension Tools {
         return fields + [String(String.UnicodeScalarView(rest))]
     }
 
-    /// macup_helpers.py `commands`: bin folders → the number of scripts, then a line per interpreter that is gone or folder of
+    /// 2.9's inline Python: bin folders → the number of scripts, then a line per interpreter that is gone or folder of
     /// dead links: name, fix ("-" for none) or folder, the scripts, what the links pointed into; tab-separated.
     static func commandScan(_ folders: [String], home givenHome: String, shell: Shell) -> String {
         typealias Scalars = [Unicode.Scalar]
@@ -84,7 +84,7 @@ extension Tools {
                     let target = PythonPath.normpath(PythonPath.join(folder, PythonPath.readlink(path)))
                     let range = NSRange(location: 0, length: (target as NSString).length)
                     let owner = removedOwner.firstMatch(in: target, range: range).map { (target as NSString).substring(with: $0.range) } ?? PythonPath.dirname(target)
-                    let shown = starts(owner, home + "/") ? "~" + String(String.UnicodeScalarView(owner.unicodeScalars.dropFirst(home.unicodeScalars.count))) : owner
+                    let shown = Bash.starts(owner, home + "/") ? "~" + String(String.UnicodeScalarView(owner.unicodeScalars.dropFirst(home.unicodeScalars.count))) : owner
                     gone[Array(folder.unicodeScalars), default: []].insert(Array(shown.unicodeScalars))
                     continue
                 }
@@ -93,7 +93,7 @@ extension Tools {
                 guard let first = head.first else { continue }
                 let interpreter: String
                 if PythonPath.basename(first) == "env" {
-                    let rest = head.dropFirst().filter { !starts($0, "-") && !$0.unicodeScalars.contains("=") }
+                    let rest = head.dropFirst().filter { !Bash.starts($0, "-") && !$0.unicodeScalars.contains("=") }
                     guard let wanted = rest.first, !PythonPath.which(wanted, path: shell.vars["PATH"]) else { continue }
                     interpreter = wanted
                 } else if access(first, X_OK) == 0 {
@@ -135,7 +135,7 @@ extension Tools {
     }
 }
 
-/// os.path as Python 3.9 has it on macOS, for the parts that macup_helpers.py's answers depend on.
+/// os.path as Python 3.9 has it on macOS, for the parts that 2.9's Python answers depend on.
 enum PythonPath {
     /// `str.isspace()`.
     static func isSpace(_ scalar: Unicode.Scalar) -> Bool {
@@ -143,7 +143,7 @@ enum PythonPath {
     }
 
     static func join(_ base: String, _ name: String) -> String {
-        if Tools.starts(name, "/") || base.isEmpty { return name }
+        if Bash.starts(name, "/") || base.isEmpty { return name }
         return base.unicodeScalars.last == "/" ? base + name : base + "/" + name
     }
 
@@ -164,7 +164,7 @@ enum PythonPath {
         guard !path.isEmpty else { return "." }
         let scalars = path.unicodeScalars
         var slashes = scalars.first == "/" ? 1 : 0
-        if Tools.starts(path, "//"), !Tools.starts(path, "///") { slashes = 2 }
+        if Bash.starts(path, "//"), !Bash.starts(path, "///") { slashes = 2 }
         var parts: [Substring.UnicodeScalarView] = []
         for part in Substring(path).unicodeScalars.split(separator: "/", omittingEmptySubsequences: false) where !part.isEmpty && !part.elementsEqual(".".unicodeScalars) {
             let up = part.elementsEqual("..".unicodeScalars)
@@ -204,7 +204,7 @@ enum PythonPath {
         func resolve(_ start: String, _ rest: String) -> (path: String, ok: Bool) {
             var resolved = start
             var parts = Array(Substring(rest).unicodeScalars.split(separator: "/", omittingEmptySubsequences: false).map { String(String.UnicodeScalarView($0)) })
-            if Tools.starts(rest, "/") { parts.removeFirst(); resolved = "/" }
+            if Bash.starts(rest, "/") { parts.removeFirst(); resolved = "/" }
             while !parts.isEmpty {
                 let name = parts.removeFirst()
                 if name.isEmpty || name == "." { continue }

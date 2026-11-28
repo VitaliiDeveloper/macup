@@ -7,7 +7,7 @@ public enum MainPass {
         env.apply()
         let shell = Shell(env: env)
         let config = Config(env: env)
-        var lang = Lang.initial(env: env, config: config, shell: shell)   // core.sh reads it before the options
+        var lang = Lang.initial(env: env, config: config, shell: shell)   // 2.9's core.sh reads it before the options
         if let chosen = arguments.lang { lang = chosen }
         var colors = Colors.initial(env: env)
         if arguments.noColor { colors = .off }
@@ -46,7 +46,8 @@ public enum MainPass {
         }
         let previous = Bash.regularFileContents(env.history).map { Bash.substitution(String(decoding: Tidy.lastLines($0, 1), as: UTF8.self)) } ?? ""
         let run = Run(env: env, arguments: arguments, settings: settings, shell: shell, out: out, report: report, lock: lock, started: started, previous: previous)
-        Interrupt.install({ interrupted(run) }, shell: shell)
+        // a reader that went away ends the run as 2.9's EXIT trap did: no report, nothing of the run left behind, 141
+        Interrupt.install({ interrupted(run) }, pipeClosed: { run.end(141) }, shell: shell)
         out.body = FileHandle(forWritingAtPath: report.body)
         if arguments.json { out.colors = .off; out.json = true }
         // --quiet: only the summary is printed (--json: only the JSON); everything is still in the report

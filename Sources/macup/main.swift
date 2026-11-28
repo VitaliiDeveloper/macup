@@ -2,7 +2,6 @@ import Darwin
 import Foundation
 import MacupCore
 
-// The macup binary.
 let argv = Array(CommandLine.arguments.dropFirst())
 let env: Env
 do {
@@ -14,7 +13,7 @@ do {
 Names.setLocale(env)
 Schedule.repair(env, translations: Translations.json)
 
-/// The command line as arguments.sh reads it; one it rejects ends macup with its message.
+/// The command line as 2.9's arguments.sh reads it; one it rejects ends macup with its message.
 func parsed(_ argv: [String]) -> Arguments {
     do { return try Arguments.parse(argv) } catch let failure as Arguments.Failure {
         exit(OneOff.rejected(failure, env: env, translations: Translations.json))

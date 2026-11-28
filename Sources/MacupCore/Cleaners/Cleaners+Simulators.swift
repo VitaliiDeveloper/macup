@@ -56,7 +56,7 @@ extension Cleaners {
         return text.replacingOccurrences(of: "-", with: ".")
     }
 
-    /// macup_helpers.py sim_list: `simctl list devices -j`, "@@", `simctl runtime list -j` → D and R lines, tab-separated,
+    /// 2.9's inline Python: `simctl list devices -j`, "@@", `simctl runtime list -j` → D and R lines, tab-separated,
     /// read back line by line as bash reads them (a name can hold a line break).
     static func simList(_ input: String) -> [String] {
         let lines = pythonSimList(input)

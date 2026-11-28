@@ -13,7 +13,7 @@ extension Tools {
         run.lines(expiring)
     }
 
-    /// macup_helpers.py `certs-expiring`: of the identities `security find-identity` lists, those whose newest certificate
+    /// 2.9's inline Python: of the identities `security find-identity` lists, those whose newest certificate
     /// expires within 30 days (one that already has is left to Keychain Access). Nothing where Python stops with an error.
     static func expiringCertificates(_ identities: String, shell: Shell) -> String {
         let names = Set(all(quoted, in: identities, group: 1).map { Array($0.unicodeScalars) })
@@ -76,7 +76,7 @@ extension Tools {
         }
     }
 
-    /// macup_helpers.py `crashes`: "S <system crashes>", then "A <count> <app>" for the apps in /Applications or
+    /// 2.9's inline Python: "S <system crashes>", then "A <count> <app>" for the apps in /Applications or
     /// ~/Applications that crashed 3 or more times in the last 7 days, most first. Nothing where Python stops with an error.
     static func crashCounts(home givenHome: String, now: Double) -> String {
         var home = String(String.UnicodeScalarView(givenHome.unicodeScalars.reversed().drop(while: { $0 == "/" }).reversed()))
@@ -93,7 +93,7 @@ extension Tools {
         var seen = Set<[Unicode.Scalar]>(), apps: [(name: [Unicode.Scalar], count: Int)] = [], system = 0
         for file in files {
             let base = PythonPath.basename(file)
-            guard !seen.contains(Array(base.unicodeScalars)), !starts(base, "ExcUserFault_") else { continue }
+            guard !seen.contains(Array(base.unicodeScalars)), !Bash.starts(base, "ExcUserFault_") else { continue }
             seen.insert(Array(base.unicodeScalars))
             var info = stat()
             guard let data = Bash.regularFileContents(file), stat(file, &info) == 0 else { continue }
@@ -121,7 +121,7 @@ extension Tools {
                 path = pythonStrip(all(crashPath, in: text, group: 1).first ?? "")
             }
             if now - when > 7 * 86400 { continue }
-            guard starts(path, "/Applications/") || starts(path, home + "/Applications/") else { system += 1; continue }
+            guard Bash.starts(path, "/Applications/") || Bash.starts(path, home + "/Applications/") else { system += 1; continue }
             guard countable else { return "" }   // a list or a dict as the name: Python cannot count it and stops
             let key = Array(name.unicodeScalars)
             if let index = apps.firstIndex(where: { $0.name == key }) { apps[index].count += 1 } else { apps.append((key, 1)) }

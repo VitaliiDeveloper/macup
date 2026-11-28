@@ -1,6 +1,6 @@
 import Darwin
 
-/// The pick at the end of a check on a terminal (summary.sh), and --pick (cleaners.sh): a person chooses, macup cleans
+/// The pick at the end of a check on a terminal (2.9's summary.sh), and --pick (cleaners.sh): a person chooses, macup cleans
 /// exactly that.
 enum Pick {
     /// After a check on a terminal with something to clean: numbers, ranges or a level; a yes for what is aggressive or

@@ -1,6 +1,6 @@
-/// The command line as arguments.sh reads it: left to right, the last command word wins, options anywhere.
+/// The command line as 2.9's arguments.sh reads it: left to right, the last command word wins, options anywhere.
 public struct Arguments: Equatable {
-    /// One-off commands (arguments.sh's CMD); they run before any check, update or cleanup.
+    /// One-off commands (2.9's arguments.sh's CMD); they run before any check, update or cleanup.
     public enum Command: String, CaseIterable {
         case lang, last, history, reports, tasks, config, selfUpdate = "self_update", uninstall, schedule, help, version
     }
@@ -30,7 +30,7 @@ public struct Arguments: Equatable {
     /// --lang.
     public var lang: Lang?
 
-    /// What makes arguments.sh stop: it prints a message and exits (2 for a bad value, 1 for an unknown word, said in the
+    /// What makes 2.9's arguments.sh stop: it prints a message and exits (2 for a bad value, 1 for an unknown word, said in the
     /// language a --lang before it chose).
     public enum Failure: Error, Equatable {
         case badLevel

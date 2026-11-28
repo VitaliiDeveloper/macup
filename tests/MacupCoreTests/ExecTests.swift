@@ -49,7 +49,7 @@ final class ExecTests: XCTestCase {
         ("Library/Caches/com.bar/org.sparkle-project.Sparkle/Installation/y/Bar.app/Contents/GPUCache/g", false),
         ("Library/Caches/zen/Profiles/abc.default/cache2/entries", true), ("Library/Caches/pypoetry/virtualenvs/proj-Ab12-py3.12", true),
         ("Library/Keychains/login.keychain-db", false), ("Library/Messages/chat.db", true), ("Library/Caches/../Documents", false),
-        ("Library/Caches/./x", true), ("Library/Caches/x.sqlite", false), (".ssh/id_rsa", false), (".ssh", false), (".gnupg/pubring.kbx", false),
+        ("Library/Caches/./x", false), ("Library/Caches/x.sqlite", false), (".ssh/id_rsa", false), (".ssh", false), (".gnupg/pubring.kbx", false),
         (".aws/credentials", false), (".aws", false), (".kube/config", false), (".netrc", false), (".config/macup/config", false), (".config", false),
         (".claude", false), (".claude/settings.json", false), (".claude/projects/-Users-me-app/aaaa-1111.jsonl", false),
         (".claude/file-history/bbbb-2222", true), (".claude/file-history/bbbb-2222/x", false), (".claude/file-history/a_b", false),
@@ -90,7 +90,7 @@ final class ExecTests: XCTestCase {
 
     /// The calls through to_trash: what each answers, what the report's raw log says, and what is left where, as 2.9's bash did.
     func testToTrashIsBash() throws {
-        let calls = ["", "data/../data/a", "data/..", "link", "missing", "data/other", "data/a", "data/b", "data/c", "data/s|sudo",
+        let calls = ["", "data/../data/a", "data/..", "data/./a", "link", "missing", "data/other", "data/a", "data/b", "data/c", "data/s|sudo",
                      "Library/Containers/X", "Library/Group Containers/G", "other/locked/d"]
         let allowed = ["data/a", "data/b", "data/c", "data/s", "link", "missing", "Library/Containers/X", "Library/Group Containers/G", "other/locked/d"]
         func prepare(_ root: String) {
@@ -130,14 +130,14 @@ final class ExecTests: XCTestCase {
             return Leftovers.toTrash(run, call.isEmpty ? "" : "\(root)/\(parts[0])", sudo: parts.count > 1) ? "0" : "1"
         }
         try? FileManager.default.moveItem(atPath: run.log.raw, toPath: root + "/raw")
-        let raw = ["macup refused to move: ", "macup refused to move: H/data/../data/a", "macup refused to move: H/data/..", "macup refused a symlink: H/link",
+        let raw = ["macup refused to move: ", "macup refused to move: H/data/../data/a", "macup refused to move: H/data/..", "macup refused to move: H/data/./a", "macup refused a symlink: H/link",
                    "macup refused to move: H/data/other", "mv: rename H/Library/Containers/X to H/.Trash/X: Permission denied",
                    "mv: rename H/Library/Group Containers/G to H/.Trash/G: Permission denied", "mv: rename H/other/locked/d to H/.Trash/d: Permission denied", ""]
         let left = ["", ".", "./.Trash", "./.Trash/G", "./.Trash/G/f", "./.Trash/X", "./.Trash/X/f", "./.Trash/a", "./.Trash/b", "./.Trash/b/f", "./.Trash/c",
                     "./.Trash/c 2", "./.Trash/c 3", "./.Trash/s", "./Library", "./Library/Containers", "./Library/Containers/X", "./Library/Group Containers",
                     "./Library/Group Containers/G", "./data", "./data/other", "./link", "./other", "./other/locked", "./other/locked/d", "./other/locked/d/f"]
         XCTAssertEqual(outcome(root), [raw.joined(separator: "\n")] + left)
-        XCTAssertEqual(swift, ["1", "1", "1", "1", "0", "1", "0", "0", "0", "0", "0", "0", "1"])
+        XCTAssertEqual(swift, ["1", "1", "1", "1", "1", "0", "1", "0", "0", "0", "0", "0", "0", "1"])
     }
 
     func testLiteralPatternAndTrashNameAreBash() throws {

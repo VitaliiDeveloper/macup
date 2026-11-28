@@ -96,6 +96,37 @@ final class ConfigTasksTests: XCTestCase {
         }
     }
 
+    /// A replaced line goes in through a new file renamed over the config, so a write cut short loses nothing: the
+    /// permissions stay and no temporary file is left. An added line is appended, through a symlink too.
+    func testConfSetKeepsTheFile() throws {
+        let fm = FileManager.default, folder = dir + "/.config/macup"
+        try "language = en\nskip = clean.*\n".write(toFile: confPath, atomically: true, encoding: .utf8)
+        chmod(confPath, 0o600)
+        try Config.set("language", "uk", path: confPath) { "" }
+        XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), "language = uk\nskip = clean.*\n")
+        XCTAssertEqual((try fm.attributesOfItem(atPath: confPath)[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: folder), ["config"])
+        chmod(confPath, 0o400)   // a new file takes its place, as with sed -i: writing over it in place would be refused
+        try Config.set("skip", "", path: confPath) { "" }
+        XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), "language = uk\nskip = \n")
+        XCTAssertEqual((try fm.attributesOfItem(atPath: confPath)[.posixPermissions] as? NSNumber)?.intValue, 0o400)
+        chmod(confPath, 0o600)
+        try Config.set("skip", "clean.*", path: confPath) { "" }
+        let real = dir + "/real"
+        try fm.moveItem(atPath: confPath, toPath: real)
+        try fm.createSymbolicLink(atPath: confPath, withDestinationPath: real)
+        try Config.set("enable", "clean.trash", path: confPath) { "" }
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: confPath), real)
+        XCTAssertEqual(try String(contentsOfFile: real, encoding: .utf8), "language = uk\nskip = clean.*\nenable = clean.trash\n")
+        try fm.removeItem(atPath: confPath)
+        try fm.moveItem(atPath: real, toPath: confPath)
+        chmod(folder, 0o500)   // no new file in the folder: replaced in place, as before
+        defer { chmod(folder, 0o755) }
+        try Config.set("language", "ru", path: confPath) { "" }
+        XCTAssertEqual(try String(contentsOfFile: confPath, encoding: .utf8), "language = ru\nskip = clean.*\nenable = clean.trash\n")
+        XCTAssertThrowsError(try Config.set("language", "en", path: dir + "/.config/macup/sub/config") { "" })
+    }
+
     /// The config write_default_conf of 2.9 wrote for MSG_LANG=uk.
     func testDefaultConfigIsTheBashTemplate() {
         XCTAssertEqual(Config.defaultText(lang: .uk), Checkout.fixture("ConfigTasksTests-default-config-uk.txt"))

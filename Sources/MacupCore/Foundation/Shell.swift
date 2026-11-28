@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Running tools: core.sh's `have`, `tl`, `run` and `tick`.
+/// Running tools: 2.9's core.sh's `have`, `tl`, `run` and `tick`.
 /// Tools are found through PATH (`Env.path`), never at fixed paths, so the tests' fakes win.
 /// A tool runs in macup's process group: Ctrl-C and sudo's password prompt reach it.
 public final class Shell {
@@ -128,8 +128,8 @@ public final class Shell {
 
     /// `tl`: runs a tool and stops it after `seconds` (macOS has no `timeout`); 124 when it was stopped.
     /// It stays in the foreground process group, so Ctrl-C and sudo prompts still reach it. When time is up, it and
-    /// everything it started (found through `ps`) get SIGTERM; whatever is still there 5 seconds later gets SIGKILL,
-    /// unless the tool has ended by then. 127 when the tool is not there.
+    /// everything it started (found through `ps`) get SIGTERM, and whatever of them is still there 5 seconds later gets
+    /// SIGKILL, before this returns. 127 when the tool is not there.
     public func tl(_ seconds: Int, _ argv: [String], stdin: Input = .inherit, stdout: Out = .inherit, stderr: Out = .inherit) -> Int32 {
         let result = timed(seconds, argv, stdin: stdin, stdout: stdout, stderr: stderr)
         return result.stopped ? 124 : result.status
@@ -144,24 +144,48 @@ public final class Shell {
             let ended = Shell.waitForSignal(pid)
             return (ended.status, ended.signal, false)
         }
-        let ended = DispatchSemaphore(value: 0)
+        let rootStart = Shell.startTime(pid)
+        let ended = DispatchSemaphore(value: 0), watched = DispatchSemaphore(value: 0)
         let stopped = ManagedFlag()
-        let watchdog = Thread { [self] in
+        Thread { [self] in
+            defer { watched.signal() }
             guard ended.wait(timeout: .now() + .seconds(seconds)) == .timedOut else { return }
             stopped.set()
-            let all = descendants(of: pid)
-            all.forEach { kill($0, SIGTERM) }
-            guard ended.wait(timeout: .now() + .seconds(5)) == .timedOut else { return }
-            all.forEach { kill($0, SIGKILL) }
-        }
-        watchdog.start()
+            stop(descendants(of: pid), known: rootStart.map { [pid: $0] } ?? [:])
+        }.start()
         let result = Shell.waitForSignal(pid)
         ended.signal()
-        ended.signal()
+        // a child that ignores SIGTERM outlives the tool: it would keep a capture's pipe open, and macup's exit would spare it
+        watched.wait()
         return (result.status, result.signal, stopped.isSet)
     }
 
-    /// The process and every process below it, from `ps -Ao pid=,ppid=` (as core.sh's tl finds them).
+    /// SIGTERM, then SIGKILL for those still there after `grace` seconds. A process counts as still there while its pid has
+    /// the start time it had: a pid that ended and was given to another process by then is left alone. `known`: start times
+    /// read earlier (the tool's own, at spawn: it may have ended and been reaped before the list was made).
+    func stop(_ pids: [pid_t], known: [pid_t: UInt64] = [:], grace: TimeInterval = 5) {
+        var alive = pids.compactMap { pid in Shell.startTime(pid).map { (pid: pid, start: $0) } }
+            .filter { process in known[process.pid].map { $0 == process.start } ?? true }
+            .filter { kill($0.pid, SIGTERM) == 0 }   // one macup cannot signal (all root) would only hold up the others
+        let deadline = DispatchTime.now() + grace
+        while !alive.isEmpty, DispatchTime.now() < deadline {
+            usleep(50_000)
+            alive = alive.filter { Shell.startTime($0.pid) == $0.start }
+        }
+        alive.forEach { kill($0.pid, SIGKILL) }
+    }
+
+    /// When the process started, in microseconds; nil when there is none. sysctl answers for any process: proc_pidinfo
+    /// refuses a setuid one such as sudo, which still takes macup's signals and passes them on.
+    static func startTime(_ pid: pid_t) -> UInt64? {
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.size
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&name, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let started = info.kp_proc.p_un.__p_starttime
+        return UInt64(started.tv_sec) * 1_000_000 + UInt64(started.tv_usec)
+    }
+
+    /// The process and every process below it, from `ps -Ao pid=,ppid=` (as 2.9's core.sh's tl finds them).
     func descendants(of root: pid_t) -> [pid_t] {
         var parent: [pid_t: pid_t] = [:]
         for line in Bash.lines(capture(["ps", "-Ao", "pid=,ppid="]).output) {

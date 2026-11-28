@@ -22,8 +22,6 @@ fakes "$work/bin" pgrep df diskutil tmutil date brew sudo osascript; export PATH
 # ANSWERS=a/b in the environment is typed into the terminal, each answer when macup asks (bash's ask reads /dev/tty);
 # ANSWERS=/ is one empty answer. A case that asks without answers waits for ever on a terminal: make it pipe.
 # A check of a clean task on a terminal ends with the pick, which waits for an answer: such cases run without one.
-# EXPECT=name in the environment: the Swift build fixes a bash bug there on purpose (docs/swift-port-plan.md, "Bash bugs"), and
-# expect_<name>, in the case file, turns bash's output into what the fix prints before the two are compared.
 for cases in tests/diff_cases/*.sh; do
   # shellcheck source=/dev/null
   . "$cases"
@@ -76,10 +74,8 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
   [ -d "$home" ] && chmod -R u+rwx "$home"; rm -rf "$home"; mkdir -p "$home"; [ -n "$fix" ] && "fix_$fix" "$home"
   # bash runs python3, which on some Macs (Xcode's 3.9) leaves its bytecode in the fake home's Library/Caches/com.apple.python
   local vars=(HOME="$home" MACUP_LANG="$lang" MACUP_BUILD="$build" PATH="$PATH" MACUP_PATH=keep PYTHONDONTWRITEBYTECODE=1)
-  local answers="" expect=""
-  for word in $envs; do
-    case "$word" in ANSWERS=*) answers=${word#ANSWERS=} ;; EXPECT=*) expect=${word#EXPECT=} ;; *) vars+=("${word//@H/$home}") ;; esac
-  done
+  local answers=""
+  for word in $envs; do case "$word" in ANSWERS=*) answers=${word#ANSWERS=} ;; *) vars+=("${word//@H/$home}") ;; esac; done
   if [ "$tty" = tty ]; then
     # the terminal's input stays open until macup is done: at its end script would echo a ^D somewhere into the output.
     # A pipe, not a fifo: script on macOS 27 cannot take a fifo as its input.
@@ -90,7 +86,6 @@ run(){ # build lang tty fixture env args… → $work/<build>.{out,rc,report,fil
     env "${vars[@]}" PERL_BADLANG=0 perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die "$ARGV[0]: $!\n"' tests/macup_run "$@" </dev/null >"$out.out" 2>&1; echo $? >"$out.rc"; fi
   local report; report=$(ls -t "$home"/Library/Logs/macup/macup_*.md 2>/dev/null | head -1)
   if [ -n "$report" ]; then norm "$report" "$home" >"$out.report"; else : >"$out.report"; fi
-  [ "$build" = bash ] && [ -n "$expect" ] && "expect_$expect" "$out.out"
   norm "$out.out" "$home" >"$out.norm"; mv "$out.norm" "$out.out"
   # the history's lines start with the date and time of the run
   local history="$home/Library/Application Support/macup/history.csv"

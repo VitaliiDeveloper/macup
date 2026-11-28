@@ -38,7 +38,7 @@ extension Tools {
             if newest[name].map({ end > $0.end }) ?? true { newest[name] = (end, pem) }
         }
         let soon = newest.map { (name: String(String.UnicodeScalarView($0.key)), pem: $0.value.pem) }
-            .sorted { Updates.codePointOrder($0.name, $1.name) }
+            .sorted { Names.codePointOrder($0.name, $1.name) }
             .filter { openssl($0.pem, ["-checkend", String(30 * 86400)]).status != 0 }
             .map(\.name).joined(separator: "\n")
         return failed ? "" : soon
@@ -89,7 +89,7 @@ extension Tools {
             guard glob(pattern, GLOB_NOESCAPE, nil, &found) == 0 else { return [] }
             return (0..<Int(found.gl_pathc)).compactMap { found.gl_pathv[$0].map { String(cString: $0) } }
         }
-        let files = ["/*.ips", "/Retired/*.ips", "/*.crash", "/Retired/*.crash"].flatMap { reports(folder + $0) }.sorted(by: Updates.codePointOrder)
+        let files = ["/*.ips", "/Retired/*.ips", "/*.crash", "/Retired/*.crash"].flatMap { reports(folder + $0) }.sorted(by: Names.codePointOrder)
         var seen = Set<[Unicode.Scalar]>(), apps: [(name: [Unicode.Scalar], count: Int)] = [], system = 0
         for file in files {
             let base = PythonPath.basename(file)

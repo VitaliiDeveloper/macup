@@ -108,10 +108,10 @@ extension Tools {
             }
         }
         var lines = [String(scripts)]
-        for key in groups.keys.sorted(by: { $0[0] == $1[0] ? Updates.codePointOrder(text($0[1]), text($1[1])) : Updates.codePointOrder(text($0[0]), text($1[0])) }) {
-            let names = groups[key, default: []].map(text).sorted(by: Updates.codePointOrder)
+        for key in groups.keys.sorted(by: { $0[0] == $1[0] ? Names.codePointOrder(text($0[1]), text($1[1])) : Names.codePointOrder(text($0[0]), text($1[0])) }) {
+            let names = groups[key, default: []].map(text).sorted(by: Names.codePointOrder)
             let shown = names.prefix(10).joined(separator: ", ") + (names.count > 10 ? " +\(names.count - 10)" : "")
-            let from = gone[key[1], default: []].map(text).sorted(by: Updates.codePointOrder).joined(separator: ", ")
+            let from = gone[key[1], default: []].map(text).sorted(by: Names.codePointOrder).joined(separator: ", ")
             lines.append([text(key[0]), text(key[1]), shown, from].joined(separator: "\t"))
         }
         return lines.joined(separator: "\n")

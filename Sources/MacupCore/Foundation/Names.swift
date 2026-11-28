@@ -32,6 +32,11 @@ public enum Names {
         }
     }
 
+    /// Python's sort of str keys: by code point.
+    static func codePointOrder(_ left: String, _ right: String) -> Bool {
+        left.unicodeScalars.lexicographicallyPrecedes(right.unicodeScalars)
+    }
+
     /// `ls -r` on these paths: ls takes its operands in reverse, then qsorts them with strcoll reversed.
     static func lsReversed(_ paths: [String]) -> [String] {
         within(toolLocale) { qsorted(paths.reversed(), descending: true) }

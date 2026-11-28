@@ -129,7 +129,7 @@ enum Tools {
         for (one, other) in zip(left, right) {
             switch (one, other) {
             case (.string(let first), .string(let second)):
-                if !first.unicodeScalars.elementsEqual(second.unicodeScalars) { return Updates.codePointOrder(first, second) }
+                if !first.unicodeScalars.elementsEqual(second.unicodeScalars) { return Names.codePointOrder(first, second) }
             case (.null, .null):
                 continue
             default:

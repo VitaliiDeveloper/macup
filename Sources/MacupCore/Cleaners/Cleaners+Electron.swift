@@ -96,10 +96,10 @@ extension Cleaners {
         }
         for root in [support, caches] { walk(root, depth: 0, root: root, isCaches: root == caches, names: names, chromium: chromium, record: record) }
         return groups.values.sorted { left, right in
-            left.kind != right.kind ? left.kind < right.kind : Updates.codePointOrder(left.name, right.name)
+            left.kind != right.kind ? left.kind < right.kind : Names.codePointOrder(left.name, right.name)
         }.map { group in
-            LayoutGroup(level: group.kind == "browser" ? 3 : 1, kind: group.kind, name: group.name, opened: Set(group.opened).sorted(by: Updates.codePointOrder),
-                        paths: group.paths.sorted(by: Updates.codePointOrder))
+            LayoutGroup(level: group.kind == "browser" ? 3 : 1, kind: group.kind, name: group.name, opened: Set(group.opened).sorted(by: Names.codePointOrder),
+                        paths: group.paths.sorted(by: Names.codePointOrder))
         }
     }
 

@@ -20,7 +20,7 @@ tasks-after-check|config||check tasks
 tasks-unicode-blanks|blanks||tasks
 tasks-latin1-config|latin1||tasks --json
 help-latin1-config|latin1|MACUP_LANG=|help
-tasks-step-09|octal|ANSWERS=q|tasks
+tasks-step-010|octal||tasks
 disk|||check --only check.disk
 disk-low||FAKE_DF_FREE=75000000 FAKE_SWAP_KB=2097152 FAKE_SNAPS=3|check --only check.disk
 disk-critical||FAKE_DF_FREE=10000000 FAKE_SMART=Failing|check --only check.disk
@@ -60,7 +60,7 @@ fix_config(){ mkdir -p "$1/.config/macup" "$1/xdg/macup"
   printf 'skip = clean.*\n' >"$1/xdg/macup/config"; }
 fix_blanks(){ mkdir -p "$1/.config/macup"; printf 'skip = clean.brew\302\240\nenable = clean.trash\343\200\200 # ideographic space\n' >"$1/.config/macup/config"; }
 fix_latin1(){ mkdir -p "$1/.config/macup"; printf 'language = uk\n# caf\351\nskip = clean.*\n' >"$1/.config/macup/config"; }   # sed stops at the byte
-fix_octal(){ mkdir -p "$1/.config/macup"; printf 'step_timeout_minutes = 09\n' >"$1/.config/macup/config"; }   # bash's arithmetic fails
+fix_octal(){ mkdir -p "$1/.config/macup"; printf 'step_timeout_minutes = 010\n' >"$1/.config/macup/config"; }   # octal 8 in bash, 10 in Swift; 09 is in 95_args.sh
 fix_lang(){ mkdir -p "$1/.config/macup"; printf 'language = ru\n' >"$1/.config/macup/config"; }
 fix_badconf(){ mkdir -p "$1/.config/macup"; printf 'skip = check.bogus\nenable = clean.nope\n' >"$1/.config/macup/config"; }
 fix_locked(){ mkdir -p "$1/Library/Application Support/macup/lock"; echo $$ >"$1/Library/Application Support/macup/lock/pid"; }   # this script runs

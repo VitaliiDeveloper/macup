@@ -19,6 +19,7 @@ FORMULA=$TAP/Formula/macup.rb
 MACOS='  depends_on macos: :ventura'
 if grep -qxF "$MACOS" "$FORMULA"; then HAS_MACOS=1; else HAS_MACOS=0; fi
 [ "$HAS_MACOS" = 1 ] || ! grep -q '^  depends_on macos:' "$FORMULA" || die "$FORMULA names another macOS than \"${MACOS#  }\": change it by hand"
+[ "$HAS_MACOS" = 1 ] || grep -qE '^  (depends_on |def install)' "$FORMULA" || die "found no place for \"${MACOS#  }\" in $FORMULA (before a depends_on or def install)"
 git -C "$TAP" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$TAP is not a git repository"
 if [ "$COMMIT" = 1 ] && [ -n "$(git -C "$TAP" status --porcelain 2>/dev/null)" ]; then die "$TAP has uncommitted changes; --commit would take them along"; fi
 
@@ -37,7 +38,7 @@ case "$SHA" in *[!0-9a-f]*|"") die "no SHA-256 computed" ;; esac
 
 sed -e "s|^  url \".*\"|  url \"$URL\"|" -e "s|^  sha256 \".*\"|  sha256 \"$SHA\"|" "$FORMULA" \
   | awk -v limit="$MACOS" -v has="$HAS_MACOS" '
-      !has && $0 == "  depends_on :macos" { print limit; has = 1; next }
+      $0 == "  depends_on :macos" { if (!has) print limit; has = 1; next }
       !has && /^  depends_on / { print limit; has = 1 }
       !has && /^  def install/ { print limit; print ""; has = 1 }
       { print }

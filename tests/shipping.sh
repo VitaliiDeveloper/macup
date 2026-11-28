@@ -95,6 +95,14 @@ formula 'depends_on macos: :monterey'; before=$(cat "$tap/Formula/macup.rb")
 out=$(bump 9.9.9 "$tap"); rc=$?
 [ $rc = 1 ] && grep -q 'names another macOS than "depends_on macos: :ventura": change it by hand' <<<"$out" && unchanged && [ ! -s "$FAKE_REMOTE/curl.log" ] \
   && pass "bump-formula: another macOS limit is not overwritten" || fail "bump-formula, other macOS (rc=$rc): $out"
+printf 'class Macup < Formula\n  url "x"\n  sha256 "y"\nend\n' >"$tap/Formula/macup.rb"; before=$(cat "$tap/Formula/macup.rb")
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 1 ] && grep -q 'found no place for "depends_on macos: :ventura"' <<<"$out" && unchanged && [ ! -s "$FAKE_REMOTE/curl.log" ] \
+  && pass "bump-formula: a formula with no place for the macOS limit stops it before any download" || fail "bump-formula, no place (rc=$rc): $out"
+printf 'class Macup < Formula\n  url "x"\n  sha256 "y"\n\n  depends_on "z"\n  depends_on :macos\nend\n' >"$tap/Formula/macup.rb"
+out=$(bump 9.9.9 "$tap"); rc=$?
+[ $rc = 0 ] && [ "$(sed -n '/depends_on/p' "$tap/Formula/macup.rb")" = '  depends_on macos: :ventura'$'\n''  depends_on "z"' ] \
+  && pass "bump-formula: depends_on :macos after another depends_on is replaced, not kept beside the limit" || { fail "bump-formula, later :macos (rc=$rc): $out"; cat "$tap/Formula/macup.rb"; }
 
 # --- the bootstrap (the root macup) and the installer against a fake release
 cat >"$work/bin/sw_vers" <<'FAKE'
@@ -162,6 +170,13 @@ for command in self-update "--lang en schedule weekly" uninstall; do
     && [ "$(urls)" = "$asset_sum" ] || { refused=0; echo "  $command (rc=$rc): $out"; }
 done
 [ $refused = 1 ] && pass "bootstrap before the release asset: self-update, schedule and uninstall, which act on their own file, are not run from a copy" || fail "bootstrap before the asset, commands on their own file"
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" schedule off); rc=$?
+[ $rc = 3 ] && grep -qE "^$bin/\.macup-update\.[A-Za-z0-9]+/macup schedule off$" "$home/ran.log" && untouched \
+  && pass "bootstrap before the release asset: schedule off runs on 2.9.2" || fail "bootstrap before the asset, schedule off (rc=$rc): $out"
+cp "$FAKE_REMOTE/raw/v2.9.2/macup.sha256" "$work/stub.sha256"; echo "$(printf '%064d' 4)  macup" >"$FAKE_REMOTE/raw/v2.9.2/macup.sha256"
+fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?; cp "$work/stub.sha256" "$FAKE_REMOTE/raw/v2.9.2/macup.sha256"
+[ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*. Nothing changed' <<<"$out" && ! grep -qE 'this run uses|checksum' <<<"$out" \
+  && untouched && [ ! -e "$home/ran.log" ] && pass "bootstrap before the release asset: a 2.9.2 that does not match its SHA-256 is never run" || fail "bootstrap, 2.9.2 checksum (rc=$rc): $out"
 rm -rf "$FAKE_REMOTE/raw/v2.9.2"; fresh "$work/bootstrap"; out=$(run /bin/bash "$bin/macup" check --no-color); rc=$?
 [ $rc = 1 ] && grep -q 'macup 9.9.9 is not published yet, or the download failed: https://github.com/.*/v9.9.9/macup-9.9.9-macos-universal.tar.gz. Nothing changed' <<<"$out" \
   && ! grep -qE 'this run uses|Download failed' <<<"$out" && untouched && [ ! -e "$home/ran.log" ] && pass "bootstrap before the release asset, without 2.9.2 either: it stays and says so" || { fail "bootstrap without both (rc=$rc): $out"; ls -A "$bin"; }

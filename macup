@@ -90,9 +90,12 @@ legacy(){ # → $WORK/macup: the last 2.9 script, checked as 2.9 checks its own 
 # A release is tagged minutes before its binary is uploaded, and from then on 2.9 copies update to this file. Until the
 # binary is there, a run uses the last 2.9 from a temporary copy and replaces nothing; the next run tries 3.0 again.
 waiting(){
-  local arg
+  local arg previous=""
   # 2.9 takes its own path from $0: from a temporary copy these would schedule, update or uninstall that copy
-  for arg in "$@"; do case "$arg" in self-update|selfupdate|upgrade|schedule|uninstall) say missing "$MACUP_VERSION" "$URL"; exit 1 ;; esac; done
+  for arg in "$@"; do
+    case "$previous:$arg" in *:self-update|*:selfupdate|*:upgrade|*:uninstall|schedule:daily|schedule:weekly) say missing "$MACUP_VERSION" "$URL"; exit 1 ;; esac
+    previous=$arg
+  done
   # the installer says itself that it could not finish
   [ -z "${MACUP_FROM_INSTALLER:-}" ] && legacy 2>/dev/null || { say missing "$MACUP_VERSION" "$URL"; exit 1; }
   say waiting "$MACUP_VERSION" "$LEGACY_VERSION"

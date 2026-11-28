@@ -28,6 +28,8 @@ enum SelfUpdate {
         guard mkdtemp(&template) != nil else { say(i18n.format("Couldn't write %s", target)); return 1 }
         let work = String(cString: template)
         defer { try? FileManager.default.removeItem(atPath: work) }
+        // a download cut short would stay hidden next to the binary
+        Interrupt.install({ try? FileManager.default.removeItem(atPath: work); exit(1) }, shell: context.shell)
         switch Release.fetch(version, repo: env.repo, into: work, shell: context.shell) {
         case .download(let url)?: say(i18n.format("Download failed: %s", url)); return 1
         case .checksum?: say(i18n.translate("The downloaded file does not match its published checksum; nothing changed.")); return 1

@@ -20,6 +20,7 @@ case "$url" in
   *) exit 6 ;;
 esac
 [ -f "$file" ] || exit 22
+case "$url" in *.tar.gz) sleep "${FAKE_SLOW:-0}" ;; esac
 if [ -n "$out" ]; then cp "$file" "$out"; else cat "$file"; fi
 FAKE
 # git answers ls-remote from FAKE_TAGS ("v1.0.0 v2.0.0"), writes what it was asked to git.log and leaves the rest to the real git
@@ -89,6 +90,7 @@ FAKE
 cat >"$work/bin/launchctl" <<'FAKE'
 #!/bin/bash
 echo "$*" >>"$HOME/launchctl.log"
+[ -n "${FAKE_LAUNCHCTL_FAIL:-}" ] && exit 1
 [ "$1" = print ] && [ -n "${FAKE_PROGRAM:-}" ] && printf '\tprogram = %s\n' "$FAKE_PROGRAM"
 exit 0
 FAKE
@@ -222,7 +224,7 @@ if [ -f "$real" ]; then
   current=$("$real" version | sed -n 's/^macup //p')
   shome="$work/swift"; sbin="$shome/bin"; splist="$shome/Library/LaunchAgents/com.vitaliideveloper.macup.plist"; asset_name=macup-9.9.9-macos-universal.tar.gz
   mkdir -p "$shome/.config/macup" "${splist%/*}" "$shome/links"; printf 'language = en\n' >"$shome/.config/macup/config"; ln -sf "$sbin/macup" "$shome/links/macup"
-  sfresh(){ chmod 755 "$sbin" 2>/dev/null; rm -rf "$sbin" "$splist" "$shome/launchctl.log"; mkdir -p "$sbin"; cp "$real" "$sbin/macup"; : >"$FAKE_REMOTE/curl.log"; }
+  sfresh(){ chmod 755 "$sbin" 2>/dev/null; rm -rf "$sbin" "$splist" "$shome/launchctl.log" "$shome/Library/Application Support/macup/schedule_checked"; mkdir -p "$sbin"; cp "$real" "$sbin/macup"; : >"$FAKE_REMOTE/curl.log"; }
   srun(){ env HOME="$shome" MACUP_PATH=keep "$@" </dev/null 2>&1; }
   update(){ sfresh; srun "${1:-$sbin/macup}" self-update --no-color; }
   kept(){ cmp -s "$sbin/macup" "$real" && [ "$(ls -A "$sbin")" = macup ] && [ ! -e "$shome/launchctl.log" ]; }
@@ -250,6 +252,9 @@ if [ -f "$real" ]; then
   release_asset 9.9.9 "$work/asset/macup"
   sfresh; chmod 555 "$sbin"; out=$(srun "$sbin/macup" self-update --no-color); rc=$?; chmod 755 "$sbin"
   [ $rc = 1 ] && [ "$out" = "Couldn't write $(cd "$sbin" && pwd -P)/macup" ] && kept && [ "$(urls)" = main/macup ] && pass "self-update (Swift): a folder it cannot write is said" || fail "self-update (Swift): read-only folder ($rc): $out"
+  sfresh; env HOME="$shome" MACUP_PATH=keep FAKE_SLOW=3 "$sbin/macup" self-update --no-color </dev/null >"$work/term.out" 2>&1 & pid=$!
+  sleep 1; kill -TERM $pid; wait $pid; rc=$?
+  [ $rc = 1 ] && kept && pass "self-update (Swift) stopped during the download: nothing changed, nothing left next to the binary" || { fail "self-update (Swift) stopped ($rc)"; ls -A "$sbin"; }
   scellar="$shome/brew/Cellar/macup/9.9.9/bin"; mkdir -p "$scellar" "$shome/brew/bin"; cp "$real" "$scellar/macup"; ln -sf ../Cellar/macup/9.9.9/bin/macup "$shome/brew/bin/macup"
   out=$(update "$shome/brew/bin/macup"); rc=$?
   [ $rc = 0 ] && [ "$out" = 'macup was installed with Homebrew. Update it with: brew upgrade macup' ] && cmp -s "$scellar/macup" "$real" && [ ! -s "$FAKE_REMOTE/curl.log" ] \
@@ -271,8 +276,16 @@ if [ -f "$real" ]; then
   out=$(srun env FAKE_PROGRAM=/bin/bash "$sbin/macup" version); rc=$?
   [ $rc = 0 ] && cmp -s "$splist" "$work/splist" && [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup"$'\n'"$reloaded" ] \
     && pass "first run (Swift): a loaded job that still runs /bin/bash is loaded again" || { fail "first run (Swift), loaded job ($rc): $out"; cat "$shome/launchctl.log"; }
-  rm -f "$shome/launchctl.log"; out=$(srun env FAKE_PROGRAM="$sbin/macup" "$sbin/macup" version); rc=$?
-  [ $rc = 0 ] && [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a right schedule is only looked at" || fail "first run (Swift), right schedule ($rc): $(cat "$shome/launchctl.log")"
+  rm -f "$shome/launchctl.log"; srun env FAKE_PROGRAM="$sbin/macup" "$sbin/macup" version >/dev/null; srun "$sbin/macup" version >/dev/null
+  [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a right schedule is looked at once" || fail "first run (Swift), right schedule: $(cat "$shome/launchctl.log")"
+  rm -f "$shome/launchctl.log"; touch "$splist"; srun "$sbin/macup" version >/dev/null
+  [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a changed schedule is looked at again" || fail "first run (Swift), changed schedule: $(cat "$shome/launchctl.log" 2>/dev/null)"
+
+  # schedule from a relative path names the absolute one; a launchctl that refuses leaves no plist
+  sfresh; out=$(cd "$sbin" && srun ./macup schedule weekly --no-color); rc=$?
+  [ $rc = 0 ] && grep -qF "<array><string>$(cd "$sbin" && pwd -P)/macup</string><string>check</string>" "$splist" && pass "schedule (Swift) run as ./macup: the absolute path" || { fail "schedule (Swift) relative ($rc): $out"; cat "$splist"; }
+  sfresh; out=$(srun env FAKE_LAUNCHCTL_FAIL=1 "$sbin/macup" schedule daily --no-color); rc=$?
+  [ $rc = 1 ] && [ "$out" = 'launchd did not accept the schedule; nothing changed.' ] && [ ! -e "$splist" ] && pass "schedule (Swift): launchd refuses, no plist left" || fail "schedule (Swift), launchd refuses ($rc): $out"
 else echo "SKIP self-update and the schedule repair of the Swift build: no binary at $real"; fi
 
 echo; [ $failed = 0 ] && echo "shipping: ALL PASS" || { echo "shipping: SOME FAILED"; exit 1; }

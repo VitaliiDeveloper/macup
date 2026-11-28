@@ -47,8 +47,7 @@ enum Uninstall {
         // rm as a tool: it goes on past what it cannot remove and says why, as bash's did
         let remove = { (argv: [String], stderr: Shell.Out) in _ = context.shell.spawn(argv, stderr: stderr).map(Shell.wait) }
         if Files.isRegular(env.schedPlist) {
-            let quiet = { (argv: [String]) -> Int32 in context.shell.spawn(argv, stderr: .null).map(Shell.wait) ?? 127 }
-            if quiet(["launchctl", "bootout", "gui/\(getuid())/\(Env.schedLabel)"]) != 0 { _ = quiet(["launchctl", "unload", env.schedPlist]) }
+            Launchctl(env: env, shell: context.shell).unload()
             remove(["rm", "-f", env.schedPlist], .inherit)
         }
         for dir in dirs { remove(["rm", "-rf", dir], .inherit) }

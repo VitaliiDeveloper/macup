@@ -71,6 +71,13 @@ public enum Schedule {
             """
     }
 
+    static func newer(_ path: String, than other: String) -> Bool {
+        var first = stat(), second = stat()
+        guard stat(path, &first) == 0, stat(other, &second) == 0 else { return false }
+        let (stamped, changed) = (first.st_mtimespec, second.st_mtimespec)
+        return (stamped.tv_sec, stamped.tv_nsec) >= (changed.tv_sec, changed.tv_nsec)
+    }
+
     static func escaped(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
     }
@@ -104,8 +111,15 @@ public enum Schedule {
             let temporary = env.schedPlist + ".new"
             guard (try? plist.replacingOccurrences(of: bashArray, with: "<array>").write(toFile: temporary, atomically: false, encoding: .utf8)) != nil,
                   rename(temporary, env.schedPlist) == 0 else { unlink(temporary); return }
-        } else if !launchctl.runsBash() {
-            return
+        } else {
+            // looked at once after each change of the plist, not on every run
+            let stamp = env.stateDir + "/schedule_checked"
+            guard !newer(stamp, than: env.schedPlist) else { return }
+            if !launchctl.runsBash() {
+                try? FileManager.default.createDirectory(atPath: env.stateDir, withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: stamp, contents: nil)
+                return
+            }
         }
         launchctl.unload()
         _ = launchctl.load(retry: true)

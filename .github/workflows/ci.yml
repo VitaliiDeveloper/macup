@@ -121,10 +121,15 @@ jobs:
 
   diff:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]   # about 2,000 runs passed the one job's 60 minutes
+    name: diff (${{ matrix.shard }}/4)
     steps:
       - uses: actions/checkout@v7
       - name: Build
         run: ./build.sh
       - name: The bash and the Swift build give the same results
-        run: tests/diff.sh
+        run: DIFF_SHARD=${{ matrix.shard }}/4 tests/diff.sh

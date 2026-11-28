@@ -323,7 +323,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 ## Follow-ups queued
 
 - [x] After wave A (#19): move `Checks.glob` (fnmatch, strcoll in the locale) into Foundation and use it in `Report.swift`'s tidy, which sorts by bytes where bash's `ls -r` uses the locale; two reports from the same second can make `keep_reports` keep a different one. Also set LC_CTYPE with LC_COLLATE (from `Env.lcCtype`'s decision): with LC_CTYPE "C" strcoll orders `a é b B e` where bash's glob and `sort` give `a b B e é` (found by the leftovers unit). Owner: the commands unit's session; it blocks the leftovers unit's non-ASCII sort test.
-- [ ] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs.
+- [x] CI's `diff` job hit its 20-minute limit at 819 runs (the PR run took 18.5 minutes); the limit is now 60. If it keeps growing, split `diff.sh` by unit block into parallel jobs. At about 2,000 runs it passed 60 minutes on every run from 7e098f9 on: `DIFF_SHARD=i/n` takes every n-th case, and CI runs 4 shards.
 - [x] Phase 3: move `Terminal.ask` and `Terminal.isYes` from the commands unit into Foundation for the pick and confirmations (#20).
 - [ ] Wave B, cleaners unit: cleaners.sh starts `kb_bg` for `~/Library/Caches`, `CoreSimulator/Devices` and `Xcode/Archives` when `check.sizes` runs; until those starts are ported, `measure.get` measures them in the foreground.
 - [x] `check.macos_updates`: owned by the updates unit, a small PR after #12 (#14).

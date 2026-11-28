@@ -57,6 +57,11 @@ final class ExecTests: XCTestCase {
         ("Library/Application Support/Code/User/workspaceStorage/.abc", false), ("Library/Application Support/Code/User/workspaceStorage/a/b", false),
         (".zshrc", true), (".nvm/alias/default", true), (".nvm/versions/node/v18.1.0", true), (".npm/_npx/abc", true),
         (".cargo/registry/index/keep", true), (".local/bin/agy.notes", true),
+        // a name that starts with a combining mark: bash compares bytes, so the slash before it is still a slash
+        ("Library/Application Support/\u{301}X/data", false), ("Library/Application Support/\u{301}X/Cache/c", true),
+        ("Library/Application Support/Code/User/workspaceStorage/\u{301}abc", false), (".claude/file-history/\u{301}abc", false),
+        ("Code/old/\u{301}node_modules", false), ("Code/\u{301}x/node_modules", true), ("Library/Caches/\u{301}x/../y", false),
+        ("Library/Caches/\u{301}Arc/org.sparkle-project.Sparkle", false), ("\u{301}Library/Caches/x", false),
     ]
 
     func testSafePathTable() throws {

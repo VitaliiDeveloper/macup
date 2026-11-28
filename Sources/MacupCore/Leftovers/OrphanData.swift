@@ -49,7 +49,7 @@ extension Leftovers {
         for folder in ["Preferences", "Caches", "HTTPStorages", "Saved Application State", "WebKit", "Logs"] {
             for entry in glob("\(library)/\(folder)", "*") where exists(entry) && !Run.isSymlink(entry) {
                 let name = lc(basename(entry))
-                guard startsWith(name, vendor + ".") else { continue }
+                guard Bash.starts(name, vendor + ".") else { continue }
                 paths.append(entry)
                 var id = name
                 for suffix in [".plist", ".savedstate", ".binarycookies"] where id.hasSuffix(suffix) { id = String(id.dropLast(suffix.count)) }
@@ -94,7 +94,7 @@ extension Leftovers {
     }
 
     static func nameOK(_ names: Taken, _ name: String) -> Bool {
-        !name.isEmpty && !holds(genericWords, " \(name) ") && !names.apps.contains(Array(name.utf8)) && !names.apple.contains(Array(name.utf8))
+        !name.isEmpty && !Bash.holds(genericWords, " \(name) ") && !names.apps.contains(Array(name.utf8)) && !names.apple.contains(Array(name.utf8))
     }
 
     static func byName(_ run: Run, _ state: State, _ names: Taken, _ folder: String, _ name: String) -> [String] {
@@ -109,7 +109,7 @@ extension Leftovers {
         guard !ids.isEmpty else { return false }
         return listing.lines.dropFirst().contains { line in
             let name = lc(basename(line))
-            return names.apps.contains(Array(name.utf8)) || ids.contains { holds(name, $0) }
+            return names.apps.contains(Array(name.utf8)) || ids.contains { Bash.holds(name, $0) }
         }
     }
 }

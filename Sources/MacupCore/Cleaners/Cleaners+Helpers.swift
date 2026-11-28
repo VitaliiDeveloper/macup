@@ -75,8 +75,6 @@ extension Cleaners {
     /// `[ "$1" = "$2" ]`: the same bytes, where Swift's == would also take a composed and a decomposed é as one.
     static func same(_ left: String, _ right: String) -> Bool { left.unicodeScalars.elementsEqual(right.unicodeScalars) }
 
-    /// `case "$text" in "$prefix"*)`, and Python's str.startswith: code point by code point.
-    static func startsWith(_ text: String, _ prefix: String) -> Bool { text.unicodeScalars.starts(with: prefix.unicodeScalars) }
 
     /// The text after a prefix it starts with, as `${text#"$prefix"}`.
     static func after(_ prefix: String, _ text: String) -> String {

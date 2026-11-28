@@ -73,13 +73,13 @@ extension Cleaners {
         }
         var groups: [String: (kind: String, name: String, paths: Set<String>, opened: [String])] = [:]
         func record(_ root: String, _ path: String) {
-            if coveredPaths.contains(where: { same($0, path) || startsWith(path, $0 + "/") }) { return }
+            if coveredPaths.contains(where: { same($0, path) || Bash.starts(path, $0 + "/") }) { return }
             let top = after(root + "/", path).components(separatedBy: "/")[0]
             let profile = Measure.parent(path)
             let appProfile = root == support ? profile : support + after(caches, profile)
             var userData = appProfile
-            while startsWith(userData, support + "/"), !has(userData, "Local State") { userData = Measure.parent(userData) }
-            var key = startsWith(userData, support + "/") ? after(support + "/", userData) : top
+            while Bash.starts(userData, support + "/"), !has(userData, "Local State") { userData = Measure.parent(userData) }
+            var key = Bash.starts(userData, support + "/") ? after(support + "/", userData) : top
             if key.hasSuffix("/User Data") { key = String(String.UnicodeScalarView(key.unicodeScalars.dropLast(10))) }
             let kind: String, name: String
             if let app = apps.last(where: { same($0.folder, top) }) {

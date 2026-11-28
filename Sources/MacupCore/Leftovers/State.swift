@@ -98,10 +98,6 @@ extension Leftovers {
     /// Bash compares bytes where Swift's `==`, `hasPrefix` and `contains` would take "é" and "e" + accent as one.
     static func same(_ left: String, _ right: String) -> Bool { left.utf8.elementsEqual(right.utf8) }
 
-    static func startsWith(_ text: String, _ prefix: String) -> Bool { text.utf8.starts(with: prefix.utf8) }
-
-    static func holds(_ text: String, _ part: String) -> Bool { Data(text.utf8).range(of: Data(part.utf8)) != nil }
-
     static func codesign(_ run: Run, _ path: String) -> [String] {
         var fds: [Int32] = [0, 0]
         guard pipe(&fds) == 0 else { return [] }
@@ -152,9 +148,7 @@ extension Leftovers {
         return Names.glob(folder, literal + pattern)
     }
 
-    static func basename(_ path: String) -> String {
-        path.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? path
-    }
+    static func basename(_ path: String) -> String { SafePaths.lastName(path) }
 
     static func lastComponent(_ id: String) -> String {
         id.split(separator: ".", omittingEmptySubsequences: false).last.map(String.init) ?? id

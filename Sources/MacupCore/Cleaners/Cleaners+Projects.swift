@@ -13,11 +13,11 @@ extension Cleaners {
         var modules = "", artifacts = ""
         for root in run.safePaths.projectRoots() {
             let found = Bash.lines(find(run, [root, "-maxdepth", "5", "-type", "d", "(", "-name", ".git"] + artifactNames.flatMap { ["-o", "-name", $0] }
-                                              + [")", "-prune", "-print"])).filter { !$0.hasSuffix("/.git") }
+                                              + [")", "-prune", "-print"])).filter { !Bash.ends($0, "/.git") }
             let real = found.filter { !$0.isEmpty && SafePaths.artifactOK($0) }
             for folder in found where !folder.isEmpty {
                 let relative = after(root, folder)
-                if Measure.parent(relative).contains("/.") || relative.hasSuffix("/lib/node_modules") { continue }   // hidden, or a global npm install
+                if Bash.holds(Measure.parent(relative), "/.") || Bash.ends(relative, "/lib/node_modules") { continue }   // hidden, or a global npm install
                 guard SafePaths.artifactOK(folder) else { continue }
                 // any depth (src/app/components/x.tsx), but never inside build folders, where an install touches every file;
                 // a folder only named like one (build/ with source, no build.gradle) is looked into

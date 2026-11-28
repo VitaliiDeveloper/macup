@@ -106,7 +106,7 @@ extension Cleaners {
         rest = rest[hostEnd...]
         if let end = rest.firstIndex(where: { $0 == "?" || $0 == "#" }) { rest = rest[..<end] }
         let path = percentDecoded(String(rest))
-        guard startsWith(path, home + "/"), !path.contains("/../"), !Checks.exists(path), !startsWith(path, home + "/Library/") else { return false }
+        guard Bash.starts(path, home + "/"), !path.contains("/../"), !Checks.exists(path), !Bash.starts(path, home + "/Library/") else { return false }
         var current = home
         for part in after(home + "/", path).components(separatedBy: "/") {
             let next = current.hasSuffix("/") ? current + part : current + "/" + part

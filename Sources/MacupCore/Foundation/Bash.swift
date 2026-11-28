@@ -42,6 +42,16 @@ enum Bash {
         return String(scalars)
     }
 
+    /// `case "$text" in "$prefix"*)`, by bytes as bash compares: Swift's hasPrefix, hasSuffix and contains read "/" and a
+    /// combining mark after it as one character, and a composed and a decomposed é as one.
+    static func starts(_ text: String, _ prefix: String) -> Bool { text.utf8.starts(with: prefix.utf8) }
+
+    /// `case "$text" in *"$suffix")`, by bytes.
+    static func ends(_ text: String, _ suffix: String) -> Bool { text.utf8.reversed().starts(with: suffix.utf8.reversed()) }
+
+    /// `case "$text" in *"$part"*)`, by bytes.
+    static func holds(_ text: String, _ part: String) -> Bool { Data(text.utf8).range(of: Data(part.utf8)) != nil }
+
     /// The pieces between newlines; "a\n" gives ["a", ""].
     static func lines(_ text: String) -> [String] {
         text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map { String(String.UnicodeScalarView($0)) }

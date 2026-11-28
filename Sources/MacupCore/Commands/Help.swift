@@ -1,4 +1,4 @@
-/// `macup help` (help.sh). The texts are the bash build's, line for line; tests/diff.sh compares them.
+/// `macup help` (2.9's help.sh). The texts are 2.9's, line for line; ArgumentsTests holds them as fixtures.
 public enum Help {
     /// `usage`: the help in the run's language; `conf` is the config path as the user writes it (~/…).
     public static func text(lang: Lang, colors: Colors, conf: String) -> String {

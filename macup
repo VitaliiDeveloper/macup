@@ -4,7 +4,7 @@
 # A 2.9 copy updates itself from main/macup: it reads MACUP_VERSION below, installs this file over itself and checks it with
 # bash -n, nothing more. The next run lands here: this downloads the release binary, checks it, replaces itself with it by
 # rename, points the schedule at it and runs the command that was asked for. A Mac older than macOS 13, where the binary
-# cannot start, gets the last 2.9 script instead. Becomes the root macup at the end of phase 5 (docs/swift-port-plan.md).
+# cannot start, gets the last 2.9 script instead.
 MACUP_VERSION="3.0.0"
 LEGACY_VERSION="2.9.2"   # the last 2.9.x, for Macs older than macOS 13
 

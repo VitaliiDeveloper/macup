@@ -82,7 +82,7 @@ out=$(bump --commit 9.9.9 "$tap"); rc=$?
 [ $rc = 0 ] && [ "$(git -C "$tap" log -1 --format=%s)" = "macup 9.9.9" ] && [ -z "$(git -C "$tap" status --porcelain)" ] && ! grep -qE '^git (-C [^ ]+ )?push' "$FAKE_REMOTE/git.log" \
   && pass "bump-formula --commit: committed, never pushed" || fail "bump-formula --commit (rc=$rc): $out"
 
-# --- the bootstrap (tools/bootstrap.sh, the root macup once phase 5 ends) and the installer against a fake release
+# --- the bootstrap (the root macup) and the installer against a fake release
 cat >"$work/bin/sw_vers" <<'FAKE'
 #!/bin/bash
 echo "${FAKE_MACOS:-15.1}"
@@ -102,11 +102,11 @@ publish(){ # FILE REF: FILE as raw/<REF>/macup with its macup.sha256, as 2.9 cop
   mkdir -p "$FAKE_REMOTE/raw/$2"; cp "$1" "$FAKE_REMOTE/raw/$2/macup"; echo "$(sum256 "$1")  macup" >"$FAKE_REMOTE/raw/$2/macup.sha256"
 }
 rm -rf "$FAKE_REMOTE"; mkdir -p "$FAKE_REMOTE" "$work/asset"
-sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' tools/bootstrap.sh >"$work/bootstrap"; publish "$work/bootstrap" main
+sed 's/^MACUP_VERSION=.*/MACUP_VERSION="9.9.9"/' macup >"$work/bootstrap"; publish "$work/bootstrap" main
 fake_binary 9.9.9 "$work/asset/macup"
-# 2.9.2 as released when this checkout has its tag; else the bash build, whose self-update is 2.9.2's (MACUP_SELF aside)
-if git cat-file -e v2.9.2:macup 2>/dev/null; then git show v2.9.2:macup >"$work/macup-2.9.2"; echo "2.9.2: the v2.9.2 tag"
-else sed 's/^MACUP_VERSION=.*/MACUP_VERSION="2.9.2"/' macup >"$work/macup-2.9.2"; echo "2.9.2: the bash build"; fi
+# 2.9.2 as released, from its tag (CI checks out with tags)
+git cat-file -e v2.9.2:macup 2>/dev/null || { echo "FAIL the v2.9.2 tag is not in this checkout: git fetch --tags"; exit 1; }
+git show v2.9.2:macup >"$work/macup-2.9.2"
 publish "$work/macup-2.9.2" v2.9.2
 
 home="$work/old"; bin="$home/.local/bin"; plist="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"
@@ -121,8 +121,8 @@ untouched(){ cmp -s "$bin/macup" "$work/bootstrap" && grep -qF "$schedule_29" "$
   && [ -z "$(ls -A "$home/tmp")" ] && [ "$(ls -A "$bin")" = macup ]; }
 urls(){ sed 's|^https://raw.githubusercontent.com/VitaliiDeveloper/macup/||; s|^https://github.com/VitaliiDeveloper/macup/releases/download/||' "$FAKE_REMOTE/curl.log" | paste -sd' ' -; }
 
-/bin/bash -n tools/bootstrap.sh && grep -qE '^MACUP_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' tools/bootstrap.sh && grep -q '^# macup' tools/bootstrap.sh \
-  && grep -qE '^LEGACY_VERSION="2\.9\.[0-9]+"' tools/bootstrap.sh && pass "bootstrap: bash -n, the version line 2.9 reads, found by 2.9's rule" || fail "bootstrap: its lines"
+/bin/bash -n macup && grep -qE '^MACUP_VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' macup && grep -q '^# macup' macup \
+  && grep -qE '^LEGACY_VERSION="2\.9\.[0-9]+"' macup && pass "bootstrap: bash -n, the version line 2.9 reads, found by 2.9's rule" || fail "bootstrap: its lines"
 
 # before the tag: 2.9.2 falls back to main, and the bootstrap waits for the release asset
 fresh "$work/macup-2.9.2"
@@ -191,7 +191,7 @@ fresh "$work/bootstrap"; out=$(macos=12.7.4 run /bin/bash "$bin/macup" self-upda
 real=${MACUP_BIN:-$PWD/.build/debug/macup}
 if [ -f "$real" ]; then
   version=$("$real" version | sed -n 's/^macup //p'); mkdir -p "$work/real"; cp "$real" "$work/real/macup"; release_asset "$version" "$work/real/macup"
-  sed "s/^MACUP_VERSION=.*/MACUP_VERSION=\"$version\"/" tools/bootstrap.sh >"$work/bootstrap-real"
+  sed "s/^MACUP_VERSION=.*/MACUP_VERSION=\"$version\"/" macup >"$work/bootstrap-real"
   fresh "$work/bootstrap-real"; out=$(run /bin/bash "$bin/macup" version); rc=$?
   [ $rc = 0 ] && cmp -s "$bin/macup" "$real" && grep -qx "macup $version" <<<"$out" && pass "bootstrap: replaced by the real binary, which runs" || fail "bootstrap with the real binary ($rc): $out"
 else echo "SKIP bootstrap with the real binary: none at $real"; fi

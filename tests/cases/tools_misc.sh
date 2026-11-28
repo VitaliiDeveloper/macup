@@ -58,5 +58,5 @@ fi
 # --- MACUP_PATH=keep: macup leaves PATH as it is, so a fake brew wins over the real one (tests, the screenshot generator)
 home="$work/kp"; mkdir -p "$home/.config/macup" "$work/kpbin"; printf 'language = en\n' >"$home/.config/macup/config"
 printf '#!/bin/bash\necho "$*" >>"$HOME/brew.log"\n' >"$work/kpbin/brew"; chmod +x "$work/kpbin/brew"
-env -i HOME="$home" MACUP_PATH=keep PATH="$work/kpbin:/usr/bin:/bin:/usr/sbin:/sbin" MACUP_BUILD="$MACUP_BUILD" ${MACUP_BIN:+MACUP_BIN="$MACUP_BIN"} "$work/bin/macup_run" check --only clean.brew --no-color </dev/null >"$work/kp.out" 2>&1
+env -i HOME="$home" MACUP_PATH=keep PATH="$work/kpbin:/usr/bin:/bin:/usr/sbin:/sbin" MACUP_BIN="$MACUP_BIN" "$work/bin/macup_run" check --only clean.brew --no-color </dev/null >"$work/kp.out" 2>&1
 grep -q 'cleanup' "$home/brew.log" 2>/dev/null && pass "MACUP_PATH=keep: the brew on PATH is the one used" || { fail "MACUP_PATH=keep"; cat "$work/kp.out" | tail -5; }

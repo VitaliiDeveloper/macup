@@ -2,22 +2,13 @@
 # shellcheck disable=SC2154  # SC2154: work, quick_skip, build_path and the helpers come from tests/run.sh
 # Sourced by tests/run.sh: static checks, commands, check and clean levels, AI tools, open apps.
 # --- static
-if bash_only "build, syntax, shellcheck"; then
-  ./build.sh --check >/dev/null 2>&1 && pass "macup is built from src/" || fail "macup is out of date: run ./build.sh"
-  /bin/bash -n macup && /bin/bash -n install.sh && pass syntax || fail syntax
-  if command -v shellcheck >/dev/null; then shellcheck -s bash -S warning macup install.sh && pass shellcheck || fail shellcheck; fi
-fi
-# the binary runs everything itself: no bash build inside it, only the two marker lines install.sh and uninstall look for
-if [ "$MACUP_BUILD" = swift ]; then
-  ! LC_ALL=C grep -aqE '^(load_conf|exec_cand|run_key|leftovers_scan)\(\)\{' "$build_path" && LC_ALL=C grep -a -A1 -x '# macup' "$build_path" | grep -q '^MACUP_VERSION="' \
-    && pass "the binary carries no bash build, and its marker" || fail "the binary carries the bash build, or lost its marker"
-fi
-python3 tests/translations.py >/dev/null && pass translations || { fail translations; python3 tests/translations.py | head; }
-if command -v python3 >/dev/null; then   # macup runs without python3; its Python helpers are tested where there is one
-  python3 tests/test_helpers.py >"$work/py.out" 2>&1 && pass "python helpers" || { fail "python helpers"; tail -20 "$work/py.out"; }
-  if command -v ruff >/dev/null; then ruff check -q --select F src/py tests/*.py && pass ruff || fail ruff
-  elif python3 -m pyflakes --version >/dev/null 2>&1; then python3 -m pyflakes src/py tests/*.py && pass pyflakes || fail pyflakes; fi
-fi
+./build.sh --check >/dev/null 2>&1 && pass "the translations, macup.sha256 and the package are current" || fail "out of date: run ./build.sh"
+# the root macup is the bootstrap 2.9 copies update to: stock bash 3.2 must read it, as it must read the installer
+/bin/bash -n macup && /bin/bash -n install.sh && pass "bash 3.2 syntax of the bootstrap and the installer" || fail syntax
+if command -v shellcheck >/dev/null; then shellcheck -s bash -S warning macup install.sh && pass shellcheck || fail shellcheck; fi
+# the binary runs everything itself: no bash inside it, only the two marker lines install.sh and uninstall look for
+! LC_ALL=C grep -aqE '^(load_conf|exec_cand|run_key|leftovers_scan)\(\)\{' "$build_path" && LC_ALL=C grep -a -A1 -x '# macup' "$build_path" | grep -qx "MACUP_VERSION=\"$(sed -n 's/^MACUP_VERSION="\(.*\)"$/\1/p' macup)\"" \
+  && pass "the binary carries no bash, and its marker names the bootstrap's version" || fail "the binary carries bash, or its marker does not name the bootstrap's version"
 
 # --- nothing changes without a command
 home="$work/h"; mkdir -p "$home"

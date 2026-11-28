@@ -3,10 +3,11 @@
 # a fake home with caches and an app's leftovers, fake sizes and free space, no running apps. Nothing of this Mac
 # shows up, and nothing outside a temp folder is touched: MACUP_PATH=keep keeps the real Homebrew off PATH, and only
 # cleaners that work on files alone are run (no brew, npm, pip, docker, xcrun), each named below.
-#   tools/screenshots.sh            rebuild macup, then write docs/images/check.svg, summary.svg, menu.svg
+#   tools/screenshots.sh            rebuild the binary, then write docs/images/check.svg, summary.svg, menu.svg
 set -eo pipefail
 cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
+MACUP="$(swift build --show-bin-path)/macup"
 OUT=docs/images; mkdir -p "$OUT"
 W=$(mktemp -d "${TMPDIR:-/tmp}/macup-shots.XXXXXX"); trap 'chflags -R nouchg "$W" 2>/dev/null; rm -rf "$W"' EXIT
 H="$W/home"; L="$H/Library"; AS="$L/Application Support"; B="$W/bin"; mkdir -p "$B"
@@ -87,7 +88,7 @@ waitfor(){ local i=0; while [ $i -lt 240 ]; do grep -qF "$2" "$1" 2>/dev/null &&
 run(){ # file prompt input macup-args… — macup in a terminal; the input is typed once the prompt shows (no prompt: none)
   local f=$1 pr=$2 in=$3; shift 3; : >"$f"
   ( [ -n "$pr" ] && { waitfor "$f" "$pr"; printf '%s' "$in"; }; waitfor "$f" "${DONE:-Report: }"; sleep 1 ) | script -q /dev/null env -i MACUP_PATH=keep HOME="$H" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" TERM=xterm-256color LANG=en_US.UTF-8 \
-    MACUP_APPS="$H/Apps" MACUP_SYSLIB="$W/SysLib" /bin/bash "$PWD/macup" "$@" >"$f" 2>&1 || true
+    MACUP_APPS="$H/Apps" MACUP_SYSLIB="$W/SysLib" "$MACUP" "$@" >"$f" 2>&1 || true
   # the clock: a fixed report name and run time
   sed -i '' -E 's/macup_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9-]{8}/macup_2026-11-21_09-41-07/g; s/· [0-9]+m [0-9]+s/· 0m 38s/g' "$f"
 }

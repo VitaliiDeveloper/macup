@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Fake system tools for tests/run.sh and tests/diff.sh, so results never depend on this machine.
+# Fake system tools for tests/run.sh and tests/leftovers.sh, so results never depend on this machine.
 #   fakes DIR tool…   writes those fakes into DIR; each answers from FAKE_* variables or files in $HOME/.fake
 fakes(){
   local dir=$1 tool; shift; mkdir -p "$dir"

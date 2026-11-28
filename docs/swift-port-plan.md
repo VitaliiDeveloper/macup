@@ -25,17 +25,17 @@ Non-goals: new features, changed task ids or config keys. 3.0.0 behaves like 2.9
    - a differential harness that runs bash and Swift on the same fixture and diffs the output.
 
    Both pass at every merge into `swift/main`.
-2. **The bash build is the oracle and stays whole.** On `swift/main`, `src/*.sh` changes only by bash fixes merged from `main`. Swift never calls into pieces of it.
+2. **The bash build is the oracle and stays whole** (until phase 5 deletes it). On `swift/main`, `src/*.sh` changes only by bash fixes merged from `main`. Swift never calls into pieces of it.
 3. **Whole runs are routed, never split.** The Swift binary runs a command or a run itself only when every task it would touch is ported. Otherwise it hands the whole run to the embedded bash build (see "Routing"). Nothing ships half and half: the hybrid exists only on `swift/main`, for testing.
 4. **Nothing is ported blind.** A unit counts as done when the runs that cover its tasks go through Swift and pass both tests.
 5. **Sequential where pieces depend on each other, parallel where they do not.** A parallel wave starts only after the work it builds on is merged into `swift/main`.
 6. **Foundation only:** Swift 5.9 tools, macOS 13 deployment target, no third-party packages.
 7. **`main` is frozen for features** until 3.0.0. Critical fixes still go to `main`. Each fix is merged into `swift/main` and adds a line to "Bash fixes to carry over". A unit that ports the touched code ticks its line. This list is a checklist item on every merge (see "Every pull request").
-8. **Code rules (owner, 2026-11-26).** KISS and DRY come first: the plainest code that does the job, no copy-paste, no layer added for later. Every file stays under 500 lines, test files included. No single-letter names, whether variables, loop indices, closure or function parameters, or struct fields; `$0` and `_` are fine. These rules cover everything written for the port: Swift, tests and the shell harness. `src/*.sh` is exempt because it is the oracle (rule 2) and is deleted in phase 4.
+8. **Code rules (owner, 2026-11-26).** KISS and DRY come first: the plainest code that does the job, no copy-paste, no layer added for later. Every file stays under 500 lines, test files included. No single-letter names, whether variables, loop indices, closure or function parameters, or struct fields; `$0` and `_` are fine. These rules cover everything written for the port: Swift, tests and the shell harness. `src/*.sh` is exempt because it is the oracle (rule 2) and is deleted in phase 5.
 
 ## Routing
 
-Done with in phase 4: the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
+Historical: done with in phase 4, the binary carries no bash build and routes nothing; `main.swift` parses the command line and runs it. This section records how the hybrid worked from phase 0 to phase 4.
 
 From phase 0 on, the Swift binary is the `macup` entry point. It carries the built bash script.
 
@@ -55,6 +55,8 @@ This keeps `$$` for the lock and the watchdogs, signal delivery (the suite kills
 **Self-update and schedule stay off under the hybrid.** Until phase 5, `self-update` and `schedule` go through bash only on the bash build. On the Swift build they print "not available in this build". The bash `self_update` would install a script over the binary, and the bash `schedule` writes `/bin/bash <binary>` into the LaunchAgent.
 
 ## Parity
+
+Historical: phase 5 deleted `tests/diff.sh` and the bash build, so this section records how parity was checked until then.
 
 The differential harness lives in `tests/diff.sh` (phase 0). For every case it runs both builds on identical fixtures and fakes, in all three languages, with and without a terminal (through `script`). It diffs:
 
@@ -124,10 +126,11 @@ Sources/MacupCore/
   Checks/ Updates/ Tools/ Cleaners/ Leftovers/ Commands/
 Sources/macup/Generated/        Translations.swift (written by build.sh, not committed)
 Tests/MacupCoreTests/           XCTest
-tests/run.sh, tests/diff.sh     black-box suite and differential harness
+tests/run.sh                    black-box suite (tests/shipping.sh: the formula bump, the installer, the bootstrap)
+macup, macup.sha256             the bootstrap 2.9 copies update to (committed)
 ```
 
-**Built files are not committed on `swift/main`.** `macup` and `macup.sha256` are untracked there and built in CI, so parallel pull requests do not conflict on a 300 KB generated file. When `main` is merged in, a change to them on `main` is resolved by keeping them deleted, and the `src/` change comes in as usual. Phase 5 puts the root `macup` back as the bootstrap.
+**Built files are not committed on `swift/main`.** Until phase 5, `macup` and `macup.sha256` were untracked there and built in CI, so parallel pull requests do not conflict on a 300 KB generated file. Until phase 5, a change to them on `main` was resolved by keeping them deleted, and the `src/` change came in as usual. From phase 5 on, a merge of `main` resolves `macup` and `macup.sha256` to `swift/main`'s bootstrap, and a fix to `src/*.sh` on `main` is ported to Swift by hand. Phase 5 puts the root `macup` back as the bootstrap, committed with its `macup.sha256`; `build.sh --check` compares the two.
 
 ## Foundation (phase 0)
 
@@ -257,7 +260,7 @@ So the repository root keeps a bash `macup` with that exact version line, and it
 - on a macOS older than the deployment target, installs the last 2.9.x instead of a binary that cannot start;
 - rewrites an existing LaunchAgent. 2.9.x wrote `/bin/bash <path> check --quiet --notify`, and with a binary at that path launchd would fail with exit 126 silently forever. The 3.0 binary also checks and rewrites it on its first run, which covers Homebrew installs.
 
-It lives in `tools/bootstrap.sh` until the cleanup moves it to the root. Started by the LaunchAgent itself (`PPID` 1 or `XPC_SERVICE_NAME`), it runs that check from the download and changes nothing: `launchctl bootout` from inside the job would stop it before it could load the job again, so the swap and the reload wait for a run from a terminal. `install.sh` installs the bootstrap and runs it, so the download, the checks and the macOS 13 rule live in one place.
+It lived in `tools/bootstrap.sh` until the cleanup moved it to the root `macup`. Started by the LaunchAgent itself (`PPID` 1 or `XPC_SERVICE_NAME`), it runs that check from the download and changes nothing: `launchctl bootout` from inside the job would stop it before it could load the job again, so the swap and the reload wait for a run from a terminal. `install.sh` installs the bootstrap and runs it, so the download, the checks and the macOS 13 rule live in one place.
 
 The suite gets tests for each of these, including a 2.9.2 `self-update` against a fake release.
 
@@ -285,11 +288,11 @@ The suite gets tests for each of these, including a 2.9.2 `self-update` against 
 3. The suite runs.
 4. One pull request goes from `swift/main` into `main`.
 
-Merging it and tagging 3.0.0 happen only when the owner says so.
+Merging it and tagging 3.0.0 happen only when the owner says so. Push the tag right after the merge: from the merge on, `main/macup` is the 3.0.0 bootstrap, and a 2.9 copy that self-updates before the release asset is uploaded gets the bootstrap, which then says "not published yet" and exits 1 on every run, scheduled checks included, until the asset exists (`tests/shipping.sh` covers it; the copy recovers by itself).
 
 ## Every pull request into `swift/main`
 
-1. **The session runs and reports the numbers:** `./build.sh`, `swift build -c release`, XCTest, `tests/run.sh` on both builds and `tests/diff.sh`, in the background (about 12 minutes per suite).
+1. **The session runs and reports the numbers:** `./build.sh`, `swift build -c release`, XCTest and `tests/run.sh`, in the background (about 12 minutes). Until phase 5 also `tests/run.sh` on the bash build and `tests/diff.sh`.
 2. **A reviewer subagent on Opus at high effort** (Fable only where a review really needs it: it costs much more, owner 2026-11-26) reads the diff together with the bash it replaces, looking for changed behaviour. The session fixes or answers each finding.
 3. **A code review** (`/code-review` at high) reads the same diff. The session fixes or answers each finding.
 4. **CI** is green.
@@ -366,4 +369,7 @@ Not worth a release from `main`: the Swift port copies them so `diff.sh` stays e
 | 4 | `diff.sh` in four CI jobs (`DIFF_SHARD`) | `swift/diff-shards` | #29 | merged (1006a3f) |
 | 5 | release asset, macup marker, formula bump | `swift/release-asset` | #21 | merged (84f4222) |
 | 5 | 2.9 bootstrap, `install.sh` on the release binary | `swift/bootstrap` | #22 | merged (4f16158) |
+| 5 | README and CHANGELOG for 3.0.0 | `swift/docs-3.0` | #31 | merged (b9a3c85) |
+| 5 | the bash oracle's comparisons become expected values | `swift/oracle-values` | #32 | merged (4c41a38) |
+| 5 | the bootstrap as the root `macup`; `src/*.sh`, `src/py`, `tests/diff.sh` and the bash build deleted | `swift/cleanup` | #35 | open |
 | - | `diff.sh` fakes: the Time Machine `date` pin matches | `swift/date-pin` | #23 | merged (cd848fc) |

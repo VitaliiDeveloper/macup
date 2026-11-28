@@ -18,9 +18,10 @@ version=$("$built" version | sed -n 's/^macup //p')
 [ -n "$version" ] || die "$built does not say its version"
 [ -z "$want" ] || [ "$want" = "$version" ] || die "the tag says $want, the binary says $version"
 
-# 2.9 copies update themselves from the root macup: it must name this version and match its macup.sha256. Once it is
-# committed (the bootstrap), what is checked must be what was committed.
-if git ls-files --error-unmatch macup >/dev/null 2>&1; then git diff --quiet HEAD -- macup macup.sha256 || die "the root macup differs from the commit"; fi
+# 2.9 copies update themselves from the root macup, the bootstrap: what is checked must be what was committed, name this
+# version and match its macup.sha256.
+git ls-files --error-unmatch macup macup.sha256 >/dev/null 2>&1 || die "the root macup and macup.sha256 must be committed"
+git diff --quiet HEAD -- macup macup.sha256 || die "the root macup differs from the commit"
 [ "$(sed -n 's/^MACUP_VERSION="\(.*\)"$/\1/p' macup)" = "$version" ] || die "the root macup does not say MACUP_VERSION=\"$version\""
 [ "$(cat macup.sha256)" = "$(sum256 macup)  macup" ] || die "macup.sha256 does not match macup"
 /bin/bash -n macup || die "the root macup does not pass bash -n"

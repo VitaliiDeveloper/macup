@@ -3,7 +3,8 @@ import Darwin
 import Foundation
 
 /// `macup self-update` (commands.sh `self_update`, `fetch_release`): main names the latest version, and that version's
-/// release asset, checked as tools/bootstrap.sh checks it, replaces this binary by rename. A running macup keeps its file.
+/// release asset, checked as the bootstrap (the root macup) checks it, replaces this binary by rename. A running macup
+/// keeps its file.
 enum SelfUpdate {
     static func run(_ context: OneOff.Context) -> Int32 {
         let env = context.env, i18n = context.i18n
@@ -43,7 +44,7 @@ enum SelfUpdate {
     }
 }
 
-/// The release asset as tools/release.sh packs it, checked as tools/bootstrap.sh checks it.
+/// The release asset as tools/release.sh packs it, checked as the bootstrap (the root macup) checks it.
 enum Release {
     enum Failure: Equatable { case download(String), checksum, broken }
 

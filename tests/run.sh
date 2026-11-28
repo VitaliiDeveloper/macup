@@ -1,22 +1,14 @@
 #!/bin/bash
 # shellcheck disable=SC2088  # a literal ~ is what users type into the installer
 # macup test suite. Everything runs against throwaway fake home folders; the real one is never touched.
-#   tests/run.sh                     all tests, on the bash build (./macup)
-#   MACUP_BUILD=swift tests/run.sh   on the Swift binary (MACUP_BIN, else .build/debug/macup)
-# Every run goes through tests/macup_run, which starts the build under test.
+#   tests/run.sh   on the binary: MACUP_BIN, else .build/debug/macup (./build.sh builds it)
+# Every run goes through tests/macup_run, which starts the binary under test.
 cd "$(dirname "$0")/.." || exit 1
 work=$(mktemp -d "${TMPDIR:-/tmp}/macup-tests.XXXXXX"); trap 'rm -rf "$work"' EXIT
 failed=0; pass(){ echo "PASS $*"; }; fail(){ echo "FAIL $*"; failed=1; }
-export MACUP_BUILD=${MACUP_BUILD:-bash}
-case "$MACUP_BUILD" in
-  bash)  build_path="$PWD/macup" ;;
-  swift) export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}; build_path=$MACUP_BIN ;;
-  *)     echo "MACUP_BUILD is bash or swift"; exit 2 ;;
-esac
-[ -f "$build_path" ] || { echo "no $MACUP_BUILD build at $build_path: run ./build.sh"; exit 1; }
-echo "testing the $MACUP_BUILD build: $build_path"
-# tests that only make sense for the script (its syntax, the installer)
-bash_only(){ [ "$MACUP_BUILD" = bash ] && return 0; echo "SKIP $* (bash build only)"; return 1; }
+export MACUP_BIN=${MACUP_BIN:-$PWD/.build/debug/macup}; build_path=$MACUP_BIN
+[ -f "$build_path" ] || { echo "no binary at $build_path: run ./build.sh"; exit 1; }
+echo "testing $build_path"
 # shellcheck disable=SC2034  # read by tests/cases/*.sh
 quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go,clean.go_mod,clean.sim_unavailable,clean.quicklook,clean.docker,clean.docker_images,clean.docker_containers,clean.brew_autoremove,check.*'
 
@@ -25,6 +17,10 @@ quick_skip='update.*,clean.brew,clean.npm,clean.pnpm,clean.pip,clean.uv,clean.go
 fakes "$work/bin" pgrep lsof launchctl osascript
 ln -s "$PWD/tests/macup_run" "$work/bin/macup_run"
 export PATH="$work/bin:$PATH"
+# fake_first DIR TOOL VAR=VALUE…: with that environment macup runs DIR's fake TOOL; else the rest of the case file is not run,
+# so a real docker, brew, mas, npm or xcrun on this Mac is never reached (use as: fake_first … || return 1)
+fake_first(){ local dir=$1 tool=$2 found; shift 2; found=$(env "$@" MACUP_RUN_WHICH="$tool" macup_run)
+  [ "$found" = "$dir/$tool" ] && return 0; fail "$tool would be ${found:-none}, not the fake in $dir: the rest of this case file is not run"; return 1; }
 deleted(){ # fixture-dir macup-args… → files the run deleted
   local home=$1; shift; tests/fixture.sh "$home"; (cd "$home" && find . \( -type f -o -type l \) | sort) >"$home.b"
   env HOME="$home" macup_run "$@" </dev/null >"$home.out" 2>&1

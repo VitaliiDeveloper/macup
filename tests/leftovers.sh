@@ -60,7 +60,7 @@ cat >"$work/bin/osascript" <<'FAKE'
 exit 0
 FAKE
 chmod +x "$work/bin/"*; export PATH="$work/bin:$PATH" MACUP_PATH=keep   # the fakes above win over Homebrew's tools
-ln -s "$PWD/tests/macup_run" "$work/bin/macup_run"   # the build under test (MACUP_BUILD, MACUP_BIN from tests/run.sh)
+ln -s "$PWD/tests/macup_run" "$work/bin/macup_run"   # the binary under test (MACUP_BIN from tests/run.sh)
 
 app(){ # dir bundle-id
   mkdir -p "$1/Contents/MacOS"

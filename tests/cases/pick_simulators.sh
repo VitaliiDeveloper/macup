@@ -37,6 +37,7 @@ case "$*" in
 esac
 FAKE
 chmod +x "$home/.local/bin/xcrun"; SO='clean.sim_runtimes,clean.sim_erase,clean.sim_unused'
+fake_first "$home/.local/bin" xcrun HOME="$home" || return 1
 env HOME="$home" macup_run clean --level aggressive --only "$SO" --no-color </dev/null >/dev/null 2>&1
 [ ! -s "$home/xcrun.log" ] && pass "simulators: nothing without a pick, even at --level aggressive" || { fail "simulators touched without a pick"; cat "$home/xcrun.log"; }
 (sleep 2; printf '1-20\n'; sleep 1; printf 'y\n'; until_done "$work/sim.out") | script -q /dev/null env HOME="$home" macup_run check --only "$SO" --no-color >"$work/sim.out" 2>&1
@@ -58,6 +59,7 @@ case "\$*" in
 esac
 FAKE
 chmod +x "$home/.local/bin/xcrun"
+fake_first "$home/.local/bin" xcrun HOME="$home" || return 1
 env HOME="$home" macup_run check --only clean.sim_unavailable --no-color </dev/null >"$work/unav.out" 2>&1
 grep -qE 'safe +6 MB +Unavailable simulators \(2\)' "$work/unav.out" && [ ! -s "$home/xcrun.log" ] && pass "unavailable simulators: check shows both sets with their size" || { fail "unavailable simulators: check"; grep -i simulat "$work/unav.out"; }
 FAKE_RUNNING='/Applications/Xcode.app/Contents/MacOS/Xcode' env HOME="$home" macup_run clean --only clean.sim_unavailable --no-color </dev/null >"$work/unav.out" 2>&1
@@ -71,6 +73,7 @@ rm -f "$home/xcrun.log"; env NODEFAULT=1 HOME="$home" macup_run clean --only cle
 if ! PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin" command -v node >/dev/null; then
   home="$work/nonode"; mkdir -p "$home/.local/bin" "$home/.agents" "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; echo '{"skills":{}}' >"$home/.agents/.skill-lock.json"
   for tool in npm npx; do printf '#!/bin/bash\necho "%s $*" >>"$HOME/npm.log"\n' "$tool" >"$home/.local/bin/$tool"; chmod +x "$home/.local/bin/$tool"; done
+  fake_first "$home/.local/bin" npm PATH="$work/bin:/usr/bin:/bin" HOME="$home" || return 1
   mkdir -p "$home/brew/opt/node@24/bin"; cp /usr/bin/true "$home/brew/opt/node@24/bin/node"
   env PATH="$work/bin:/usr/bin:/bin" HOME="$home" HOMEBREW_PREFIX="$home/brew" macup_run check --only update.npm,update.skills --no-color </dev/null >"$work/nonode.out" 2>&1
   grep -q 'npm globals: skipped, node is not on PATH — run: brew link --.* node' "$work/nonode.out" && grep -q 'Agent skills: skipped, node is not on PATH — run: brew link' "$work/nonode.out" \
@@ -83,6 +86,7 @@ else echo "SKIP no node: node is installed here"; fi
 home="$work/mas"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; answering "$home/bin" mas; fakes "$home/bin" sudo
 answer "$home" mas outdated "$(printf '        1  Foo          (1.0    -> 1.1)\n123456789  Bar Baz Pro  (2.10.3 -> 3.0)')"; echo 1 >"$home/.fake/mas/upgrade 123456789.rc"
 mas_env=(HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin")
+fake_first "$home/bin" mas "${mas_env[@]}" || return 1
 env "${mas_env[@]}" FAKE_SUDO_RC=0 macup_run update --only update.mas --no-color </dev/null >"$work/mas.out" 2>&1
 grep -q '^      Bar Baz Pro (2.10.3 → 3.0)$' "$work/mas.out" && grep -q '✓ App Store: Foo (1.0 → 1.1)$' "$work/mas.out" \
   && grep -q '✗ App Store: updates not installed: Bar Baz Pro (2.10.3 → 3.0) — open the App Store' "$work/mas.out" \
@@ -92,18 +96,18 @@ rm -f "$home/calls.log"; env "${mas_env[@]}" FAKE_SUDO_ASK_RC=1 macup_run update
 grep -q 'updates not installed: 2 — they need your Mac password' "$work/mas.out" && [ ! -e "$home/calls.log" ] && pass "App Store: no password, mas never runs" \
   || { fail "App Store without a password"; grep 'App Store' "$work/mas.out"; }
 
-# --- intended differences of the Swift build (docs/swift-port-plan.md): each build is held to its own behaviour
-# without python3 (here: no Command Line Tools, so /usr/bin/python3 does not count) bash skips npm globals; Swift reads npm's JSON itself
+# --- intended differences from 2.9 (docs/swift-port-plan.md, "Intended differences")
+# without python3 (here: no Command Line Tools, so /usr/bin/python3 does not count) npm globals still run: macup reads npm's JSON itself
 home="$work/nopy"; mkdir -p "$home/.config/macup"; printf 'language = en\n' >"$home/.config/macup/config"; answering "$home/bin" npm node xcode-select
 answer "$home" xcode-select -p /nonexistent; answer "$home" npm outdated '{"aaa":{"current":"1.0.0","latest":"2.0.0"}}'
 env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" macup_run check --only update.npm --no-color </dev/null >"$work/nopy.out" 2>&1; rc=$?
-[ $rc = 0 ] && grep -q 'Summary' "$work/nopy.out" && if [ "$MACUP_BUILD" = swift ]; then grep -q 'npm globals: 1 outdated' "$work/nopy.out"; else ! grep -q 'npm globals' "$work/nopy.out"; fi \
-  && pass "no python3: npm globals as the $MACUP_BUILD build does it" || { fail "no python3 ($MACUP_BUILD)"; cat "$work/nopy.out"; }
-# a step run from the home folder that is stopped: bash runs it in a subshell and loses its warning from the summary and --json
+[ $rc = 0 ] && grep -q 'Summary' "$work/nopy.out" && grep -q 'npm globals: 1 outdated' "$work/nopy.out" \
+  && pass "no python3: npm globals still run" || { fail "no python3"; cat "$work/nopy.out"; }
+# a step run from the home folder that is stopped: its warning counts in the summary and --json (2.9 lost it in a subshell)
 home="$work/skillslow"; mkdir -p "$home/.config/macup" "$home/.agents"; printf 'language = en\n' >"$home/.config/macup/config"; echo '{"skills":{}}' >"$home/.agents/.skill-lock.json"
 answering "$home/bin" npx node; mkdir -p "$home/.fake/npx"; echo 30 >"$home/.fake/npx/-y.sleep"
 env HOME="$home" MACUP_PATH=keep PATH="$home/bin:$work/bin:/usr/bin:/bin" MACUP_STEP_SECS=2 macup_run update --only update.skills --json </dev/null >"$work/skillslow.json" 2>/dev/null
 stopped=$(jq "$work/skillslow.json" 'print(sum("stopped after" in line for line in data["needs_attention"]))' 2>/dev/null)
-[ "$stopped" = "$([ "$MACUP_BUILD" = swift ] && echo 1 || echo 0)" ] && pass "a stopped step run from the home folder: its warning as the $MACUP_BUILD build counts it" \
-  || { fail "stopped step from the home folder ($MACUP_BUILD: $stopped)"; cat "$work/skillslow.json"; }
+[ "$stopped" = 1 ] && pass "a stopped step run from the home folder: its warning counts" \
+  || { fail "stopped step from the home folder ($stopped)"; cat "$work/skillslow.json"; }
 

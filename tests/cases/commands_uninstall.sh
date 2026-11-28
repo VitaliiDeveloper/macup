@@ -62,7 +62,7 @@ else
     || { fail "uninstall --yes"; cat "$work/un.out"; cat "$home/.zshrc"; ls -la "$tmp_dir"; }
   # a bootstrap 2.9 installed, and the schedule in either form: 2.9's runs it through /bin/bash, 3.0's runs the binary
   for first in "<string>/bin/bash</string>" ""; do
-    home="$work/unb"; rm -rf "$home"; mkdir -p "$home/.local/bin" "$home/Library/LaunchAgents"; cp tools/bootstrap.sh "$home/.local/bin/macup"
+    home="$work/unb"; rm -rf "$home"; mkdir -p "$home/.local/bin" "$home/Library/LaunchAgents"; cp macup "$home/.local/bin/macup"
     SP="$home/Library/LaunchAgents/com.vitaliideveloper.macup.plist"
     printf '<plist version="1.0">\n<dict>\n  <key>ProgramArguments</key>\n  <array>%s<string>%s</string><string>check</string></array>\n</dict>\n</plist>\n' "$first" "$home/.local/bin/macup" >"$SP"
     env HOME="$home" TMPDIR="$home/" macup_run uninstall --yes --no-color </dev/null >"$work/unb.out" 2>&1

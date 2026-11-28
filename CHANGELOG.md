@@ -43,8 +43,8 @@ Small differences you might notice:
 
 For developers:
 
-- **The Python code is in a real file.** The 13 Python snippets that lived as strings inside `src/cleaners.sh`, `src/tools.sh` and `src/updates.sh` are now functions in `src/py/macup_helpers.py`, run as `python3 -c "$MACUP_PY" <command> args…` with the same input and output. `build.sh` embeds the file into `macup` (a `@py` line, like `@i18n`), checks that it compiles for Python 3.9 and `--check` covers it, so `macup` is still one file and still runs without Python. No change in what macup does.
-- **`tests/test_helpers.py`** (plain unittest, the stock `/usr/bin/python3` is enough) tests which editor workspaces count as gone, the Chromium and Electron cache scan and version parsing. `tests/run.sh` runs it, and ruff or pyflakes when one is installed; CI runs both.
+- **The bash source is gone.** `src/*.sh`, the Python helpers (`src/py`, `tests/test_helpers.py`) and the differential harness (`tests/diff.sh`), which compared the two builds case by case during the port, are deleted. The unit tests that ran bash as their reference now assert the values bash gave. `build.sh` builds the binary, `swift test` runs the unit tests and `tests/run.sh` the suite.
+- **The root `macup` is the 2.9 bootstrap,** committed with its `macup.sha256`; `./build.sh --check` fails when the two disagree. `tools/release.sh` builds and checks the release archive, and `tools/bump-formula.sh` points the Homebrew formula at it.
 
 ## 2.9.2 — 2026-11-25
 

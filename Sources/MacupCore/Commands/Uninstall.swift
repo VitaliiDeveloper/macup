@@ -6,7 +6,7 @@ enum Uninstall {
     static func run(_ context: OneOff.Context, selfPath: String) {
         let env = context.env, i18n = context.i18n, out = context.out, paths = env.paths
         let brewPrefix = SelfPath.brewPrefix(selfPath)
-        let target = SelfPath.isCheckout(SelfPath.dirname(selfPath)) ? "" : selfPath
+        let target = SelfPath.isBuildOutput(selfPath) ? "" : selfPath
         var programs: [String] = []
         for file in [target, "\(env.home)/.local/bin/macup", "\(env.home)/.npm-global/bin/macup", "/usr/local/bin/macup", "/opt/homebrew/bin/macup"]
         where !file.isEmpty && Files.isRegular(file) && SelfPath.brewPrefix(file).isEmpty && SelfPath.isMacup(file) && !programs.contains(file) {

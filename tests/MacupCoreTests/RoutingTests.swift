@@ -81,15 +81,17 @@ final class RoutingTests: XCTestCase {
         XCTAssertEqual(route("check --only chek.disk"), "run", "an unknown id: the run says so")
     }
 
-    func testConfigBashCannotComputeGoesToBash() throws {
+    /// step_timeout_minutes with leading zeros is decimal: bash read 010 as octal 8 and gave up on 09 (intended difference).
+    func testLeadingZerosAreDecimal() throws {
         let environment = try env()
         try FileManager.default.createDirectory(atPath: environment.confDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: environment.home) }
-        try "step_timeout_minutes = 09\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
-        XCTAssertEqual(Router.route(["tasks"], env: environment), .bash)
-        XCTAssertNotEqual(Router.route(["help"], env: environment), .bash)
-        try "step_timeout_minutes = 010\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
-        XCTAssertNotEqual(Router.route(["tasks"], env: environment), .bash)
+        for (text, seconds) in [("09", 540), ("010", 600), ("0008", 480), ("10", 600), ("0", 3600), ("x9", 3600)] {
+            try "step_timeout_minutes = \(text)\n".write(toFile: environment.conf, atomically: true, encoding: .utf8)
+            for line in [["tasks"], ["check"], []] { XCTAssertNotEqual(Router.route(line, env: environment, terminal: false), .bash, "\(text) \(line)") }
+            let settings = Settings(config: Config(env: environment), env: environment, cliSkip: "", cliOnly: "", cliEnable: "", cliLevel: nil)
+            XCTAssertEqual(settings.stepSeconds, seconds, text)
+        }
     }
 
     func testRunsRouteOnlyWhenEveryTaskIsPorted() throws {

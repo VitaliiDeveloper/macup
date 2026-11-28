@@ -129,7 +129,8 @@ public struct Config {
         return text
     }
 
-    /// `num` read as a number. Bash's arithmetic would read a leading 0 as octal; macup's values never have one.
+    /// `num` read as a number, leading zeros and all in decimal: 010 is 10. Bash's arithmetic read step_timeout_minutes 010 as
+    /// octal 8 and gave up on 08 and 09 (intended difference).
     public static func num(_ text: String, _ def: Int) -> Int {
         Int(num(text, String(def))) ?? def
     }
@@ -186,9 +187,6 @@ public struct Settings {
     public var level: Int
     public var devPrefixes: String
     public var projectDirs: String
-    /// step_timeout_minutes is 08, 09, 018…: bash's arithmetic fails on it and abandons the whole command it is in
-    /// (`macup tasks` then prints the help and exits 2). Such a run is left to the bash build.
-    public var bashArithmeticFails: Bool
 
     public init(config: Config, env: Env, cliSkip: String, cliOnly: String, cliEnable: String, cliLevel: Int?) {
         func nospace(_ text: String) -> String { String(text.unicodeScalars.filter { $0 != " " }) }
@@ -200,10 +198,7 @@ public struct Settings {
         keepReports = Config.num(config.value("keep_reports", "20"), 20)
         staleProjectDays = Config.num(config.value("stale_project_days", "90"), 90)
         simulatorDays = Config.num(config.value("simulator_days", "30"), 30)
-        // $(( minutes * 60 )): a leading 0 is octal there, and a digit 8 or 9 after it an error that leaves 3600
-        let minutes = Config.num(config.value("step_timeout_minutes", "60"), "60")
-        bashArithmeticFails = minutes.hasPrefix("0") && Int(minutes, radix: 8) == nil
-        var step = minutes.hasPrefix("0") ? Int(minutes, radix: 8).map { $0 * 60 } ?? 3600 : (Int(minutes) ?? 60) * 60
+        var step = Config.num(config.value("step_timeout_minutes", "60"), 60) * 60
         if let seconds = env.stepSecsHook { step = Config.num(seconds, step) }   // seconds, for the tests
         stepSeconds = step
         level = cliLevel ?? Config.level(config.value("clean_level", "safe")) ?? 1

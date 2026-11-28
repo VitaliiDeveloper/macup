@@ -99,30 +99,46 @@ public enum Schedule {
     /// A 2.9 schedule runs `/bin/bash <path>`; with this binary at <path> launchd fails on every run. From a run that launchd
     /// did not start, a schedule naming this binary (after symlinks) loses its /bin/bash and is loaded again, and so is a
     /// loaded job that still runs /bin/bash. Never from the scheduled run itself: bootout would stop it before bootstrap.
-    public static func repair(_ env: Env) {
+    public static func repair(_ env: Env, translations: String) {
         guard getuid() != 0, getppid() != 1, ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != Env.schedLabel,
               let data = FileManager.default.contents(atPath: env.schedPlist) else { return }
         let plist = String(decoding: data, as: UTF8.self)
         guard let program = program(in: plist), let resolved = realpath(program.path, nil) else { return }
         defer { free(resolved) }
         guard String(cString: resolved) == SelfPath.executable() else { return }
-        let launchctl = Launchctl(env: env, shell: Shell(env: env))
+        let shell = Shell(env: env), launchctl = Launchctl(env: env, shell: shell)
         if program.bash {
-            let temporary = env.schedPlist + ".new"
-            guard (try? plist.replacingOccurrences(of: bashArray, with: "<array>").write(toFile: temporary, atomically: false, encoding: .utf8)) != nil,
-                  rename(temporary, env.schedPlist) == 0 else { unlink(temporary); return }
+            guard replace(env.schedPlist, with: plist.replacingOccurrences(of: bashArray, with: "<array>")) else { return }
         } else {
             // looked at once after each change of the plist, not on every run
             let stamp = env.stateDir + "/schedule_checked"
-            guard !newer(stamp, than: env.schedPlist) else { return }
-            if !launchctl.runsBash() {
+            guard !newer(stamp, than: env.schedPlist), let bash = launchctl.runsBash() else { return }
+            if !bash {
                 try? FileManager.default.createDirectory(atPath: env.stateDir, withIntermediateDirectories: true)
                 FileManager.default.createFile(atPath: stamp, contents: nil)
                 return
             }
         }
         launchctl.unload()
-        _ = launchctl.load(retry: true)
+        if launchctl.load(retry: true) { return }
+        var config = Config(env: env)
+        config.reportsErrors = false
+        let i18n = I18n(lang: Lang.initial(env: env, config: config, shell: shell), translationsJSON: translations)
+        Shell.writeText(i18n.translate("launchd did not take the updated schedule; it applies after the next login.") + "\n", to: 2)
+    }
+
+    /// By rename from a file of its own, so two first runs at once never leave a half-written plist.
+    static func replace(_ path: String, with text: String) -> Bool {
+        var template = Array("\(SelfPath.dirname(path))/.macup-plist.XXXXXX".utf8CString)
+        let descriptor = mkstemp(&template)
+        guard descriptor >= 0 else { return false }
+        let temporary = String(cString: template)
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        guard fchmod(descriptor, 0o644) == 0, (try? handle.write(contentsOf: Data(text.utf8))) != nil, rename(temporary, path) == 0 else {
+            unlink(temporary)
+            return false
+        }
+        return true
     }
 }
 
@@ -154,9 +170,10 @@ struct Launchctl {
         return quiet(["load", "-w", env.schedPlist])
     }
 
-    /// The loaded job still starts /bin/bash (`launchctl print` says `program = /bin/bash`).
-    func runsBash() -> Bool {
-        Launchctl.runsBash(shell.capture(["launchctl", "print", "\(domain)/\(Env.schedLabel)"]).output)
+    /// The loaded job still starts /bin/bash (`launchctl print` says `program = /bin/bash`); nil when launchctl cannot say.
+    func runsBash() -> Bool? {
+        let printed = shell.capture(["launchctl", "print", "\(domain)/\(Env.schedLabel)"])
+        return printed.status == 0 ? Launchctl.runsBash(printed.output) : nil
     }
 
     static func runsBash(_ printed: String) -> Bool {

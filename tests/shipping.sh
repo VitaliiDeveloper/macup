@@ -90,7 +90,7 @@ FAKE
 cat >"$work/bin/launchctl" <<'FAKE'
 #!/bin/bash
 echo "$*" >>"$HOME/launchctl.log"
-[ -n "${FAKE_LAUNCHCTL_FAIL:-}" ] && exit 1
+case " ${FAKE_LAUNCHCTL_FAIL:-} " in *" $1 "*) exit 1 ;; esac   # the subcommands that fail
 [ "$1" = print ] && [ -n "${FAKE_PROGRAM:-}" ] && printf '\tprogram = %s\n' "$FAKE_PROGRAM"
 exit 0
 FAKE
@@ -266,6 +266,7 @@ if [ -f "$real" ]; then
   for named in "$sbin/macup" "$shome/links/macup"; do
     sfresh; schedule29 "$named"; out=$(srun "$sbin/macup" version); rc=$?
     [ $rc = 0 ] && [ "$out" = "macup $current" ] && grep -qF "<array><string>$named</string><string>check</string></array>" "$splist" && [ "$(cat "$shome/launchctl.log")" = "$reloaded" ] \
+      && [ "$(ls -A "${splist%/*}")" = com.vitaliideveloper.macup.plist ] && [ "$(stat -f %Lp "$splist")" = 644 ] \
       && pass "first run (Swift): the 2.9 schedule of $(basename "$(dirname "$named")")/macup runs the binary, loaded again" || { fail "first run (Swift), 2.9 schedule of $named ($rc): $out"; cat "$splist" "$shome/launchctl.log"; }
   done
   sfresh; schedule29 "$sbin/macup"; out=$(srun env XPC_SERVICE_NAME=com.vitaliideveloper.macup "$sbin/macup" version); rc=$?
@@ -278,13 +279,27 @@ if [ -f "$real" ]; then
     && pass "first run (Swift): a loaded job that still runs /bin/bash is loaded again" || { fail "first run (Swift), loaded job ($rc): $out"; cat "$shome/launchctl.log"; }
   rm -f "$shome/launchctl.log"; srun env FAKE_PROGRAM="$sbin/macup" "$sbin/macup" version >/dev/null; srun "$sbin/macup" version >/dev/null
   [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a right schedule is looked at once" || fail "first run (Swift), right schedule: $(cat "$shome/launchctl.log")"
+  sfresh; schedule29 "$sbin/macup"; sed -i '' 's|<string>/bin/bash</string>||' "$splist"
+  srun env FAKE_LAUNCHCTL_FAIL=print "$sbin/macup" version >/dev/null; srun env FAKE_LAUNCHCTL_FAIL=print "$sbin/macup" version >/dev/null
+  [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup"$'\n'"print gui/$(id -u)/com.vitaliideveloper.macup" ] && [ ! -e "$shome/Library/Application Support/macup/schedule_checked" ] \
+    && pass "first run (Swift): a launchctl print that fails proves nothing, the next run looks again" || fail "first run (Swift), print fails: $(cat "$shome/launchctl.log")"
+  for lang in en uk; do
+    sfresh; schedule29 "$sbin/macup"; printf 'language = %s\n' "$lang" >"$shome/.config/macup/config"
+    out=$(env HOME="$shome" MACUP_PATH=keep FAKE_LAUNCHCTL_FAIL="bootstrap load" "$sbin/macup" version </dev/null 2>"$work/reload.err"); rc=$?
+    message=$([ $lang = uk ] && echo 'launchd не прийняв оновлений розклад; він запрацює після наступного входу в систему.' || echo 'launchd did not take the updated schedule; it applies after the next login.')
+    [ $rc = 0 ] && [ "$out" = "macup $current" ] && [ "$(cat "$work/reload.err")" = "$message" ] && grep -qF "<array><string>$sbin/macup</string>" "$splist" \
+      && [ "$(grep -c '^bootstrap ' "$shome/launchctl.log")" = 2 ] && grep -q '^load -w ' "$shome/launchctl.log" \
+      && pass "first run (Swift): a reload launchd refuses is said on stderr ($lang)" || { fail "first run (Swift), reload refused ($lang, $rc): $out"; cat "$work/reload.err" "$shome/launchctl.log"; }
+  done
+  printf 'language = en\n' >"$shome/.config/macup/config"
+  sfresh; schedule29 "$sbin/macup"; sed -i '' 's|<string>/bin/bash</string>||' "$splist"; srun env FAKE_PROGRAM="$sbin/macup" "$sbin/macup" version >/dev/null
   rm -f "$shome/launchctl.log"; touch "$splist"; srun "$sbin/macup" version >/dev/null
   [ "$(cat "$shome/launchctl.log")" = "print gui/$(id -u)/com.vitaliideveloper.macup" ] && pass "first run (Swift): a changed schedule is looked at again" || fail "first run (Swift), changed schedule: $(cat "$shome/launchctl.log" 2>/dev/null)"
 
   # schedule from a relative path names the absolute one; a launchctl that refuses leaves no plist
   sfresh; out=$(cd "$sbin" && srun ./macup schedule weekly --no-color); rc=$?
   [ $rc = 0 ] && grep -qF "<array><string>$(cd "$sbin" && pwd -P)/macup</string><string>check</string>" "$splist" && pass "schedule (Swift) run as ./macup: the absolute path" || { fail "schedule (Swift) relative ($rc): $out"; cat "$splist"; }
-  sfresh; out=$(srun env FAKE_LAUNCHCTL_FAIL=1 "$sbin/macup" schedule daily --no-color); rc=$?
+  sfresh; out=$(srun env FAKE_LAUNCHCTL_FAIL="bootstrap load" "$sbin/macup" schedule daily --no-color); rc=$?
   [ $rc = 1 ] && [ "$out" = 'launchd did not accept the schedule; nothing changed.' ] && [ ! -e "$splist" ] && pass "schedule (Swift): launchd refuses, no plist left" || fail "schedule (Swift), launchd refuses ($rc): $out"
 else echo "SKIP self-update and the schedule repair of the Swift build: no binary at $real"; fi
 

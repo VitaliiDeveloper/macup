@@ -13,18 +13,20 @@ enum Uninstall {
             programs.append(file)
         }
         let dirs = [env.confDir, env.stateDir, env.cacheDir, env.logDir].filter(Run.isDirectory)
-        var pathLines: [(rc: String, line: Data)] = [], kept: [String] = []
+        var pathLines: [(rc: String, line: Data)] = [], kept: [String] = [], binDirs = programs.map(SelfPath.dirname)
         for rc in ["\(env.home)/.zshrc", "\(env.home)/.bash_profile"] {
             guard let line = installerLine(rc) else { continue }
             var dir = String(String(decoding: line, as: UTF8.self).dropFirst(13))
             if dir.hasSuffix(":$PATH\"") { dir = String(dir.dropLast(7)) }
             if let home = dir.range(of: "$HOME") { dir.replaceSubrange(home, with: env.home) }
+            binDirs.append(dir)
             // the line also serves whatever else lives in that folder
             let others = neighbours(dir)
             if others.isEmpty { pathLines.append((rc, line)) }
             else { kept.append(i18n.format("Kept: the PATH line in %s, because %s also has %s", paths.tildify(rc), paths.tildify(dir), others)) }
         }
-        let temporary = temporaryFiles(env.tmpDir)
+        var temporary = temporaryFiles(env.tmpDir)
+        for path in binDirs.flatMap({ ownLeftovers($0) }) where !temporary.contains(path) { temporary.append(path) }
         let schedule = Files.isRegular(env.schedPlist)
 
         out.write(i18n.translate("macup uninstall removes:") + "\n")
@@ -52,7 +54,7 @@ enum Uninstall {
         }
         for dir in dirs { remove(["rm", "-rf", dir], .inherit) }
         for entry in pathLines { removeInstallerLine(entry.rc, entry.line) }
-        for file in temporary { remove(["rm", "-f", file], .inherit) }
+        for file in temporary { remove(["rm", "-rf", file], .inherit) }
         for file in programs {
             remove(["rm", "-f", file], .null)
             if access(file, F_OK) == 0 {
@@ -87,11 +89,28 @@ enum Uninstall {
     /// Up to three other names in the folder, as `"$dir"/* "$dir"/.[!.]*` lists them, joined with ", ".
     private static func neighbours(_ dir: String) -> String {
         let names = (Names.glob(dir, "*") + Names.glob(dir, ".[!.]*")).map { String($0.dropFirst(dir.count + 1)) }
-        return names.filter { $0 != "macup" }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
+        return names.filter { $0 != "macup" && ownLeftovers(dir, only: $0).isEmpty }.prefix(3).joined(separator: ",").replacingOccurrences(of: ",", with: ", ")
+    }
+
+    /// mktemp's six random letters and digits.
+    private static func alnum(_ text: Substring) -> Bool {
+        text.unicodeScalars.count == 6 && text.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)) }
+    }
+
+    /// What a self-update or an install that was killed leaves next to the binary: a `.macup-update.XXXXXX` folder, a
+    /// `.macup-install.XXXXXX` file and its `.tag`. They are macup's own, and keep no PATH line.
+    private static func ownLeftovers(_ dir: String, only name: String? = nil) -> [String] {
+        let names = name.map { [$0] } ?? (Names.glob(dir, ".macup-update.*") + Names.glob(dir, ".macup-install.*")).map { String($0.dropFirst(dir.count + 1)) }
+        return names.filter { name in
+            let path = "\(dir)/\(name)"
+            if name.hasPrefix(".macup-update.") { return alnum(name.dropFirst(14)) && Run.isDirectory(path) && !Run.isSymlink(path) }
+            guard name.hasPrefix(".macup-install.") else { return false }
+            let rest = name.dropFirst(15)
+            return (alnum(rest) || (rest.hasSuffix(".tag") && alnum(rest.dropLast(4)))) && Files.isRegular(path, followingLinks: false)
+        }.map { "\(dir)/\($0)" }
     }
 
     private static func temporaryFiles(_ tmpDir: String) -> [String] {
-        func alnum(_ text: Substring) -> Bool { text.unicodeScalars.count == 6 && text.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0)) } }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: tmpDir)) ?? []
         return names.filter { name in
             guard name != "macup.sha256" else { return false }
